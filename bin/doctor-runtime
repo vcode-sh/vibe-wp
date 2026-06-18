@@ -1,0 +1,77 @@
+#!/usr/bin/env sh
+set -eu
+
+failures=0
+
+fail() {
+  echo "failed: $*" >&2
+  failures=$((failures + 1))
+}
+
+ok() {
+  echo "ok: $*"
+}
+
+require_service() {
+  service="$1"
+  if docker compose ps --status running --services 2>/dev/null | grep -qx "${service}"; then
+    ok "${service} is running"
+  else
+    fail "${service} is not running"
+  fi
+}
+
+require_service db
+require_service redis
+require_service wordpress
+require_service nginx
+
+if docker compose exec -T db healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+  ok "MariaDB healthcheck passes"
+else
+  fail "MariaDB healthcheck failed"
+fi
+
+if docker compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG' >/dev/null 2>&1; then
+  ok "Redis responds to authenticated ping"
+else
+  fail "Redis ping failed"
+fi
+
+if ./bin/wp core is-installed >/dev/null 2>&1; then
+  ok "WordPress is installed"
+else
+  fail "WordPress is not installed"
+fi
+
+if ./bin/wp redis status 2>/dev/null | grep -q '^Status: Connected'; then
+  ok "Redis Object Cache is connected"
+else
+  fail "Redis Object Cache is not connected"
+fi
+
+if ./bin/wp eval 'printf("%o %o", FS_CHMOD_DIR, FS_CHMOD_FILE);' 2>/dev/null | grep -q '^755 644$'; then
+  ok "WordPress filesystem chmod constants are 755/644"
+else
+  fail "WordPress filesystem chmod constants are unexpected"
+fi
+
+if docker compose exec -T wordpress sh -lc 'su -s /bin/sh www-data -c "test -w /var/www/html/wp-content/uploads && test -w /var/www/html/wp-content/plugins && test -w /var/www/html/wp-content/themes && test -w /var/www/html/wp-content/mu-plugins"' >/dev/null 2>&1; then
+  ok "wp-content writable surfaces are writable"
+else
+  fail "one or more wp-content writable surfaces are not writable"
+fi
+
+permission_find='find /var/www/html/wp-content -maxdepth 3 \( -perm -0002 -o -user root \) -print -quit'
+if [ -z "$(docker compose exec -T wordpress sh -lc "${permission_find}")" ]; then
+  ok "wp-content has no root-owned or world-writable entries within depth 3"
+else
+  fail "wp-content contains root-owned or world-writable entries"
+fi
+
+if [ "${failures}" -ne 0 ]; then
+  echo "runtime doctor found ${failures} issue(s)." >&2
+  exit 1
+fi
+
+echo "runtime doctor passed."

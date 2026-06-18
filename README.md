@@ -47,8 +47,11 @@ make logs
 make wp ARGS="plugin list"
 ./bin/wp user list
 make wp-info
+make doctor-runtime
+make smoke
 make cache-enable
 make backup
+make restore BACKUP=backups/<timestamp> ARGS="--yes"
 make down
 ```
 
@@ -64,6 +67,14 @@ The stack is configured by `.env`, not by editing container files. The main swit
 - PHP, PHP-FPM, Nginx, MariaDB, Redis, and WordPress constants through explicit env values.
 
 See [docs/configuration.md](docs/configuration.md) for the complete contract.
+
+## Deployment Modes
+
+- Local/dev: `docker compose up -d --build`
+- Production volume preset: `docker compose -f compose.yaml -f compose.prod.yaml up -d --build`
+- External MariaDB/Redis preset: `docker compose -f compose.external.yaml up -d --build`
+
+See [docs/deployment.md](docs/deployment.md).
 
 ## Research Baseline
 

@@ -13,7 +13,7 @@ Both forms run inside Docker Compose. They do not use a host-installed `wp` bina
 
 The `wp` service uses the same image, environment, database network, Redis network, and `content/` mount as the `wordpress` PHP-FPM service. That keeps CLI behavior aligned with runtime behavior.
 
-The service also bootstraps the official WordPress files and `wp-config.php` before running commands, so one-off CLI containers behave like the app container.
+The service also bootstraps the official WordPress files and `wp-config.php` before running commands, then executes WP-CLI as `www-data`. That prevents CLI-created uploads, plugins, themes, and cache drop-ins from becoming root-owned.
 
 ## Common Commands
 
@@ -88,5 +88,5 @@ Inside the shell, WordPress is available at:
 Run WP-CLI manually as:
 
 ```sh
-wp --allow-root --path=/var/www/html plugin list
+wp --path=/var/www/html plugin list
 ```

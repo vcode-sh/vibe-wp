@@ -4,7 +4,7 @@ set -eu
 interval="${WP_CRON_INTERVAL:-60}"
 
 wp_cmd() {
-  wp --allow-root --path=/var/www/html "$@"
+  wp --path=/var/www/html "$@"
 }
 
 echo "Waiting for WordPress to become installed before starting cron..."

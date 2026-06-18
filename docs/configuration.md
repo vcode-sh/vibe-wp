@@ -21,6 +21,11 @@ Use `wordpress:7.0-php8.4-fpm` if a plugin is not ready for PHP 8.5.
 
 `WORDPRESS_RUNTIME_IMAGE` is shared by the `wordpress`, `cron`, and `wp` services so WP-CLI always uses the exact same runtime image as PHP-FPM.
 
+Production and external-service examples are available in:
+
+- `.env.production.example`
+- `.env.external.example`
+
 ## Public URL
 
 ```env
@@ -120,3 +125,13 @@ The template generates common constants from env:
 - Redis constants
 
 Use `WORDPRESS_CONFIG_EXTRA` only for project-specific constants not already covered.
+
+## Content Permissions
+
+```env
+WP_CONTENT_FIX_PERMISSIONS=1
+FS_CHMOD_DIR=0755
+FS_CHMOD_FILE=0644
+```
+
+When enabled, the WordPress entrypoint makes `wp-content` writable by `www-data` and normalizes directories/files to non-world-writable permissions. WordPress also receives explicit `FS_CHMOD_DIR` and `FS_CHMOD_FILE` constants so upload year/month folders are created with predictable permissions. This protects uploads, plugin installs, theme installs, and Redis Object Cache drop-ins from root-owned or `777` leftovers.

@@ -6,44 +6,38 @@ x-wordpress-build: &wordpress-build
     WORDPRESS_IMAGE: ${WORDPRESS_IMAGE:-wordpress:7.0-php8.5-fpm}
 
 x-wordpress-content-rw: &wordpress-content-rw
-  - type: bind
-    source: ./content
+  - type: volume
+    source: wp_content
     target: /var/www/html/wp-content
-
-x-wordpress-content-ro: &wordpress-content-ro
-  - type: bind
-    source: ./content
-    target: /var/www/html/wp-content
-    read_only: true
 
 x-wordpress-environment: &wordpress-environment
-  WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-db:3306}
-  WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
-  WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
-  WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-change-me}
+  WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:?WORDPRESS_DB_HOST is required for external mode}
+  WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:?WORDPRESS_DB_NAME is required for external mode}
+  WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:?WORDPRESS_DB_USER is required for external mode}
+  WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?WORDPRESS_DB_PASSWORD is required for external mode}
   WORDPRESS_DB_CHARSET: ${WORDPRESS_DB_CHARSET:-utf8mb4}
   WORDPRESS_DB_COLLATE: ${WORDPRESS_DB_COLLATE:-}
   WORDPRESS_TABLE_PREFIX: ${WORDPRESS_TABLE_PREFIX:-wp_}
-  WORDPRESS_AUTH_KEY: ${WORDPRESS_AUTH_KEY:-change-me}
-  WORDPRESS_SECURE_AUTH_KEY: ${WORDPRESS_SECURE_AUTH_KEY:-change-me}
-  WORDPRESS_LOGGED_IN_KEY: ${WORDPRESS_LOGGED_IN_KEY:-change-me}
-  WORDPRESS_NONCE_KEY: ${WORDPRESS_NONCE_KEY:-change-me}
-  WORDPRESS_AUTH_SALT: ${WORDPRESS_AUTH_SALT:-change-me}
-  WORDPRESS_SECURE_AUTH_SALT: ${WORDPRESS_SECURE_AUTH_SALT:-change-me}
-  WORDPRESS_LOGGED_IN_SALT: ${WORDPRESS_LOGGED_IN_SALT:-change-me}
-  WORDPRESS_NONCE_SALT: ${WORDPRESS_NONCE_SALT:-change-me}
+  WORDPRESS_AUTH_KEY: ${WORDPRESS_AUTH_KEY:?WORDPRESS_AUTH_KEY is required}
+  WORDPRESS_SECURE_AUTH_KEY: ${WORDPRESS_SECURE_AUTH_KEY:?WORDPRESS_SECURE_AUTH_KEY is required}
+  WORDPRESS_LOGGED_IN_KEY: ${WORDPRESS_LOGGED_IN_KEY:?WORDPRESS_LOGGED_IN_KEY is required}
+  WORDPRESS_NONCE_KEY: ${WORDPRESS_NONCE_KEY:?WORDPRESS_NONCE_KEY is required}
+  WORDPRESS_AUTH_SALT: ${WORDPRESS_AUTH_SALT:?WORDPRESS_AUTH_SALT is required}
+  WORDPRESS_SECURE_AUTH_SALT: ${WORDPRESS_SECURE_AUTH_SALT:?WORDPRESS_SECURE_AUTH_SALT is required}
+  WORDPRESS_LOGGED_IN_SALT: ${WORDPRESS_LOGGED_IN_SALT:?WORDPRESS_LOGGED_IN_SALT is required}
+  WORDPRESS_NONCE_SALT: ${WORDPRESS_NONCE_SALT:?WORDPRESS_NONCE_SALT is required}
   WORDPRESS_DEBUG: ${WORDPRESS_DEBUG:-}
   WORDPRESS_CONFIG_EXTRA: ${WORDPRESS_CONFIG_EXTRA:-}
-  WP_HOME: ${WP_HOME:-http://localhost:8080}
-  WP_SITEURL: ${WP_SITEURL:-http://localhost:8080}
-  WP_ENVIRONMENT_TYPE: ${WP_ENVIRONMENT_TYPE:-local}
+  WP_HOME: ${WP_HOME:?WP_HOME is required}
+  WP_SITEURL: ${WP_SITEURL:?WP_SITEURL is required}
+  WP_ENVIRONMENT_TYPE: ${WP_ENVIRONMENT_TYPE:-production}
   WP_DEBUG_LOG: ${WP_DEBUG_LOG:-0}
   WP_DEBUG_DISPLAY: ${WP_DEBUG_DISPLAY:-0}
   SCRIPT_DEBUG: ${SCRIPT_DEBUG:-0}
   WP_CACHE: ${WP_CACHE:-1}
   WP_MEMORY_LIMIT: ${WP_MEMORY_LIMIT:-256M}
   WP_MAX_MEMORY_LIMIT: ${WP_MAX_MEMORY_LIMIT:-512M}
-  FORCE_SSL_ADMIN: ${FORCE_SSL_ADMIN:-0}
+  FORCE_SSL_ADMIN: ${FORCE_SSL_ADMIN:-1}
   DISABLE_WP_CRON: ${DISABLE_WP_CRON:-1}
   DISALLOW_FILE_EDIT: ${DISALLOW_FILE_EDIT:-1}
   DISALLOW_FILE_MODS: ${DISALLOW_FILE_MODS:-0}
@@ -55,12 +49,12 @@ x-wordpress-environment: &wordpress-environment
   EMPTY_TRASH_DAYS: ${EMPTY_TRASH_DAYS:-14}
   WP_POST_REVISIONS: ${WP_POST_REVISIONS:-10}
   WP_CONTENT_FIX_PERMISSIONS: ${WP_CONTENT_FIX_PERMISSIONS:-1}
-  WP_REDIS_HOST: ${WP_REDIS_HOST:-redis}
+  WP_REDIS_HOST: ${WP_REDIS_HOST:?WP_REDIS_HOST is required for external mode}
   WP_REDIS_PORT: ${WP_REDIS_PORT:-6379}
-  WP_REDIS_PASSWORD: ${WP_REDIS_PASSWORD:-${REDIS_PASSWORD:-change-me}}
+  WP_REDIS_PASSWORD: ${WP_REDIS_PASSWORD:-}
   WP_REDIS_DATABASE: ${WP_REDIS_DATABASE:-0}
-  WP_REDIS_PREFIX: ${WP_REDIS_PREFIX:-vibe-wp:}
-  WP_CACHE_KEY_SALT: ${WP_CACHE_KEY_SALT:-vibe-wp:}
+  WP_REDIS_PREFIX: ${WP_REDIS_PREFIX:?WP_REDIS_PREFIX is required}
+  WP_CACHE_KEY_SALT: ${WP_CACHE_KEY_SALT:?WP_CACHE_KEY_SALT is required}
   WP_REDIS_TIMEOUT: ${WP_REDIS_TIMEOUT:-1}
   WP_REDIS_READ_TIMEOUT: ${WP_REDIS_READ_TIMEOUT:-1}
   WP_REDIS_CLIENT: ${WP_REDIS_CLIENT:-phpredis}
@@ -78,8 +72,8 @@ x-wordpress-environment: &wordpress-environment
   PHP_OPCACHE_MEMORY_CONSUMPTION: ${PHP_OPCACHE_MEMORY_CONSUMPTION:-256}
   PHP_OPCACHE_INTERNED_STRINGS_BUFFER: ${PHP_OPCACHE_INTERNED_STRINGS_BUFFER:-32}
   PHP_OPCACHE_MAX_ACCELERATED_FILES: ${PHP_OPCACHE_MAX_ACCELERATED_FILES:-65000}
-  PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-1}
-  PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-2}
+  PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-0}
+  PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-0}
   PHP_OPCACHE_JIT: ${PHP_OPCACHE_JIT:-0}
   PHP_OPCACHE_JIT_BUFFER_SIZE: ${PHP_OPCACHE_JIT_BUFFER_SIZE:-0}
   PHP_FPM_PM: ${PHP_FPM_PM:-dynamic}
@@ -112,12 +106,12 @@ services:
       NGINX_FASTCGI_SEND_TIMEOUT: ${NGINX_FASTCGI_SEND_TIMEOUT:-120s}
       NGINX_FASTCGI_READ_TIMEOUT: ${NGINX_FASTCGI_READ_TIMEOUT:-120s}
       NGINX_KEEPALIVE_TIMEOUT: ${NGINX_KEEPALIVE_TIMEOUT:-65s}
-      NGINX_ENABLE_HSTS: ${NGINX_ENABLE_HSTS:-0}
+      NGINX_ENABLE_HSTS: ${NGINX_ENABLE_HSTS:-1}
     ports:
       - "${HTTP_PORT:-8080}:8080"
     volumes:
-      - type: bind
-        source: ./content
+      - type: volume
+        source: wp_content
         target: /var/www/html/wp-content
         read_only: true
       - nginx_cache:/var/cache/nginx/wordpress
@@ -135,11 +129,6 @@ services:
     build: *wordpress-build
     init: true
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
       <<: *wordpress-environment
     expose:
@@ -170,68 +159,11 @@ services:
     networks:
       - backend
 
-  db:
-    image: ${MARIADB_IMAGE:-mariadb:12.3}
-    restart: unless-stopped
-    environment:
-      MARIADB_DATABASE: ${MARIADB_DATABASE:-wordpress}
-      MARIADB_USER: ${MARIADB_USER:-wordpress}
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-change-me}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-change-me}
-      MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE:-1}
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --skip-name-resolve=1
-      - --max-allowed-packet=${MARIADB_MAX_ALLOWED_PACKET:-256M}
-      - --innodb-buffer-pool-size=${MARIADB_INNODB_BUFFER_POOL_SIZE:-256M}
-      - --tmp-table-size=${MARIADB_TMP_TABLE_SIZE:-64M}
-      - --max-heap-table-size=${MARIADB_MAX_HEAP_TABLE_SIZE:-64M}
-      - --innodb-flush-log-at-trx-commit=${MARIADB_INNODB_FLUSH_LOG_AT_TRX_COMMIT:-1}
-    volumes:
-      - db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    networks:
-      - backend
-
-  redis:
-    image: ${REDIS_IMAGE:-redis:8-alpine}
-    restart: unless-stopped
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me}
-      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-256mb}
-      REDIS_MAXMEMORY_POLICY: ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
-    command:
-      - sh
-      - -c
-      - exec redis-server /usr/local/etc/redis/redis.conf --requirepass "$${REDIS_PASSWORD}" --maxmemory "$${REDIS_MAXMEMORY}" --maxmemory-policy "$${REDIS_MAXMEMORY_POLICY}"
-    volumes:
-      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping 2>/dev/null | grep -q PONG"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    networks:
-      - backend
-
   wp:
     profiles:
       - tools
     image: ${WORDPRESS_RUNTIME_IMAGE:-vibe-wp-wordpress}
     build: *wordpress-build
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     entrypoint: ["/usr/local/bin/vibe-wp-entrypoint.sh", "wp", "--path=/var/www/html"]
     command: ["--info"]
     environment:
@@ -240,24 +172,8 @@ services:
     networks:
       - backend
 
-  adminer:
-    profiles:
-      - tools
-    image: adminer:latest
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "${ADMINER_PORT:-8081}:8080"
-    environment:
-      ADMINER_DEFAULT_SERVER: db
-    networks:
-      - backend
-
 volumes:
-  db_data:
-  redis_data:
+  wp_content:
   nginx_cache:
 
 networks:

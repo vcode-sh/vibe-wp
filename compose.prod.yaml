@@ -1,0 +1,43 @@
+services:
+  nginx:
+    environment:
+      NGINX_ENABLE_HSTS: ${NGINX_ENABLE_HSTS:-1}
+    volumes:
+      - type: volume
+        source: wp_content
+        target: /var/www/html/wp-content
+        read_only: true
+      - nginx_cache:/var/cache/nginx/wordpress
+
+  wordpress:
+    environment:
+      WP_ENVIRONMENT_TYPE: ${WP_ENVIRONMENT_TYPE:-production}
+      FORCE_SSL_ADMIN: ${FORCE_SSL_ADMIN:-1}
+      DISALLOW_FILE_EDIT: ${DISALLOW_FILE_EDIT:-1}
+      PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-0}
+      PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-0}
+    volumes:
+      - wp_content:/var/www/html/wp-content
+
+  cron:
+    environment:
+      WP_ENVIRONMENT_TYPE: ${WP_ENVIRONMENT_TYPE:-production}
+      FORCE_SSL_ADMIN: ${FORCE_SSL_ADMIN:-1}
+      DISALLOW_FILE_EDIT: ${DISALLOW_FILE_EDIT:-1}
+      PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-0}
+      PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-0}
+    volumes:
+      - wp_content:/var/www/html/wp-content
+
+  wp:
+    environment:
+      WP_ENVIRONMENT_TYPE: ${WP_ENVIRONMENT_TYPE:-production}
+      FORCE_SSL_ADMIN: ${FORCE_SSL_ADMIN:-1}
+      DISALLOW_FILE_EDIT: ${DISALLOW_FILE_EDIT:-1}
+      PHP_OPCACHE_VALIDATE_TIMESTAMPS: ${PHP_OPCACHE_VALIDATE_TIMESTAMPS:-0}
+      PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-0}
+    volumes:
+      - wp_content:/var/www/html/wp-content
+
+volumes:
+  wp_content:

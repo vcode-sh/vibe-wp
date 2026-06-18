@@ -28,7 +28,15 @@ export PHP_FPM_PM_MAX_REQUESTS="${PHP_FPM_PM_MAX_REQUESTS:-500}"
 export PHP_FPM_REQUEST_TERMINATE_TIMEOUT="${PHP_FPM_REQUEST_TERMINATE_TIMEOUT:-120s}"
 export PHP_FPM_PM_PROCESS_IDLE_TIMEOUT="${PHP_FPM_PM_PROCESS_IDLE_TIMEOUT:-10s}"
 
-mkdir -p /usr/local/etc/php/conf.d /usr/local/etc/php-fpm.d /var/www/html/wp-content
+mkdir -p \
+  /usr/local/etc/php/conf.d \
+  /usr/local/etc/php-fpm.d \
+  /var/www/html/wp-content/uploads \
+  /var/www/html/wp-content/plugins \
+  /var/www/html/wp-content/themes \
+  /var/www/html/wp-content/mu-plugins \
+  /var/www/html/wp-content/upgrade
+
 rsync -a --ignore-existing /usr/src/wordpress/wp-content/ /var/www/html/wp-content/
 
 if [ ! -f /var/www/html/wp-includes/version.php ]; then
@@ -39,7 +47,11 @@ if [ ! -f /var/www/html/wp-config.php ] && [ -f /usr/src/wordpress/wp-config-doc
   cp /usr/src/wordpress/wp-config-docker.php /var/www/html/wp-config.php
 fi
 
-chown -R www-data:www-data /var/www/html/wp-content || true
+if [ "${WP_CONTENT_FIX_PERMISSIONS:-1}" = "1" ] && [ "${1:-}" != "wp" ]; then
+  chown -R www-data:www-data /var/www/html/wp-content || true
+  find /var/www/html/wp-content -type d -exec chmod u+rwX,go+rX,go-w {} + || true
+  find /var/www/html/wp-content -type f -exec chmod u+rw,go+r,go-w {} + || true
+fi
 
 envsubst '
   ${PHP_MEMORY_LIMIT}
@@ -164,6 +176,14 @@ if (($fs_method = vibe_wp_env('FS_METHOD')) !== '') {
     vibe_wp_define('FS_METHOD', $fs_method);
 }
 
+if (($fs_chmod_dir = vibe_wp_env('FS_CHMOD_DIR')) !== '') {
+    vibe_wp_define('FS_CHMOD_DIR', octdec($fs_chmod_dir));
+}
+
+if (($fs_chmod_file = vibe_wp_env('FS_CHMOD_FILE')) !== '') {
+    vibe_wp_define('FS_CHMOD_FILE', octdec($fs_chmod_file));
+}
+
 if (($empty_trash_days = vibe_wp_env('EMPTY_TRASH_DAYS')) !== '') {
     vibe_wp_define('EMPTY_TRASH_DAYS', (int) $empty_trash_days);
 }
@@ -213,5 +233,26 @@ PHP
 
 export WORDPRESS_CONFIG_EXTRA="$(cat "${extra_config_file}")"
 rm -f "${extra_config_file}"
+
+if [ "$(id -u)" = "0" ]; then
+  case "${1:-}" in
+    wp|/usr/local/bin/vibe-wp-cron.sh|vibe-wp-cron.sh)
+      if command -v gosu >/dev/null 2>&1; then
+        exec gosu www-data "$@"
+      fi
+
+      if command -v su-exec >/dev/null 2>&1; then
+        exec su-exec www-data "$@"
+      fi
+
+      if command -v setpriv >/dev/null 2>&1; then
+        exec setpriv --reuid="$(id -u www-data)" --regid="$(id -g www-data)" --init-groups "$@"
+      fi
+
+      echo "No privilege-drop helper found for running $1 as www-data." >&2
+      exit 1
+      ;;
+  esac
+fi
 
 exec docker-entrypoint.sh "$@"

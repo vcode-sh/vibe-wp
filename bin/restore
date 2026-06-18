@@ -1,0 +1,121 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/restore backups/<timestamp> --yes [--old-url OLD] [--new-url NEW]
+
+Restores:
+  - database.sql.gz or database.sql
+  - wp-content.tar.gz
+
+The --yes flag is required because this replaces the current database and
+wp-content files.
+USAGE
+}
+
+backup_dir=""
+confirm=0
+old_url=""
+new_url=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --yes)
+      confirm=1
+      shift
+      ;;
+    --old-url)
+      old_url="${2:-}"
+      shift 2
+      ;;
+    --new-url)
+      new_url="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "${backup_dir}" ]; then
+        echo "Only one backup directory can be provided." >&2
+        usage >&2
+        exit 1
+      fi
+      backup_dir="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ -z "${backup_dir}" ]; then
+  usage >&2
+  exit 1
+fi
+
+if [ "${confirm}" != "1" ]; then
+  echo "Refusing to restore without --yes." >&2
+  usage >&2
+  exit 1
+fi
+
+if [ ! -d "${backup_dir}" ]; then
+  echo "Backup directory not found: ${backup_dir}" >&2
+  exit 1
+fi
+
+if [ ! -f "${backup_dir}/database.sql.gz" ] && [ ! -f "${backup_dir}/database.sql" ]; then
+  echo "No database.sql.gz or database.sql found in ${backup_dir}." >&2
+  exit 1
+fi
+
+if [ ! -f "${backup_dir}/wp-content.tar.gz" ]; then
+  echo "No wp-content.tar.gz found in ${backup_dir}." >&2
+  exit 1
+fi
+
+echo "Starting required services..."
+docker compose up -d db redis wordpress >/dev/null
+
+echo "Resetting WordPress database..."
+./bin/wp db reset --yes >/dev/null
+
+echo "Restoring database..."
+if [ -f "${backup_dir}/database.sql.gz" ]; then
+  gunzip -c "${backup_dir}/database.sql.gz" | docker compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"'
+else
+  docker compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < "${backup_dir}/database.sql"
+fi
+
+echo "Restoring wp-content..."
+find content -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+mkdir -p content/uploads content/plugins content/themes content/mu-plugins
+tar -xzf "${backup_dir}/wp-content.tar.gz" -C content
+mkdir -p content/uploads content/plugins content/themes content/mu-plugins
+touch content/uploads/.gitkeep content/plugins/.gitkeep content/themes/.gitkeep content/mu-plugins/.gitkeep
+
+echo "Normalizing wp-content permissions through the WordPress container..."
+docker compose up -d --force-recreate wordpress cron >/dev/null
+
+if [ -n "${old_url}" ] || [ -n "${new_url}" ]; then
+  if [ -z "${old_url}" ] || [ -z "${new_url}" ]; then
+    echo "Both --old-url and --new-url are required for search-replace." >&2
+    exit 1
+  fi
+
+  echo "Running URL search-replace..."
+  ./bin/wp search-replace "${old_url}" "${new_url}" --all-tables --precise --skip-columns=guid
+fi
+
+echo "Flushing caches..."
+./bin/wp cache flush >/dev/null || true
+docker compose exec -T nginx sh -c 'rm -rf /var/cache/nginx/wordpress/*' >/dev/null 2>&1 || true
+
+echo "Restore complete from ${backup_dir}."

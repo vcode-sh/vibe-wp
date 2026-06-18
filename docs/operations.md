@@ -26,6 +26,8 @@ Direct form:
 
 The wrapper uses the Compose `wp` service, so it does not use or require a host-installed `wp` binary.
 
+WP-CLI commands execute as `www-data`, the same user that owns writable WordPress content. This avoids root-owned files after plugin installs, theme installs, imports, and media operations.
+
 More examples are in [wp-cli.md](wp-cli.md).
 
 ## Enable Redis Object Cache
@@ -88,6 +90,31 @@ backups/<timestamp>/manifest.txt
 ```
 
 The backup command uses `mariadb-dump --single-transaction --routines --triggers`.
+
+## Restore
+
+Restore requires an explicit `--yes` because it replaces the current database and `wp-content`.
+
+```sh
+make restore BACKUP=backups/20260618T195728Z ARGS="--yes"
+```
+
+With URL migration:
+
+```sh
+make restore BACKUP=backups/20260618T195728Z ARGS="--yes --old-url https://old.example.com --new-url https://new.example.com"
+```
+
+## Runtime Checks
+
+```sh
+make doctor-runtime
+make smoke
+```
+
+`doctor-runtime` checks service health, WordPress installation, Redis Object Cache, filesystem constants, and writable content surfaces.
+
+`smoke` additionally verifies HTTP 200, FastCGI cache HIT, future upload year/month folder creation, and upload file ownership.
 
 ## Update Images
 

@@ -32,6 +32,8 @@ This still allows plugin and theme installation unless `DISALLOW_FILE_MODS=1`.
 
 Nginx denies PHP execution under upload/cache/upgrade-style paths. This reduces the risk of a malicious uploaded PHP file being executed through the web server.
 
+The WordPress runtime keeps `wp-content` owned by `www-data` by default through `WP_CONTENT_FIX_PERMISSIONS=1`. New upload year/month folders are created by PHP-FPM as `www-data`, and WP-CLI commands are also dropped to `www-data` before execution.
+
 ## HTTPS
 
 For production:

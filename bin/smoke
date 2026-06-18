@@ -1,0 +1,80 @@
+#!/usr/bin/env sh
+set -eu
+
+failures=0
+
+fail() {
+  echo "failed: $*" >&2
+  failures=$((failures + 1))
+}
+
+ok() {
+  echo "ok: $*"
+}
+
+site_url="${WP_HOME:-http://localhost:${HTTP_PORT:-8080}}"
+
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+  site_url="${WP_HOME:-${site_url}}"
+fi
+
+if ./bin/doctor-runtime; then
+  ok "runtime doctor"
+else
+  fail "runtime doctor"
+fi
+
+docker compose exec -T nginx sh -c 'rm -rf /var/cache/nginx/wordpress/*' >/dev/null 2>&1 || true
+
+first_headers="$(mktemp)"
+second_headers="$(mktemp)"
+trap 'rm -f "${first_headers}" "${second_headers}"' EXIT INT TERM
+
+if curl -fsS -o /dev/null -D "${first_headers}" "${site_url}/"; then
+  ok "HTTP request succeeds"
+else
+  fail "HTTP request failed for ${site_url}/"
+fi
+
+if curl -fsS -o /dev/null -D "${second_headers}" "${site_url}/"; then
+  ok "second HTTP request succeeds"
+else
+  fail "second HTTP request failed for ${site_url}/"
+fi
+
+if grep -qi '^X-FastCGI-Cache: HIT' "${second_headers}"; then
+  ok "Nginx FastCGI cache reaches HIT"
+else
+  fail "Nginx FastCGI cache did not reach HIT"
+fi
+
+if ./bin/wp eval '$u = wp_upload_dir("2099/12"); if ($u["error"]) { fwrite(STDERR, $u["error"] . PHP_EOL); exit(1); } file_put_contents($u["path"] . "/vibe-wp-smoke.txt", "ok"); echo $u["path"];' >/tmp/vibe-wp-smoke-upload-path 2>/tmp/vibe-wp-smoke-upload-error; then
+  upload_path="$(cat /tmp/vibe-wp-smoke-upload-path)"
+  ok "WordPress can create future year/month upload directories"
+else
+  cat /tmp/vibe-wp-smoke-upload-error >&2 || true
+  fail "WordPress upload directory creation failed"
+  upload_path=""
+fi
+
+if [ -n "${upload_path}" ]; then
+  if docker compose exec -T wordpress sh -lc 'test "$(stat -c "%U:%G %a" /var/www/html/wp-content/uploads/2099/12/vibe-wp-smoke.txt)" = "www-data:www-data 644"'; then
+    ok "upload smoke file owner/mode is www-data:www-data 644"
+  else
+    fail "upload smoke file owner/mode is unexpected"
+  fi
+
+  docker compose exec -T wordpress sh -lc 'rm -f /var/www/html/wp-content/uploads/2099/12/vibe-wp-smoke.txt; rmdir /var/www/html/wp-content/uploads/2099/12 /var/www/html/wp-content/uploads/2099 2>/dev/null || true' >/dev/null 2>&1 || true
+fi
+
+rm -f /tmp/vibe-wp-smoke-upload-path /tmp/vibe-wp-smoke-upload-error
+
+if [ "${failures}" -ne 0 ]; then
+  echo "smoke test found ${failures} issue(s)." >&2
+  exit 1
+fi
+
+echo "smoke test passed."
