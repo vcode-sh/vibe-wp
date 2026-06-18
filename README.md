@@ -4,7 +4,7 @@
 
 - WordPress 7.0 on PHP-FPM.
 - Nginx with FastCGI page cache for anonymous traffic.
-- MariaDB LTS with health checks and WordPress-oriented defaults.
+- MariaDB LTS with rendered WordPress-oriented performance config.
 - Redis object cache with the PhpRedis extension.
 - Separate runtime surfaces for uploads, plugins, themes, and MU plugins.
 - Dedicated cron worker instead of request-triggered WP-Cron.
@@ -34,6 +34,7 @@ content/plugins/     persistent plugins
 content/themes/      persistent themes
 content/mu-plugins/  persistent MU plugins
 docker/nginx/        Nginx image, cache, compression, and server config
+docker/mariadb/      MariaDB image and env-rendered database config
 docker/redis/        Redis cache config
 docker/wordpress/    WordPress PHP-FPM image and runtime config
 docs/                architecture, configuration, operations, research
@@ -63,10 +64,11 @@ The stack is configured by `.env`, not by editing container files. The main swit
 
 - `WORDPRESS_IMAGE` for the WordPress/PHP baseline.
 - `MARIADB_IMAGE` for the database LTS line.
+- `MARIADB_RUNTIME_IMAGE` for the rendered database runtime image.
 - `REDIS_IMAGE` for the Redis major line.
 - PHP, PHP-FPM, Nginx, MariaDB, Redis, and WordPress constants through explicit env values.
 
-See [docs/configuration.md](docs/configuration.md) for the complete contract and [docs/web-tier.md](docs/web-tier.md) for the Nginx performance model.
+See [docs/configuration.md](docs/configuration.md) for the complete contract, [docs/web-tier.md](docs/web-tier.md) for the Nginx performance model, and [docs/mariadb.md](docs/mariadb.md) for database tuning.
 
 ## Deployment Modes
 

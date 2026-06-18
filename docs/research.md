@@ -59,10 +59,14 @@ The official MariaDB image provides `latest` and `lts` tags. Docker Hub currentl
 
 The image also includes `healthcheck.sh`; the template uses `--connect` and `--innodb_initialized` before WordPress starts.
 
+MariaDB's official Docker image supports custom `.cnf` files under `/etc/mysql/conf.d`, so the template now renders a `z-vibe-wp.cnf` file from env instead of keeping database tuning as a long Compose `command:` list. MariaDB's current tuning docs emphasize sizing the InnoDB buffer pool from available memory and configuring redo log size in a configuration file for restart-safe persistence.
+
 Sources:
 
 - https://hub.docker.com/_/mariadb
 - https://mariadb.com/docs/server/server-management/automated-mariadb-deployment-and-administration/docker-and-mariadb/using-healthcheck-sh
+- https://mariadb.com/docs/server/server-usage/storage-engines/innodb/mariadb-enterprise-server-innodb-operations/configure-the-innodb-buffer-pool
+- https://mariadb.com/docs/server/server-usage/storage-engines/innodb/mariadb-enterprise-server-innodb-operations/configure-the-innodb-redo-log
 
 ## Redis Object Cache
 

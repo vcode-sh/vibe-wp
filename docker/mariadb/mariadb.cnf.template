@@ -1,0 +1,51 @@
+[mariadb]
+# WordPress stores all modern content in utf8mb4.
+character-set-server=${MARIADB_CHARACTER_SET_SERVER}
+collation-server=${MARIADB_COLLATION_SERVER}
+default-storage-engine=InnoDB
+
+# Container networking should not depend on DNS reverse lookups.
+skip-name-resolve
+host-cache-size=0
+
+# Connection and table metadata caches.
+max-allowed-packet=${MARIADB_MAX_ALLOWED_PACKET}
+max-connections=${MARIADB_MAX_CONNECTIONS}
+thread-cache-size=${MARIADB_THREAD_CACHE_SIZE}
+table-open-cache=${MARIADB_TABLE_OPEN_CACHE}
+table-definition-cache=${MARIADB_TABLE_DEFINITION_CACHE}
+open-files-limit=${MARIADB_OPEN_FILES_LIMIT}
+
+# Per-session memory. Keep these deliberate because they multiply by concurrent connections.
+tmp-table-size=${MARIADB_TMP_TABLE_SIZE}
+max-heap-table-size=${MARIADB_MAX_HEAP_TABLE_SIZE}
+sort-buffer-size=${MARIADB_SORT_BUFFER_SIZE}
+join-buffer-size=${MARIADB_JOIN_BUFFER_SIZE}
+read-buffer-size=${MARIADB_READ_BUFFER_SIZE}
+read-rnd-buffer-size=${MARIADB_READ_RND_BUFFER_SIZE}
+aria-pagecache-buffer-size=${MARIADB_ARIA_PAGECACHE_BUFFER_SIZE}
+
+# InnoDB is the WordPress hot path.
+innodb-buffer-pool-size=${MARIADB_INNODB_BUFFER_POOL_SIZE}
+innodb-log-file-size=${MARIADB_INNODB_LOG_FILE_SIZE}
+innodb-log-buffer-size=${MARIADB_INNODB_LOG_BUFFER_SIZE}
+innodb-flush-log-at-trx-commit=${MARIADB_INNODB_FLUSH_LOG_AT_TRX_COMMIT}
+innodb-linux-aio=${MARIADB_INNODB_LINUX_AIO}
+innodb-flush-neighbors=${MARIADB_INNODB_FLUSH_NEIGHBORS}
+innodb-io-capacity=${MARIADB_INNODB_IO_CAPACITY}
+innodb-io-capacity-max=${MARIADB_INNODB_IO_CAPACITY_MAX}
+innodb-read-io-threads=${MARIADB_INNODB_READ_IO_THREADS}
+innodb-write-io-threads=${MARIADB_INNODB_WRITE_IO_THREADS}
+innodb-purge-threads=${MARIADB_INNODB_PURGE_THREADS}
+innodb-stats-persistent=${MARIADB_INNODB_STATS_PERSISTENT}
+innodb-buffer-pool-dump-at-shutdown=${MARIADB_INNODB_BUFFER_POOL_DUMP_AT_SHUTDOWN}
+innodb-buffer-pool-load-at-startup=${MARIADB_INNODB_BUFFER_POOL_LOAD_AT_STARTUP}
+innodb-buffer-pool-dump-pct=${MARIADB_INNODB_BUFFER_POOL_DUMP_PCT}
+
+# Diagnostics are opt-in for low overhead defaults.
+performance-schema=${MARIADB_PERFORMANCE_SCHEMA}
+slow-query-log=${MARIADB_SLOW_QUERY_LOG}
+slow-query-log-file=${MARIADB_SLOW_QUERY_LOG_FILE}
+long-query-time=${MARIADB_LONG_QUERY_TIME}
+min-examined-row-limit=${MARIADB_MIN_EXAMINED_ROW_LIMIT}
+log-queries-not-using-indexes=${MARIADB_LOG_QUERIES_NOT_USING_INDEXES}

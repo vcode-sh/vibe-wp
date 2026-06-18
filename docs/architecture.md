@@ -46,7 +46,7 @@ The WordPress service is a custom image based on the official WordPress PHP-FPM 
 
 ### `db`
 
-MariaDB stores all authoritative WordPress data. It uses a named Docker volume and health checks before WordPress starts.
+MariaDB stores all authoritative WordPress data. It uses a named Docker volume, health checks before WordPress starts, and an env-rendered `/etc/mysql/conf.d/z-vibe-wp.cnf` for WordPress-oriented InnoDB, connection, table cache, and diagnostic settings.
 
 ### `redis`
 

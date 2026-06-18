@@ -54,7 +54,9 @@ max_children = memory_available_for_php / average_child_memory
 
 ## MariaDB
 
-The default `MARIADB_INNODB_BUFFER_POOL_SIZE=256M` is intentionally modest for local use. Increase it when the database container has enough memory.
+The MariaDB service uses a rendered `/etc/mysql/conf.d/z-vibe-wp.cnf` rather than a long Compose command line. This keeps the database tuning readable and makes the active configuration easy to inspect with `my_print_defaults`.
+
+The default `MARIADB_INNODB_BUFFER_POOL_SIZE=256M` is intentionally modest for local use. Increase it when the database container has enough memory. The production example starts at `512M`, but larger servers should size the buffer pool from real database working set and available memory.
 
 For production durability, keep:
 
@@ -63,6 +65,8 @@ MARIADB_INNODB_FLUSH_LOG_AT_TRX_COMMIT=1
 ```
 
 Lower values can improve write throughput but reduce crash safety.
+
+The default also increases redo log size, table metadata caches, open-file capacity, and enables buffer-pool dump/load so restarts do not always begin with a fully cold InnoDB cache. See [mariadb.md](mariadb.md).
 
 ## Redis
 

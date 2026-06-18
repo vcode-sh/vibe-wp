@@ -15,6 +15,7 @@ MARIADB_IMAGE=mariadb:12.3
 REDIS_IMAGE=redis:8-alpine
 WORDPRESS_RUNTIME_IMAGE=vibe-wp-wordpress
 NGINX_RUNTIME_IMAGE=vibe-wp-nginx
+MARIADB_RUNTIME_IMAGE=vibe-wp-mariadb
 ```
 
 Use `wordpress:7.0-php8.4-fpm` if a plugin is not ready for PHP 8.5.
@@ -53,6 +54,18 @@ MARIADB_PASSWORD=...
 MARIADB_ROOT_PASSWORD=...
 ```
 
+MariaDB server tuning is rendered into `/etc/mysql/conf.d/z-vibe-wp.cnf` from env:
+
+```env
+MARIADB_INNODB_BUFFER_POOL_SIZE=256M
+MARIADB_INNODB_LOG_FILE_SIZE=256M
+MARIADB_MAX_CONNECTIONS=150
+MARIADB_TABLE_OPEN_CACHE=4000
+MARIADB_TMP_TABLE_SIZE=64M
+MARIADB_MAX_HEAP_TABLE_SIZE=64M
+MARIADB_SLOW_QUERY_LOG=OFF
+```
+
 WordPress values:
 
 ```env
@@ -64,6 +77,8 @@ WORDPRESS_TABLE_PREFIX=wp_
 ```
 
 For an external database, point `WORDPRESS_DB_HOST` at the external host and remove or ignore the local `db` service in your deployment model.
+
+See [mariadb.md](mariadb.md) for the full database tuning contract.
 
 ## Redis
 

@@ -32,6 +32,19 @@ else
   fail "MariaDB healthcheck failed"
 fi
 
+if docker compose exec -T db test -s /etc/mysql/conf.d/z-vibe-wp.cnf >/dev/null 2>&1; then
+  ok "MariaDB rendered config is present"
+else
+  fail "MariaDB rendered config is missing"
+fi
+
+db_runtime_values='SELECT @@character_set_server, @@collation_server, @@innodb_file_per_table, @@skip_name_resolve, @@innodb_flush_log_at_trx_commit;'
+if docker compose exec -T db sh -c 'mariadb -N -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$0"' "${db_runtime_values}" 2>/dev/null | grep -Eq '^utf8mb4[[:space:]]+utf8mb4_unicode_ci[[:space:]]+1[[:space:]]+1[[:space:]]+1$'; then
+  ok "MariaDB WordPress baseline variables are active"
+else
+  fail "MariaDB WordPress baseline variables are not active"
+fi
+
 if docker compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG' >/dev/null 2>&1; then
   ok "Redis responds to authenticated ping"
 else

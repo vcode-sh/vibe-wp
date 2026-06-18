@@ -21,7 +21,7 @@ doctor-runtime: ## Check running WordPress, DB, Redis, cache, and permissions
 smoke: ## Run end-to-end runtime smoke tests
 	@./bin/smoke
 
-build: ## Build custom WordPress and Nginx images
+build: ## Build custom WordPress, MariaDB, and Nginx images
 	@$(COMPOSE) build
 
 build-prod: ## Build using production compose override
