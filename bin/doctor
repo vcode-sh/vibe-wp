@@ -1,0 +1,49 @@
+#!/usr/bin/env sh
+set -eu
+
+failures=0
+
+check_command() {
+  if command -v "$1" >/dev/null 2>&1; then
+    echo "ok: found $1"
+  else
+    echo "missing: $1" >&2
+    failures=$((failures + 1))
+  fi
+}
+
+check_command docker
+check_command openssl
+
+if [ -f .env ]; then
+  echo "ok: .env exists"
+else
+  echo "missing: .env. Run make init." >&2
+  failures=$((failures + 1))
+fi
+
+for dir in content/uploads content/plugins content/themes content/mu-plugins backups; do
+  if [ -d "${dir}" ]; then
+    echo "ok: ${dir}"
+  else
+    echo "missing: ${dir}" >&2
+    failures=$((failures + 1))
+  fi
+done
+
+if docker compose config >/tmp/vibe-wp-compose-config.$$ 2>/tmp/vibe-wp-compose-config.err.$$; then
+  echo "ok: docker compose config"
+else
+  echo "failed: docker compose config" >&2
+  cat /tmp/vibe-wp-compose-config.err.$$ >&2 || true
+  failures=$((failures + 1))
+fi
+
+rm -f /tmp/vibe-wp-compose-config.$$ /tmp/vibe-wp-compose-config.err.$$
+
+if [ "${failures}" -ne 0 ]; then
+  echo "doctor found ${failures} issue(s)." >&2
+  exit 1
+fi
+
+echo "doctor passed."

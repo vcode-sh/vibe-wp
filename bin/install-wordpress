@@ -1,0 +1,49 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ ! -f .env ]; then
+  echo ".env is missing. Run make init first." >&2
+  exit 1
+fi
+
+set -a
+. ./.env
+set +a
+
+wp() {
+  docker compose run --rm wp "$@"
+}
+
+docker compose up -d --build db redis wordpress nginx cron
+
+echo "Waiting for database connectivity through WP-CLI..."
+until wp db check >/dev/null 2>&1; do
+  sleep 5
+done
+
+if wp core is-installed >/dev/null 2>&1; then
+  echo "WordPress is already installed."
+else
+  skip_email_flag=""
+  if [ "${WP_INSTALL_SKIP_EMAIL:-1}" = "1" ]; then
+    skip_email_flag="--skip-email"
+  fi
+
+  wp core install \
+    --url="${WP_HOME}" \
+    --title="${WP_INSTALL_TITLE:-Vibe WP}" \
+    --admin_user="${WP_INSTALL_ADMIN_USER:-admin}" \
+    --admin_password="${WP_INSTALL_ADMIN_PASSWORD}" \
+    --admin_email="${WP_INSTALL_ADMIN_EMAIL:-admin@example.com}" \
+    ${skip_email_flag}
+fi
+
+wp option update permalink_structure '/%postname%/'
+wp rewrite flush --hard
+wp plugin install redis-cache --activate
+wp redis enable || true
+wp cache flush || true
+
+echo "WordPress URL: ${WP_HOME}"
+echo "Admin user: ${WP_INSTALL_ADMIN_USER:-admin}"
+echo "Admin password: ${WP_INSTALL_ADMIN_PASSWORD}"

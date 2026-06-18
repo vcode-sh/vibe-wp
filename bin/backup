@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+set -eu
+
+timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
+target="backups/${timestamp}"
+
+mkdir -p "${target}"
+
+echo "Dumping MariaDB..."
+docker compose exec -T db sh -c 'mariadb-dump --single-transaction --routines --triggers -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' | gzip > "${target}/database.sql.gz"
+
+echo "Archiving wp-content..."
+tar -czf "${target}/wp-content.tar.gz" -C content .
+
+cat > "${target}/manifest.txt" <<EOF
+created_at=${timestamp}
+database=database.sql.gz
+wp_content=wp-content.tar.gz
+EOF
+
+echo "Backup written to ${target}"

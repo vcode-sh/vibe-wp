@@ -1,0 +1,90 @@
+user nginx;
+worker_processes auto;
+
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+  worker_connections 4096;
+  multi_accept on;
+}
+
+http {
+  include /etc/nginx/mime.types;
+  default_type application/octet-stream;
+
+  sendfile on;
+  tcp_nopush on;
+  tcp_nodelay on;
+  keepalive_timeout 65;
+  keepalive_requests 1000;
+  types_hash_max_size 2048;
+  server_tokens off;
+  charset utf-8;
+
+  log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                  '$status $body_bytes_sent "$http_referer" '
+                  '"$http_user_agent" "$http_x_forwarded_for" '
+                  'cache=$upstream_cache_status';
+
+  access_log /var/log/nginx/access.log main;
+
+  upstream php_fpm {
+    server wordpress:9000;
+    keepalive 32;
+  }
+
+  map $http_x_forwarded_proto $fastcgi_https {
+    default off;
+    https on;
+  }
+
+  map $request_method $skip_cache_method {
+    default 1;
+    GET 0;
+    HEAD 0;
+  }
+
+  map $query_string $skip_cache_query_string {
+    default 1;
+    "" 0;
+  }
+
+  map $http_authorization $skip_cache_authorization {
+    default 1;
+    "" 0;
+  }
+
+  map $request_uri $skip_cache_uri {
+    default 0;
+    ~*/wp-admin/ 1;
+    ~*/wp-login.php 1;
+    ~*/wp-cron.php 1;
+    ~*/xmlrpc.php 1;
+    ~*/wp-json/ 1;
+    ~*/wc-api/ 1;
+    ~*/cart/ 1;
+    ~*/checkout/ 1;
+    ~*/my-account/ 1;
+  }
+
+  map $http_cookie $skip_cache_cookie {
+    default 0;
+    ~*comment_author 1;
+    ~*wordpress_[a-f0-9]+ 1;
+    ~*wordpress_logged_in 1;
+    ~*wp-postpass 1;
+    ~*woocommerce_items_in_cart 1;
+    ~*woocommerce_cart_hash 1;
+    ~*wp_woocommerce_session_ 1;
+  }
+
+  map "$skip_cache_method$skip_cache_query_string$skip_cache_authorization$skip_cache_uri$skip_cache_cookie" $skip_cache {
+    default 1;
+    "00000" 0;
+  }
+
+  fastcgi_cache_path /var/cache/nginx/wordpress levels=1:2 keys_zone=WORDPRESS:128m max_size=${NGINX_FASTCGI_CACHE_MAX_SIZE} inactive=${NGINX_FASTCGI_CACHE_INACTIVE} use_temp_path=off;
+
+  include /etc/nginx/conf.d/*.conf;
+}

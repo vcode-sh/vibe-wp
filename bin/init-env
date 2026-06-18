@@ -1,0 +1,71 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ -f .env ] && [ "${1:-}" != "--force" ]; then
+  echo ".env already exists. Use ./bin/init-env --force to replace it." >&2
+  exit 1
+fi
+
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "openssl is required to generate secrets." >&2
+  exit 1
+fi
+
+rand_hex() {
+  openssl rand -hex "${1:-32}"
+}
+
+db_password="$(rand_hex 24)"
+root_password="$(rand_hex 32)"
+redis_password="$(rand_hex 24)"
+cache_suffix="$(rand_hex 4)"
+admin_password="$(rand_hex 12)"
+
+replace_line() {
+  key="$1"
+  value="$2"
+  line="$3"
+
+  case "${line}" in
+    "${key}="*) printf '%s=%s\n' "${key}" "${value}" ;;
+    *) printf '%s\n' "${line}" ;;
+  esac
+}
+
+tmp_file="$(mktemp)"
+while IFS= read -r line || [ -n "${line}" ]; do
+  for pair in \
+    "MARIADB_PASSWORD=${db_password}" \
+    "MARIADB_ROOT_PASSWORD=${root_password}" \
+    "WORDPRESS_DB_PASSWORD=${db_password}" \
+    "REDIS_PASSWORD=${redis_password}" \
+    "WP_REDIS_PASSWORD=${redis_password}" \
+    "WP_INSTALL_ADMIN_PASSWORD=${admin_password}" \
+    "WP_REDIS_PREFIX=vibe-wp-${cache_suffix}:" \
+    "WP_CACHE_KEY_SALT=vibe-wp-${cache_suffix}:" \
+    "WORDPRESS_AUTH_KEY=$(rand_hex 32)" \
+    "WORDPRESS_SECURE_AUTH_KEY=$(rand_hex 32)" \
+    "WORDPRESS_LOGGED_IN_KEY=$(rand_hex 32)" \
+    "WORDPRESS_NONCE_KEY=$(rand_hex 32)" \
+    "WORDPRESS_AUTH_SALT=$(rand_hex 32)" \
+    "WORDPRESS_SECURE_AUTH_SALT=$(rand_hex 32)" \
+    "WORDPRESS_LOGGED_IN_SALT=$(rand_hex 32)" \
+    "WORDPRESS_NONCE_SALT=$(rand_hex 32)"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    new_line="$(replace_line "${key}" "${value}" "${line}")"
+    if [ "${new_line}" != "${line}" ]; then
+      line="${new_line}"
+      break
+    fi
+  done
+
+  printf '%s\n' "${line}" >> "${tmp_file}"
+done < .env.example
+
+mv "${tmp_file}" .env
+mkdir -p content/uploads content/plugins content/themes content/mu-plugins backups
+
+echo "Created .env with generated local secrets."
+echo "WordPress admin user: admin"
+echo "WordPress admin password: ${admin_password}"
