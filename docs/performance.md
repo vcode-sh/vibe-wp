@@ -2,11 +2,12 @@
 
 ## Layers
 
-The template uses three performance layers:
+The template uses four performance layers:
 
 1. OPcache in PHP.
 2. Redis persistent object cache for WordPress object caching.
-3. Nginx FastCGI page cache for anonymous page views.
+3. Nginx static file and compression tuning.
+4. Nginx FastCGI page cache for anonymous page views.
 
 These layers solve different problems. Redis does not replace page cache, and page cache does not remove the need for object cache in admin, logged-in, and dynamic flows.
 
@@ -79,12 +80,27 @@ If multiple sites share one Redis server, every site must use unique:
 
 ## Nginx FastCGI Cache
 
-The cache is short-lived by default:
+Nginx handles static assets directly, enables gzip for text-based responses, caches open file metadata, and uses FastCGI cache for anonymous page views.
+
+Static file defaults:
+
+```env
+NGINX_GZIP=on
+NGINX_OPEN_FILE_CACHE=on
+NGINX_STATIC_CACHE_CONTROL=public,max-age=2592000
+```
+
+The page cache is short-lived by default:
 
 ```env
 NGINX_FASTCGI_CACHE_TTL=10m
+NGINX_FASTCGI_REDIRECT_CACHE_TTL=1m
 ```
 
 This gives a visible speedup for anonymous traffic while keeping editorial changes reasonably fresh. For high-traffic sites with explicit cache purge workflows, increase the TTL.
 
-The template skips cache for admin, login, REST API, query strings, authorization headers, logged-in cookies, comment author cookies, and common WooCommerce cart/account paths.
+The template skips cache for admin, login, comments, REST API, XML-RPC, query strings, no-cache requests, authorization headers, logged-in cookies, password/reset/settings cookies, comment author cookies, feeds, and common WooCommerce cart/account paths.
+
+`fastcgi_cache_lock` is enabled to avoid stampedes when an uncached anonymous page receives concurrent traffic. `fastcgi_cache_use_stale` allows Nginx to serve a stale cached response during upstream errors, timeouts, or background updates.
+
+See [web-tier.md](web-tier.md) for the full web-tier decision and tuning matrix.

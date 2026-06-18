@@ -101,15 +101,26 @@ PHP_FPM_PM_START_SERVERS=4
 
 Tune `PHP_FPM_PM_MAX_CHILDREN` from real memory usage, not from CPU count alone.
 
-## Nginx Cache
+## Nginx
 
 ```env
+NGINX_WORKER_CONNECTIONS=4096
+NGINX_KEEPALIVE_TIMEOUT=65s
+NGINX_KEEPALIVE_REQUESTS=1000
+NGINX_CLIENT_MAX_BODY_SIZE=128m
+NGINX_CLIENT_BODY_BUFFER_SIZE=256k
+NGINX_GZIP=on
+NGINX_OPEN_FILE_CACHE=on
+NGINX_STATIC_CACHE_CONTROL=public,max-age=2592000
 NGINX_FASTCGI_CACHE_TTL=10m
+NGINX_FASTCGI_REDIRECT_CACHE_TTL=1m
 NGINX_FASTCGI_CACHE_INACTIVE=30m
 NGINX_FASTCGI_CACHE_MAX_SIZE=1g
 ```
 
-The page cache is intentionally conservative. It improves anonymous traffic without caching logged-in or cart-like flows.
+Nginx serves static files, compresses text responses, caches file metadata, and keeps a conservative FastCGI page cache for anonymous traffic. It does not cache logged-in, admin, REST, query-string, no-cache, or cart-like flows.
+
+See [web-tier.md](web-tier.md) for the full Nginx tuning contract and the Nginx/Caddy/OpenLiteSpeed tradeoff.
 
 ## WordPress Constants
 

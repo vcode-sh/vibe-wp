@@ -5,7 +5,7 @@ server {
   index index.php index.html;
 
   client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
-  keepalive_timeout ${NGINX_KEEPALIVE_TIMEOUT};
+  client_body_buffer_size ${NGINX_CLIENT_BODY_BUFFER_SIZE};
 
   add_header X-Content-Type-Options "nosniff" always;
   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -30,7 +30,7 @@ server {
     try_files $uri /index.php?$args;
   }
 
-  location ~* /(?:uploads|files|cache|upgrade)/.*\.php$ {
+  location ~* /(?:uploads|files|cache|upgrade|backups?|private)/.*\.(?:php|phtml|phar|phps)$ {
     deny all;
   }
 
@@ -46,10 +46,9 @@ server {
     try_files $uri $uri/ /index.php?$args;
   }
 
-  location ~* \.(?:css|js|jpg|jpeg|gif|png|svg|webp|ico|avif|woff|woff2|ttf|eot|otf|mp4|webm)$ {
+  location ~* \.(?:css|js|mjs|map|json|jpg|jpeg|gif|png|svg|webp|ico|avif|woff|woff2|ttf|eot|otf|mp4|webm|pdf|webmanifest)$ {
     access_log off;
-    expires 30d;
-    add_header Cache-Control "public, max-age=2592000, immutable";
+    add_header Cache-Control "${NGINX_STATIC_CACHE_CONTROL}" always;
     try_files $uri =404;
   }
 
@@ -60,27 +59,34 @@ server {
     fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     fastcgi_param SCRIPT_NAME $fastcgi_script_name;
     fastcgi_param HTTPS $fastcgi_https;
+    fastcgi_param SERVER_PORT $fastcgi_server_port;
     fastcgi_param HTTP_X_FORWARDED_PROTO $http_x_forwarded_proto;
     fastcgi_param HTTP_X_FORWARDED_HOST $http_host;
     fastcgi_param HTTP_X_FORWARDED_PORT $http_x_forwarded_port;
     fastcgi_pass php_fpm;
     fastcgi_keep_conn on;
+    fastcgi_hide_header X-Powered-By;
 
     fastcgi_buffering on;
     fastcgi_buffers 16 16k;
     fastcgi_buffer_size 32k;
+    fastcgi_busy_buffers_size 64k;
     fastcgi_connect_timeout ${NGINX_FASTCGI_CONNECT_TIMEOUT};
     fastcgi_send_timeout ${NGINX_FASTCGI_SEND_TIMEOUT};
     fastcgi_read_timeout ${NGINX_FASTCGI_READ_TIMEOUT};
 
     fastcgi_cache WORDPRESS;
     fastcgi_cache_methods GET HEAD;
-    fastcgi_cache_key "$scheme$request_method$host$request_uri";
+    fastcgi_cache_key "$fastcgi_https$host$request_uri";
     fastcgi_cache_bypass $skip_cache;
     fastcgi_no_cache $skip_cache $upstream_http_set_cookie;
-    fastcgi_cache_valid 200 301 302 ${NGINX_FASTCGI_CACHE_TTL};
+    fastcgi_cache_valid 200 ${NGINX_FASTCGI_CACHE_TTL};
+    fastcgi_cache_valid 301 302 ${NGINX_FASTCGI_REDIRECT_CACHE_TTL};
+    fastcgi_cache_min_uses ${NGINX_FASTCGI_CACHE_MIN_USES};
     fastcgi_cache_use_stale error timeout invalid_header updating http_500 http_503;
     fastcgi_cache_lock on;
+    fastcgi_cache_lock_timeout ${NGINX_FASTCGI_CACHE_LOCK_TIMEOUT};
+    fastcgi_cache_revalidate on;
     fastcgi_cache_background_update on;
     add_header X-FastCGI-Cache $upstream_cache_status always;
   }

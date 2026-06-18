@@ -19,7 +19,7 @@ Workers and tools:
 
 ### `nginx`
 
-Nginx serves static files, applies WordPress rewrites, forwards PHP requests to PHP-FPM, and keeps a short-lived FastCGI page cache for anonymous GET and HEAD requests.
+Nginx serves static files, applies WordPress rewrites, compresses text responses, forwards PHP requests to PHP-FPM, and keeps a short-lived FastCGI page cache for anonymous GET and HEAD requests.
 
 The cache intentionally skips:
 
@@ -28,8 +28,11 @@ The cache intentionally skips:
 - login requests
 - REST API requests
 - query-string requests
+- browser no-cache requests
 - WooCommerce cart, checkout, and account URLs
 - requests with authorization headers
+
+The default web tier remains Nginx rather than Caddy or OpenLiteSpeed because this template prioritizes an env-driven FastCGI cache layer without making TLS automation or an LSCache plugin contract mandatory. See [web-tier.md](web-tier.md).
 
 ### `wordpress`
 

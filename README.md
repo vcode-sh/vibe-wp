@@ -33,7 +33,7 @@ content/uploads/     persistent media uploads
 content/plugins/     persistent plugins
 content/themes/      persistent themes
 content/mu-plugins/  persistent MU plugins
-docker/nginx/        Nginx image, cache, and server config
+docker/nginx/        Nginx image, cache, compression, and server config
 docker/redis/        Redis cache config
 docker/wordpress/    WordPress PHP-FPM image and runtime config
 docs/                architecture, configuration, operations, research
@@ -66,7 +66,7 @@ The stack is configured by `.env`, not by editing container files. The main swit
 - `REDIS_IMAGE` for the Redis major line.
 - PHP, PHP-FPM, Nginx, MariaDB, Redis, and WordPress constants through explicit env values.
 
-See [docs/configuration.md](docs/configuration.md) for the complete contract.
+See [docs/configuration.md](docs/configuration.md) for the complete contract and [docs/web-tier.md](docs/web-tier.md) for the Nginx performance model.
 
 ## Deployment Modes
 

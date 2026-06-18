@@ -87,3 +87,15 @@ The default stack is:
 - WP-CLI sidecar profile for operations.
 
 This keeps the template easy to run locally while remaining close to a production deployment model.
+
+## Web Tier Review
+
+Nginx remains the default because it gives the template direct FastCGI cache controls, cache-bypass maps, static file handling, and WordPress rewrites without requiring a WordPress cache plugin. Caddy is a strong choice for host-level automatic HTTPS, but this stack usually sits behind an external TLS proxy. OpenLiteSpeed with LSCache is a good candidate for a future optional preset, but it changes the runtime and plugin contract enough that it should not be the default.
+
+Sources:
+
+- https://nginx.org/en/docs/http/ngx_http_core_module.html
+- https://nginx.org/en/docs/http/ngx_http_fastcgi_module.html
+- https://docs.nginx.com/nginx/admin-guide/content-cache/content-caching/
+- https://caddyserver.com/docs/caddyfile/directives/php_fastcgi
+- https://docs.litespeedtech.com/cloud/docker/ols-wordpress/
