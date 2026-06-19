@@ -1,7 +1,7 @@
 import { randomPassword } from "./secrets";
 import type { HostFacts, InstallerState, PerformancePreset } from "./types";
 
-export const INSTALLER_VERSION = "0.1.0";
+export const INSTALLER_VERSION = "0.1.1";
 
 export function emptyHostFacts(): HostFacts {
   return {

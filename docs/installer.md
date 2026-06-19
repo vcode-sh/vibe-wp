@@ -38,7 +38,7 @@ curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh
 Run a specific installer version:
 
 ```sh
-curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --installer-version 0.1.0
+curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --installer-version 0.1.1
 ```
 
 Use a staging installer host:
@@ -52,8 +52,8 @@ curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_BASE_URL=https://s
 Create a release by pushing a tag:
 
 ```sh
-git tag installer-v0.1.0
-git push origin installer-v0.1.0
+git tag installer-v0.1.1
+git push origin installer-v0.1.1
 ```
 
 The release workflow:
