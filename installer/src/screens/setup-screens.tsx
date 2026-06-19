@@ -172,6 +172,10 @@ export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
 export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
+      <text fg={color("muted")} wrapMode="word">
+        This is the account you'll use to log in to WordPress. We generate a strong password for
+        you.
+      </text>
       <Field
         focused={focusIndex === 0}
         label="Site title"
@@ -193,6 +197,7 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
       />
       <Field
         focused={focusIndex === 3}
+        hint="Auto-generated and strong. Saved to your env file — keep it safe to log in."
         label="Admin password"
         onInput={(value) => update("adminPassword", value)}
         secret
@@ -204,13 +209,10 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
         onInput={(value) => update("locale", value)}
         value={state.locale}
       />
-      <text fg={color("muted")}>
-        Password is stored only in the generated env file and redacted from logs.
-      </text>
       <ActionRow
         onPrimary={next}
         primary="Continue"
-        secondary="Use WordPress admin to change profile details later"
+        secondary="You can change all of this later in WordPress"
       />
     </box>
   );

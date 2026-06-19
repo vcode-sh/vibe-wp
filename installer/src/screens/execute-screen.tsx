@@ -102,6 +102,11 @@ export function ExecuteScreen({
       {latestResults.length > 0 && <ResultPanel results={latestResults} />}
       {!options.yes && (
         <Field
+          feedback={
+            confirmationAccepted
+              ? { tone: "ok", text: "Confirmed — press Enter to begin." }
+              : { tone: "warn", text: "Safety check: type the line above exactly to confirm." }
+          }
           focused
           label={`Type ${confirmationPhrase}`}
           onInput={setConfirmation}
