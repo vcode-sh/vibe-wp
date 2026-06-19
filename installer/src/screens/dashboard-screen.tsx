@@ -4,17 +4,26 @@ import { useMemo, useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
-import { useGlyphs } from "../components/glyph-context";
-import { Panel } from "../components/primitives";
-import { Spinner } from "../components/spinner";
 import {
+  buildBackupsListTask,
   buildOperationTask,
   groupedOperations,
-  type ManageOperation,
-  type OpSafety
+  type ManageOperation
 } from "../core/manage-operations";
 import { runTask, type TaskStatus } from "../core/task-runner";
 import { GroupedOpList, type HealthState, StatusCards } from "./dashboard-cards";
+import { BackupPicker, OpDetail, ResultPanel } from "./dashboard-detail";
+
+const SANDBOX_BACKUPS = [
+  "backups/prod/20260618T090000Z",
+  "backups/prod/20260619T120000Z-pre-update"
+];
+
+interface RestoreState {
+  index: number;
+  items: string[];
+  op: ManageOperation;
+}
 
 export function DashboardScreen({ state, plan }: ScreenProps) {
   const groups = useMemo(() => groupedOperations(state.stagingEnabled), [state.stagingEnabled]);
@@ -24,17 +33,40 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
   const [status, setStatus] = useState<TaskStatus | "idle">("idle");
   const [output, setOutput] = useState<string[]>([]);
   const [health, setHealth] = useState<HealthState>("unknown");
+  const [restore, setRestore] = useState<RestoreState | null>(null);
   const current = ops[selected] ?? ops[0];
 
-  async function run(op: ManageOperation) {
-    if (op.safety === "danger" && confirmId !== op.id) {
-      setConfirmId(op.id);
+  async function fetchBackups(): Promise<string[]> {
+    if (state.localSandbox) {
+      return SANDBOX_BACKUPS;
+    }
+    const res = await runTask(buildBackupsListTask("prod", state), true, plan);
+    return res.output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  async function openRestore(op: ManageOperation) {
+    setStatus("running");
+    setOutput(["Loading backups…"]);
+    const backups = await fetchBackups();
+    setStatus("idle");
+    setOutput([]);
+    if (backups.length === 0) {
+      setStatus("failed");
+      setOutput(['No backups found yet — run "Back up now" first.']);
       return;
     }
+    setRestore({ op, items: ["Cancel", ...backups], index: 0 });
+  }
+
+  async function runOp(op: ManageOperation, backupPath?: string) {
+    setRestore(null);
     setConfirmId(null);
     setStatus("running");
     setOutput([`Running: ${op.label}…`]);
-    const result = await runTask(buildOperationTask(op, state), true, plan);
+    const result = await runTask(buildOperationTask(op, state, backupPath), true, plan);
     setStatus(result.status);
     setOutput((result.output || "Done.").split("\n"));
     if (op.id === "health") {
@@ -42,7 +74,23 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
     }
   }
 
+  function activate(op: ManageOperation) {
+    if (op.needsBackup) {
+      openRestore(op);
+      return;
+    }
+    if (op.safety === "danger" && confirmId !== op.id) {
+      setConfirmId(op.id);
+      return;
+    }
+    runOp(op);
+  }
+
   useKeyboard((key) => {
+    if (restore) {
+      handleRestoreKey(key, restore, setRestore, runOp);
+      return;
+    }
     if (key.name === "up") {
       setSelected((index) => Math.max(0, index - 1));
       setConfirmId(null);
@@ -50,7 +98,7 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
       setSelected((index) => Math.min(ops.length - 1, index + 1));
       setConfirmId(null);
     } else if ((key.name === "return" || key.name === "enter") && current) {
-      run(current);
+      activate(current);
     }
   });
 
@@ -64,100 +112,77 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
         </text>
       </box>
       <StatusCards health={health} state={state} />
+      {restore ? (
+        <BackupPicker index={restore.index} items={restore.items} />
+      ) : (
+        <OpList
+          confirmId={confirmId}
+          current={current}
+          groups={groups}
+          ops={ops}
+          set={setSelected}
+          setConfirm={setConfirmId}
+          status={status}
+        />
+      )}
+      {output.length > 0 && <ResultPanel output={output} status={status} />}
+    </box>
+  );
+}
+
+function OpList({
+  groups,
+  ops,
+  current,
+  status,
+  confirmId,
+  set,
+  setConfirm
+}: {
+  groups: ReturnType<typeof groupedOperations>;
+  ops: ManageOperation[];
+  current: ManageOperation | undefined;
+  status: TaskStatus | "idle";
+  confirmId: string | null;
+  set: (n: number) => void;
+  setConfirm: (id: string | null) => void;
+}) {
+  return (
+    <box flexDirection="column" gap={1}>
       <text fg={color("subtle")} height={1} truncate>
         Pick an action below. Nothing happens until you press Enter.
       </text>
       <GroupedOpList
         groups={groups}
         onSelect={(id) => {
-          // Click selects only — never runs. Clear any pending danger confirm.
           const index = ops.findIndex((op) => op.id === id);
           if (index >= 0) {
-            setSelected(index);
-            setConfirmId(null);
+            set(index);
+            setConfirm(null);
           }
         }}
         selectedId={current?.id}
       />
       <OpDetail confirmPending={confirmId === current?.id} op={current} status={status} />
-      {output.length > 0 && <ResultPanel output={output} status={status} />}
     </box>
   );
 }
 
-function ResultPanel({ output, status }: { output: string[]; status: TaskStatus | "idle" }) {
-  return (
-    <box flexDirection="column" gap={space.xs}>
-      <ResultBadge status={status} />
-      <Panel content={output.join("\n")} maxLines={8} title="RESULT" />
-    </box>
-  );
-}
-
-function ResultBadge({ status }: { status: TaskStatus | "idle" }) {
-  if (status === "running") {
-    return (
-      <box alignItems="center" flexDirection="row" gap={space.sm} height={1}>
-        <Spinner />
-        <text fg={color("muted")}>Working…</text>
-      </box>
-    );
+function handleRestoreKey(
+  key: { name: string },
+  restore: RestoreState,
+  setRestore: (r: RestoreState | null) => void,
+  runOp: (op: ManageOperation, backupPath?: string) => void
+) {
+  if (key.name === "up") {
+    setRestore({ ...restore, index: Math.max(0, restore.index - 1) });
+  } else if (key.name === "down") {
+    setRestore({ ...restore, index: Math.min(restore.items.length - 1, restore.index + 1) });
+  } else if (key.name === "return" || key.name === "enter") {
+    if (restore.index === 0) {
+      setRestore(null);
+    } else {
+      runOp(restore.op, restore.items[restore.index]);
+    }
   }
-  if (status !== "done" && status !== "failed") {
-    return null;
-  }
-  const failed = status === "failed";
-  return (
-    <box flexDirection="row" height={1}>
-      <box backgroundColor={color(failed ? "danger" : "success")} paddingX={1}>
-        <text attributes={TextAttributes.BOLD} fg={color("black")}>
-          {failed ? "Failed" : "Done"}
-        </text>
-      </box>
-    </box>
-  );
-}
-
-function OpDetail({
-  op,
-  status,
-  confirmPending
-}: {
-  op: ManageOperation | undefined;
-  status: TaskStatus | "idle";
-  confirmPending: boolean;
-}) {
-  const glyphs = useGlyphs();
-  if (!op) {
-    return null;
-  }
-  return (
-    <box flexDirection="column" gap={space.xs} paddingX={1}>
-      <text fg={color("muted")} height={1} truncate>
-        {op.description}
-      </text>
-      {confirmPending ? (
-        <text attributes={TextAttributes.BOLD} fg={color("danger")} height={1} truncate>
-          {glyphs.warn} This changes your live site — press Enter again to confirm.
-        </text>
-      ) : (
-        <text fg={color(status === "failed" ? "danger" : "subtle")} height={1} truncate>
-          {statusLine(status, op.safety)}
-        </text>
-      )}
-    </box>
-  );
-}
-
-function statusLine(status: TaskStatus | "idle", safety: OpSafety): string {
-  if (status === "running") {
-    return "Working…";
-  }
-  if (status === "done") {
-    return "Done — pick another action or press esc to go back.";
-  }
-  if (status === "failed") {
-    return "That didn't work — see the result below.";
-  }
-  return safety === "safe" ? "Press Enter to run — this is safe." : "Press Enter to run.";
 }
