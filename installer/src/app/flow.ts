@@ -5,23 +5,37 @@ import { steps } from "./steps";
 // Dynamic wizard flow: each mode reveals only the steps it actually needs, so a
 // "Manage" run no longer drags the user through Domain/Admin/Performance/etc.
 // This is navigation/presentation only — the core/ planner already branches.
+// Essentials first (domain, admin), then options (staging, performance, backup,
+// ai), with the advanced Location step kept just before review.
 const FULL: StepId[] = [
   "welcome",
   "sites",
   "system",
   "domain",
-  "mode",
   "admin",
-  "performance",
-  "ai",
-  "backup",
   "staging",
+  "performance",
+  "backup",
+  "ai",
+  "mode",
   "review",
   "execute",
   "success"
 ];
 
-function visibleStepIds(mode: InstallMode): StepId[] {
+// Quick new-site: ask only what we cannot guess (domain + admin email) and let
+// smart defaults handle everything else, so the happy path is Enter-Enter-done.
+const QUICK_NEW_SITE: StepId[] = [
+  "welcome",
+  "sites",
+  "domain",
+  "admin",
+  "review",
+  "execute",
+  "success"
+];
+
+function visibleStepIds(mode: InstallMode, quickInstall: boolean): StepId[] {
   switch (mode) {
     case "manage-existing":
       return ["welcome", "sites", "dashboard"];
@@ -32,12 +46,19 @@ function visibleStepIds(mode: InstallMode): StepId[] {
     case "staging-only":
       return ["welcome", "sites", "system", "domain", "staging", "review", "execute", "success"];
     default:
-      // new-site and external-services need the full build flow.
+      // new-site and external-services need the full build flow, unless the user
+      // picked the quick new-site path.
+      if (mode === "new-site" && quickInstall) {
+        return QUICK_NEW_SITE;
+      }
       return FULL;
   }
 }
 
-export function visibleSteps(mode: InstallMode): Step[] {
-  const ids = new Set(visibleStepIds(mode));
-  return steps.filter((step) => ids.has(step.id));
+export function visibleSteps(mode: InstallMode, quickInstall = false): Step[] {
+  const order = visibleStepIds(mode, quickInstall);
+  const rank = new Map(order.map((id, index) => [id, index]));
+  return steps
+    .filter((step) => rank.has(step.id))
+    .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
 }

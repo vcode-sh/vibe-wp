@@ -20,6 +20,21 @@ const SITE_MODES = new Set<InstallMode>([
   "staging-only"
 ]);
 
+type SetupChoice = "quick" | "custom";
+
+const SETUP_CHOICES: Array<{ description: string; name: string; value: SetupChoice }> = [
+  {
+    name: "Create a new site — quick setup",
+    description: "Just your domain and email. We pick safe defaults for everything else.",
+    value: "quick"
+  },
+  {
+    name: "Create a new site — custom",
+    description: "Walk through staging, performance, backups, AI, and where it lives.",
+    value: "custom"
+  }
+];
+
 export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
   const sites = state.host.existingSites;
   const hasSites = sites.length > 0;
@@ -28,6 +43,7 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
     (option) => hasSites || option.value === "new-site" || option.value === "external-services"
   );
   const needsSite = SITE_MODES.has(state.mode) && hasSites;
+  const isNewSite = state.mode === "new-site";
 
   function setMode(mode: InstallMode) {
     update("mode", mode);
@@ -38,6 +54,16 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
       update("installDir", defaultInstallDir(slug, sites.length));
       update("productionHttpPort", ports.production);
       update("stagingHttpPort", ports.staging);
+    }
+  }
+
+  function setSetupChoice(choice: SetupChoice) {
+    const quick = choice === "quick";
+    update("quickInstall", quick);
+    // Quick skips the staging step, so make sure we never carry an unreachable
+    // (and invalid) default staging domain into the plan.
+    if (quick) {
+      update("stagingEnabled", false);
     }
   }
 
@@ -65,7 +91,17 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
           value={state.mode}
         />
       </Section>
-      {needsSite ? (
+      {isNewSite && (
+        <Section title="How much do you want to set up?">
+          <ChoiceList
+            focused={focusIndex === 1}
+            onChange={setSetupChoice}
+            options={SETUP_CHOICES}
+            value={state.quickInstall ? "quick" : "custom"}
+          />
+        </Section>
+      )}
+      {needsSite && (
         <Section title="Which site?">
           <ChoiceList
             focused={focusIndex === 1}
@@ -83,11 +119,10 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
             value={state.selectedSiteDir || sites[0]?.installDir || ""}
           />
         </Section>
-      ) : (
+      )}
+      {!(isNewSite || needsSite) && (
         <text fg={color("subtle")}>
-          {hasSites
-            ? `${sites.length} existing install(s) detected on this host.`
-            : "No existing Vibe WP installs detected — let's create your first site."}
+          {`${sites.length} existing install(s) detected on this host.`}
         </text>
       )}
       <ActionRow onPrimary={next} primary="Continue" secondary={secondaryFor(state.mode)} />

@@ -55,16 +55,16 @@ export const steps: Step[] = [
     help: "Collects public domains and keeps app ports bound to loopback."
   },
   {
-    id: "mode",
-    focusCount: 2,
-    title: "Location",
-    help: "Where the checkout lives on disk and which git ref to deploy."
-  },
-  {
     id: "admin",
     focusCount: 5,
     title: "Admin",
     help: "Creates the first WordPress administrator with generated secrets."
+  },
+  {
+    id: "staging",
+    focusCount: 3,
+    title: "Staging",
+    help: "Creates a safe private test copy with noindex and mail safeguards."
   },
   {
     id: "performance",
@@ -73,22 +73,22 @@ export const steps: Step[] = [
     help: "Maps VPS memory to PHP-FPM, Redis, MariaDB, and Nginx settings."
   },
   {
-    id: "ai",
-    focusCount: 3,
-    title: "AI",
-    help: "Keeps WordPress AI plugins ready and optionally injects provider keys."
-  },
-  {
     id: "backup",
     focusCount: 1,
     title: "Backups",
     help: "Makes backups visible in the install flow instead of an afterthought."
   },
   {
-    id: "staging",
+    id: "ai",
     focusCount: 3,
-    title: "Staging",
-    help: "Creates a safe private test copy with noindex and mail safeguards."
+    title: "AI",
+    help: "Keeps WordPress AI plugins ready and optionally injects provider keys."
+  },
+  {
+    id: "mode",
+    focusCount: 2,
+    title: "Location",
+    help: "Where the checkout lives on disk and which git ref to deploy."
   },
   {
     id: "review",

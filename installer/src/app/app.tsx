@@ -39,7 +39,10 @@ export function App({ initialState, options }: AppProps) {
 
   const compact = options.compact || dimensions.width < 92 || dimensions.height < 26;
   const ascii = useMemo(() => shouldUseAscii({ ascii: options.ascii }), [options.ascii]);
-  const flowSteps = useMemo(() => visibleSteps(state.mode), [state.mode]);
+  const flowSteps = useMemo(
+    () => visibleSteps(state.mode, state.quickInstall),
+    [state.mode, state.quickInstall]
+  );
   const activeIndex = Math.min(stepIndex, flowSteps.length - 1);
   const current = getStep(flowSteps, activeIndex);
   const plan = useMemo(() => buildInstallPlan(state), [state]);

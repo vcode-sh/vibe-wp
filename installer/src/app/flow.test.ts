@@ -1,12 +1,51 @@
 import { expect, test } from "bun:test";
 import { visibleSteps } from "./flow";
 
-test("new-site reveals the full build flow", () => {
-  const ids = visibleSteps("new-site").map((step) => step.id);
+test("custom new-site reveals the full build flow", () => {
+  const ids = visibleSteps("new-site", false).map((step) => step.id);
   expect(ids).toContain("domain");
   expect(ids).toContain("admin");
   expect(ids).toContain("staging");
   expect(ids.length).toBe(13);
+});
+
+test("custom new-site orders essentials before options and advanced last", () => {
+  const ids = visibleSteps("new-site", false).map((step) => step.id);
+  expect(ids).toEqual([
+    "welcome",
+    "sites",
+    "system",
+    "domain",
+    "admin",
+    "staging",
+    "performance",
+    "backup",
+    "ai",
+    "mode",
+    "review",
+    "execute",
+    "success"
+  ]);
+});
+
+test("quick new-site asks only the essentials", () => {
+  const ids = visibleSteps("new-site", true).map((step) => step.id);
+  expect(ids).toEqual(["welcome", "sites", "domain", "admin", "review", "execute", "success"]);
+  expect(ids.length).toBe(7);
+});
+
+test("quick flag is ignored for non-new-site modes", () => {
+  const ids = visibleSteps("staging-only", true).map((step) => step.id);
+  expect(ids).toEqual([
+    "welcome",
+    "sites",
+    "system",
+    "domain",
+    "staging",
+    "review",
+    "execute",
+    "success"
+  ]);
 });
 
 test("manage-existing routes to the dashboard", () => {
