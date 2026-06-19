@@ -15,8 +15,9 @@ ok() {
   echo "ok: $*"
 }
 
-vibe_wp_list() {
-  printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d'
+runtime_check_ok() {
+  key="$1"
+  printf '%s\n' "${wp_runtime_checks}" | grep -qx "${key}=ok"
 }
 
 require_service() {
@@ -90,55 +91,95 @@ test "$policy" = "$REDIS_MAXMEMORY_POLICY" && test "$memory" -gt 0 && test "$app
   fi
 fi
 
-if vibe_wp core is-installed >/dev/null 2>&1; then
-  ok "WordPress is installed"
-else
-  fail "WordPress is not installed"
-fi
-
 required_plugins="$(vibe_env_value VIBE_WP_REQUIRED_PLUGINS)"
 required_plugins="${required_plugins:-redis-cache,ai,ai-provider-for-anthropic,ai-provider-for-google,ai-provider-for-openai}"
-missing_required_plugins=0
-for plugin in $(vibe_wp_list "${required_plugins}"); do
-  if ! vibe_wp plugin is-installed "${plugin}" >/dev/null 2>&1 || ! vibe_wp plugin is-active "${plugin}" >/dev/null 2>&1; then
-    missing_required_plugins=1
-  fi
-done
-if [ "${missing_required_plugins}" -eq 0 ]; then
-  ok "WordPress baseline plugins are installed and active"
-else
-  fail "one or more WordPress baseline plugins are missing or inactive"
-fi
-
 removed_plugins="$(vibe_env_value VIBE_WP_REMOVE_PLUGINS)"
 removed_plugins="${removed_plugins:-hello,hello-dolly}"
-unexpected_removed_plugins=0
-for plugin in $(vibe_wp_list "${removed_plugins}"); do
-  if vibe_wp plugin is-installed "${plugin}" >/dev/null 2>&1; then
-    unexpected_removed_plugins=1
-  fi
-done
-if [ "${unexpected_removed_plugins}" -eq 0 ]; then
-  ok "unwanted bundled plugins are absent"
-else
-  fail "one or more unwanted bundled plugins are still installed"
-fi
-
 removed_themes="$(vibe_env_value VIBE_WP_REMOVE_THEMES)"
 removed_themes="${removed_themes:-twentytwentythree,twentytwentyfour}"
-unexpected_removed_themes=0
-for theme in $(vibe_wp_list "${removed_themes}"); do
-  if vibe_wp theme is-installed "${theme}" >/dev/null 2>&1; then
-    unexpected_removed_themes=1
-  fi
-done
-if [ "${unexpected_removed_themes}" -eq 0 ]; then
-  ok "unwanted bundled themes are absent"
-else
-  fail "one or more unwanted bundled themes are still installed"
-fi
 
-opcache_runtime_check='
+wp_runtime_check='
+function vibe_result(string $name, bool $ok): void {
+    echo $name . "=" . ($ok ? "ok" : "bad") . PHP_EOL;
+}
+
+function vibe_csv_items(string $name, string $default): array {
+    $value = getenv($name);
+
+    if ($value === false || trim((string) $value) === "") {
+        $value = $default;
+    }
+
+    return array_values(array_filter(array_map("trim", explode(",", (string) $value)), static function (string $item): bool {
+        return $item !== "";
+    }));
+}
+
+function vibe_plugin_file_for_slug(array $plugins, string $slug): ?string {
+    if (isset($plugins[$slug])) {
+        return $slug;
+    }
+
+    if (isset($plugins[$slug . ".php"])) {
+        return $slug . ".php";
+    }
+
+    if (isset($plugins[$slug . "/" . $slug . ".php"])) {
+        return $slug . "/" . $slug . ".php";
+    }
+
+    foreach (array_keys($plugins) as $file) {
+        if (strpos($file, $slug . "/") === 0 || basename($file, ".php") === $slug) {
+            return $file;
+        }
+    }
+
+    return null;
+}
+
+function vibe_plugin_is_active(string $pluginFile): bool {
+    return is_plugin_active($pluginFile)
+        || (function_exists("is_plugin_active_for_network") && is_plugin_active_for_network($pluginFile));
+}
+
+$requiredPlugins = vibe_csv_items("VIBE_WP_REQUIRED_PLUGINS", "redis-cache,ai,ai-provider-for-anthropic,ai-provider-for-google,ai-provider-for-openai");
+$removedPlugins = vibe_csv_items("VIBE_WP_REMOVE_PLUGINS", "hello,hello-dolly");
+$removedThemes = vibe_csv_items("VIBE_WP_REMOVE_THEMES", "twentytwentythree,twentytwentyfour");
+
+vibe_result("core_installed", is_blog_installed());
+
+require_once ABSPATH . "wp-admin/includes/plugin.php";
+$plugins = get_plugins();
+$missingRequiredPlugins = false;
+foreach ($requiredPlugins as $plugin) {
+    $pluginFile = vibe_plugin_file_for_slug($plugins, $plugin);
+
+    if ($pluginFile === null || !vibe_plugin_is_active($pluginFile)) {
+        $missingRequiredPlugins = true;
+        break;
+    }
+}
+vibe_result("baseline_plugins", !$missingRequiredPlugins);
+
+$unexpectedRemovedPlugins = false;
+foreach ($removedPlugins as $plugin) {
+    if (vibe_plugin_file_for_slug($plugins, $plugin) !== null) {
+        $unexpectedRemovedPlugins = true;
+        break;
+    }
+}
+vibe_result("removed_plugins", !$unexpectedRemovedPlugins);
+
+$themes = wp_get_themes();
+$unexpectedRemovedThemes = false;
+foreach ($removedThemes as $theme) {
+    if (isset($themes[$theme])) {
+        $unexpectedRemovedThemes = true;
+        break;
+    }
+}
+vibe_result("removed_themes", !$unexpectedRemovedThemes);
+
 $cfg = opcache_get_configuration();
 $directives = is_array($cfg) && isset($cfg["directives"]) ? $cfg["directives"] : array();
 
@@ -150,49 +191,99 @@ $saveComments = !empty($directives["opcache.save_comments"]);
 $fileOverride = !empty($directives["opcache.enable_file_override"]);
 $jitBuffer = (int) ($directives["opcache.jit_buffer_size"] ?? 0);
 
-if ($enabled && $memory >= 134217728 && $interned >= 16 && $maxFiles >= 20000 && $saveComments && !$fileOverride && $jitBuffer === 0) {
-    echo "ok";
-} else {
-    echo "bad";
+$opcacheOk = $enabled && $memory >= 134217728 && $interned >= 16 && $maxFiles >= 20000 && $saveComments && !$fileOverride && $jitBuffer === 0;
+vibe_result("opcache", $opcacheOk);
+
+global $wp_object_cache;
+$redisConnected = false;
+try {
+    $redisConnected = is_object($wp_object_cache)
+        && method_exists($wp_object_cache, "redis_status")
+        && $wp_object_cache->redis_status() === true;
+} catch (Throwable $e) {
+    $redisConnected = false;
 }
+vibe_result("redis_status", $redisConnected);
+
+$rest = wp_remote_get(home_url("/wp-json/wp/v2/types/post?context=edit"), array("timeout" => 10));
+vibe_result("rest", !is_wp_error($rest));
+
+$loopback = wp_remote_get(site_url("/wp-cron.php?doing_wp_cron=" . microtime(true)), array("timeout" => 10));
+vibe_result("loopback", !is_wp_error($loopback));
+
+$redisConstants = defined("WP_REDIS_SELECTIVE_FLUSH") && WP_REDIS_SELECTIVE_FLUSH && defined("WP_REDIS_GRACEFUL") && WP_REDIS_GRACEFUL && defined("WP_REDIS_MAXTTL") && WP_REDIS_MAXTTL >= 86400;
+vibe_result("redis_constants", $redisConstants);
+
+vibe_result("redis_mu_plugin", function_exists("vibe_wp_redis_add_cache_groups"));
+vibe_result("filesystem_chmod", defined("FS_CHMOD_DIR") && defined("FS_CHMOD_FILE") && decoct(FS_CHMOD_DIR) === "755" && decoct(FS_CHMOD_FILE) === "644");
 '
-if vibe_wp eval "${opcache_runtime_check}" 2>/dev/null | grep -q '^ok$'; then
+wp_runtime_checks="$(vibe_compose run --rm -T \
+  -e VIBE_WP_REQUIRED_PLUGINS="${required_plugins}" \
+  -e VIBE_WP_REMOVE_PLUGINS="${removed_plugins}" \
+  -e VIBE_WP_REMOVE_THEMES="${removed_themes}" \
+  wp eval "${wp_runtime_check}" 2>/dev/null || true)"
+
+if runtime_check_ok core_installed; then
+  ok "WordPress is installed"
+else
+  fail "WordPress is not installed"
+fi
+
+if runtime_check_ok baseline_plugins; then
+  ok "WordPress baseline plugins are installed and active"
+else
+  fail "one or more WordPress baseline plugins are missing or inactive"
+fi
+
+if runtime_check_ok removed_plugins; then
+  ok "unwanted bundled plugins are absent"
+else
+  fail "one or more unwanted bundled plugins are still installed"
+fi
+
+if runtime_check_ok removed_themes; then
+  ok "unwanted bundled themes are absent"
+else
+  fail "one or more unwanted bundled themes are still installed"
+fi
+
+if runtime_check_ok opcache; then
   ok "PHP OPcache WordPress baseline is active"
 else
   fail "PHP OPcache WordPress baseline is not active"
 fi
 
-if vibe_wp redis status 2>/dev/null | grep -q '^Status: Connected'; then
+if runtime_check_ok redis_status; then
   ok "Redis Object Cache is connected"
 else
   fail "Redis Object Cache is not connected"
 fi
 
-if vibe_wp eval '$r = wp_remote_get(home_url("/wp-json/wp/v2/types/post?context=edit"), array("timeout" => 10)); if (is_wp_error($r)) { fwrite(STDERR, $r->get_error_message() . PHP_EOL); exit(1); } echo "ok";' 2>/dev/null | grep -q '^ok$'; then
+if runtime_check_ok rest; then
   ok "WordPress REST self-request is reachable"
 else
   fail "WordPress REST self-request failed"
 fi
 
-if vibe_wp eval '$r = wp_remote_get(site_url("/wp-cron.php?doing_wp_cron=" . microtime(true)), array("timeout" => 10)); if (is_wp_error($r)) { fwrite(STDERR, $r->get_error_message() . PHP_EOL); exit(1); } echo "ok";' 2>/dev/null | grep -q '^ok$'; then
+if runtime_check_ok loopback; then
   ok "WordPress loopback request is reachable"
 else
   fail "WordPress loopback request failed"
 fi
 
-if vibe_wp eval 'echo defined("WP_REDIS_SELECTIVE_FLUSH") && WP_REDIS_SELECTIVE_FLUSH && defined("WP_REDIS_GRACEFUL") && WP_REDIS_GRACEFUL && defined("WP_REDIS_MAXTTL") && WP_REDIS_MAXTTL >= 86400 ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
+if runtime_check_ok redis_constants; then
   ok "Redis Object Cache performance constants are active"
 else
   fail "Redis Object Cache performance constants are not active"
 fi
 
-if vibe_wp eval 'echo function_exists("vibe_wp_redis_add_cache_groups") ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
+if runtime_check_ok redis_mu_plugin; then
   ok "Vibe WP Redis MU plugin is loaded"
 else
   fail "Vibe WP Redis MU plugin is not loaded"
 fi
 
-if vibe_wp eval 'printf("%o %o", FS_CHMOD_DIR, FS_CHMOD_FILE);' 2>/dev/null | grep -q '^755 644$'; then
+if runtime_check_ok filesystem_chmod; then
   ok "WordPress filesystem chmod constants are 755/644"
 else
   fail "WordPress filesystem chmod constants are unexpected"

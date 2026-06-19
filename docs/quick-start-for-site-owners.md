@@ -199,6 +199,18 @@ backups/stage/
 
 Keep important backups outside the VPS too. A VPS failure can destroy local backups stored on the same machine.
 
+Check a backup before depending on it:
+
+```sh
+./bin/vibe prod backup-verify backups/prod/<backup-folder>
+```
+
+For a deeper check that still does not touch the running site:
+
+```sh
+./bin/vibe prod backup-verify backups/prod/<backup-folder> --deep
+```
+
 ## Restore
 
 Restore is destructive. It replaces the current site data.
@@ -224,6 +236,7 @@ Check production:
 ```sh
 ./bin/vibe prod ps
 ./bin/vibe prod smoke
+./bin/vibe prod perf-report
 ```
 
 Check staging:
@@ -231,7 +244,10 @@ Check staging:
 ```sh
 ./bin/vibe stage ps
 ./bin/vibe stage smoke
+./bin/vibe stage perf-report
 ```
+
+`perf-report` only prints diagnostic information. It does not change the website.
 
 See logs:
 

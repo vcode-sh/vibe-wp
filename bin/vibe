@@ -17,8 +17,10 @@ Commands:
   install                    Install WordPress and Redis Object Cache
   wp <args...>               Run WP-CLI
   backup [args...]           Create a DB and wp-content backup
+  backup-verify <backup> [args...] Verify a backup without restoring it
   restore <backup> [args...] Restore a backup
   doctor-runtime             Run runtime checks
+  perf-report                Print a read-only performance report
   smoke                      Run smoke tests
   cache-flush                Flush object cache and Nginx page cache
   refresh-from-prod --yes    Refresh this staging env from prod
@@ -80,11 +82,17 @@ case "${command}" in
   backup)
     "${VIBE_BIN_DIR}/backup" "$@"
     ;;
+  backup-verify)
+    "${VIBE_BIN_DIR}/backup-verify" "$@"
+    ;;
   restore)
     "${VIBE_BIN_DIR}/restore" "$@"
     ;;
   doctor-runtime)
     "${VIBE_BIN_DIR}/doctor-runtime" "$@"
+    ;;
+  perf-report)
+    "${VIBE_BIN_DIR}/perf-report" "$@"
     ;;
   smoke)
     "${VIBE_BIN_DIR}/smoke" "$@"

@@ -1,0 +1,409 @@
+#!/usr/bin/env sh
+set -u
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+first_headers="$(mktemp)"
+second_headers="$(mktemp)"
+trap 'rm -f "${first_headers}" "${second_headers}"' EXIT INT TERM
+
+env_file_status="missing"
+if [ -f "${VIBE_ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${VIBE_ENV_FILE}"
+  set +a
+  env_file_status="loaded"
+fi
+
+section() {
+  printf '\n## %s\n' "$1"
+}
+
+item() {
+  printf '  %-30s %s\n' "$1" "$2"
+}
+
+block() {
+  if [ -n "$1" ]; then
+    printf '%s\n' "$1" | sed 's/^/  /'
+  else
+    printf '  no output\n'
+  fi
+}
+
+skip() {
+  item "$1" "skipped ($2)"
+}
+
+compose_config_error="$(vibe_compose config 2>&1 >/dev/null)"
+if [ "$?" -eq 0 ]; then
+  compose_config_ok=1
+else
+  compose_config_ok=0
+fi
+
+service_exists() {
+  [ "${compose_config_ok}" -eq 1 ] && vibe_compose_service_exists "$1"
+}
+
+service_running() {
+  service_exists "$1" && vibe_compose_service_running "$1"
+}
+
+wp_exec() {
+  vibe_compose exec -T -u www-data wordpress wp --path=/var/www/html "$@"
+}
+
+wp_exec_without_object_cache() {
+  vibe_compose exec -T -u www-data -e 'WORDPRESS_CONFIG_EXTRA=define("WP_REDIS_DISABLED", true);' wordpress wp --path=/var/www/html "$@"
+}
+
+sql_output_from_rows() {
+  awk '{
+    key = $1
+    $1 = ""
+    sub(/^[[:space:]]+/, "")
+    printf "%s=%s\n", key, $0
+  }'
+}
+
+site_url="${VIBE_PERF_URL:-${WP_HOME:-http://localhost:${HTTP_PORT:-8080}}}"
+site_url="${site_url%/}/"
+
+db_perf_sql="SHOW VARIABLES WHERE Variable_name IN ('version','version_comment','character_set_server','collation_server','max_connections','thread_cache_size','table_open_cache','table_definition_cache','tmp_table_size','max_heap_table_size','innodb_buffer_pool_size','innodb_log_file_size','innodb_log_buffer_size','innodb_flush_log_at_trx_commit','innodb_flush_neighbors','innodb_io_capacity','innodb_io_capacity_max','innodb_read_io_threads','innodb_write_io_threads','innodb_stats_persistent','performance_schema','slow_query_log','long_query_time'); SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime','Threads_connected','Threads_running','Max_used_connections','Questions','Created_tmp_tables','Created_tmp_disk_tables','Open_tables','Opened_tables','Innodb_buffer_pool_read_requests','Innodb_buffer_pool_reads','Innodb_buffer_pool_pages_free');"
+
+section "Environment"
+item "environment" "${VIBE_ENV}"
+item "env file" "${VIBE_ENV_FILE} (${env_file_status})"
+if [ "${compose_config_ok}" -eq 1 ]; then
+  item "compose config" "ok"
+else
+  item "compose config" "unavailable"
+  block "${compose_config_error}"
+fi
+
+if [ "${compose_config_ok}" -eq 1 ]; then
+  section "Services"
+  reported_services=0
+  for service in nginx wordpress db redis cron wp; do
+    if service_exists "${service}"; then
+      reported_services=$((reported_services + 1))
+      if service_running "${service}"; then
+        item "${service}" "running"
+      else
+        item "${service}" "not running"
+      fi
+    fi
+  done
+  if [ "${reported_services}" -eq 0 ]; then
+    skip "services" "no Compose services were resolved"
+  fi
+fi
+
+section "PHP OPcache"
+if service_running wordpress; then
+  opcache_output="$(vibe_compose exec -T wordpress php 2>&1 <<'PHP'
+<?php
+function vibe_report_bool($value): string {
+    return $value ? 'yes' : 'no';
+}
+
+function vibe_report_mib($bytes): string {
+    return sprintf('%.1f MiB', ((float) $bytes) / 1048576);
+}
+
+if (!function_exists('opcache_get_configuration')) {
+    echo "status=unavailable (OPcache extension is not loaded)\n";
+    exit(0);
+}
+
+$configuration = opcache_get_configuration();
+if (!is_array($configuration)) {
+    echo "status=unavailable (OPcache configuration is not readable)\n";
+    exit(0);
+}
+
+$directives = $configuration['directives'] ?? array();
+printf("opcache.enable=%s\n", vibe_report_bool(!empty($directives['opcache.enable'])));
+printf("opcache.enable_cli=%s\n", vibe_report_bool(!empty($directives['opcache.enable_cli'])));
+printf("opcache.memory_consumption=%s\n", vibe_report_mib($directives['opcache.memory_consumption'] ?? 0));
+printf("opcache.interned_strings_buffer=%s\n", vibe_report_mib(($directives['opcache.interned_strings_buffer'] ?? 0) * 1048576));
+printf("opcache.max_accelerated_files=%s\n", (string) ($directives['opcache.max_accelerated_files'] ?? 'unknown'));
+printf("opcache.validate_timestamps=%s\n", vibe_report_bool(!empty($directives['opcache.validate_timestamps'])));
+printf("opcache.revalidate_freq=%s\n", (string) ($directives['opcache.revalidate_freq'] ?? 'unknown'));
+printf("opcache.save_comments=%s\n", vibe_report_bool(!empty($directives['opcache.save_comments'])));
+printf("opcache.enable_file_override=%s\n", vibe_report_bool(!empty($directives['opcache.enable_file_override'])));
+printf("opcache.jit=%s\n", (string) ($directives['opcache.jit'] ?? 'unknown'));
+printf("opcache.jit_buffer_size=%s\n", vibe_report_mib($directives['opcache.jit_buffer_size'] ?? 0));
+
+$status = function_exists('opcache_get_status') ? @opcache_get_status(false) : false;
+if (!is_array($status)) {
+    echo "runtime_status=unavailable\n";
+    exit(0);
+}
+
+$memory = $status['memory_usage'] ?? array();
+$interned = $status['interned_strings_usage'] ?? array();
+$stats = $status['opcache_statistics'] ?? array();
+printf("runtime_enabled=%s\n", vibe_report_bool(!empty($status['opcache_enabled'])));
+printf("runtime_used_memory=%s\n", vibe_report_mib($memory['used_memory'] ?? 0));
+printf("runtime_free_memory=%s\n", vibe_report_mib($memory['free_memory'] ?? 0));
+printf("runtime_wasted_memory=%s\n", vibe_report_mib($memory['wasted_memory'] ?? 0));
+printf("runtime_interned_used=%s\n", vibe_report_mib($interned['used_memory'] ?? 0));
+printf("runtime_cached_scripts=%s\n", (string) ($stats['num_cached_scripts'] ?? 'unknown'));
+printf("runtime_hit_rate=%.2f%%\n", (float) ($stats['opcache_hit_rate'] ?? 0));
+printf("runtime_oom_restarts=%s\n", (string) ($stats['oom_restarts'] ?? 'unknown'));
+PHP
+)"
+  block "${opcache_output}"
+else
+  skip "OPcache" "wordpress service is not running"
+fi
+
+section "PHP-FPM Memory"
+if service_running wordpress; then
+  fpm_output="$(vibe_compose exec -T wordpress sh -c '
+set +u
+printf "%-8s %-8s %-10s %s\n" "PID" "PPID" "RSS_MiB" "COMMAND"
+count=0
+total_kb=0
+for status_file in /proc/[0-9]*/status; do
+  [ -r "${status_file}" ] || continue
+  name="$(awk "/^Name:/ {print \$2}" "${status_file}" 2>/dev/null)"
+  case "${name}" in
+    php-fpm*)
+      pid="$(awk "/^Pid:/ {print \$2}" "${status_file}" 2>/dev/null)"
+      ppid="$(awk "/^PPid:/ {print \$2}" "${status_file}" 2>/dev/null)"
+      rss_kb="$(awk "/^VmRSS:/ {print \$2}" "${status_file}" 2>/dev/null)"
+      pid="${pid:-unknown}"
+      ppid="${ppid:-unknown}"
+      rss_kb="${rss_kb:-0}"
+      if [ "${pid}" != "unknown" ]; then
+        command="$(tr "\\000" " " < "/proc/${pid}/cmdline" 2>/dev/null | sed "s/[[:space:]]*$//")"
+      else
+        command=""
+      fi
+      [ -n "${command}" ] || command="${name}"
+      rss_mib="$(awk -v kb="${rss_kb}" "BEGIN { printf \"%.1f\", kb / 1024 }")"
+      printf "%-8s %-8s %-10s %s\n" "${pid}" "${ppid}" "${rss_mib}" "${command}"
+      count=$((count + 1))
+      total_kb=$((total_kb + rss_kb))
+      ;;
+  esac
+done
+
+if [ "${count}" -eq 0 ]; then
+  echo "php_fpm_processes=0"
+else
+  total_mib="$(awk -v kb="${total_kb}" "BEGIN { printf \"%.1f\", kb / 1024 }")"
+  average_mib="$(awk -v kb="${total_kb}" -v count="${count}" "BEGIN { printf \"%.1f\", (kb / count) / 1024 }")"
+  echo "php_fpm_processes=${count}"
+  echo "php_fpm_total_rss=${total_mib} MiB"
+  echo "php_fpm_average_rss=${average_mib} MiB"
+fi
+' 2>&1)"
+  block "${fpm_output}"
+else
+  skip "PHP-FPM memory" "wordpress service is not running"
+fi
+
+section "Redis"
+if service_running redis; then
+  redis_output="$(vibe_compose exec -T redis sh 2>&1 <<'SH'
+redis_cli() {
+  if [ -n "${REDIS_PASSWORD:-}" ]; then
+    redis-cli -a "${REDIS_PASSWORD}" --raw "$@" 2>/dev/null
+  else
+    redis-cli --raw "$@" 2>/dev/null
+  fi
+}
+
+redis_config() {
+  value="$(redis_cli CONFIG GET "$1" | sed -n '2p')"
+  printf "%s=%s\n" "$1" "${value:-unavailable}"
+}
+
+echo "source=redis service"
+ping="$(redis_cli PING || true)"
+printf "ping=%s\n" "${ping:-unavailable}"
+redis_config maxmemory
+redis_config maxmemory-policy
+redis_config maxmemory-samples
+redis_config appendonly
+redis_config lazyfree-lazy-eviction
+redis_config lazyfree-lazy-expire
+redis_config activedefrag
+redis_cli INFO memory | awk -F: '/^(used_memory_human|used_memory_peak_human|maxmemory_human|mem_fragmentation_ratio):/ { gsub(/\r/, "", $2); printf "%s=%s\n", $1, $2 }'
+redis_cli INFO stats | awk -F: '/^(keyspace_hits|keyspace_misses|evicted_keys|expired_keys|total_commands_processed):/ { gsub(/\r/, "", $2); printf "%s=%s\n", $1, $2 }'
+SH
+)"
+  block "${redis_output}"
+elif service_running wordpress; then
+  redis_output="$(vibe_compose exec -T wordpress php 2>&1 <<'PHP'
+<?php
+if (!extension_loaded('redis')) {
+    echo "status=unavailable (phpredis extension is not loaded)\n";
+    exit(0);
+}
+
+$host = getenv('WP_REDIS_HOST') ?: '';
+$scheme = getenv('WP_REDIS_SCHEME') ?: 'tcp';
+$path = getenv('WP_REDIS_PATH') ?: '';
+$port = (int) (getenv('WP_REDIS_PORT') ?: 6379);
+$timeout = (float) (getenv('WP_REDIS_TIMEOUT') ?: 1);
+$username = getenv('WP_REDIS_USERNAME') ?: '';
+$password = getenv('WP_REDIS_PASSWORD') ?: '';
+$database = getenv('WP_REDIS_DATABASE');
+
+if ($scheme === 'unix') {
+    $target = $path;
+} elseif ($scheme === 'tls') {
+    $target = 'tls://' . $host;
+} else {
+    $target = $host;
+}
+
+if ($target === '') {
+    echo "status=unavailable (WP_REDIS_HOST or WP_REDIS_PATH is not set)\n";
+    exit(0);
+}
+
+try {
+    $redis = new Redis();
+    if (!$redis->connect($target, $scheme === 'unix' ? 0 : $port, $timeout)) {
+        echo "status=unavailable (connection failed)\n";
+        exit(0);
+    }
+
+    if ($password !== '') {
+        $auth = $username !== '' ? array($username, $password) : $password;
+        $redis->auth($auth);
+    }
+
+    if ($database !== false && $database !== '' && is_numeric($database)) {
+        $redis->select((int) $database);
+    }
+
+    echo "source=WordPress Redis env via phpredis\n";
+    echo "ping=" . $redis->ping() . "\n";
+    foreach (array('maxmemory', 'maxmemory-policy', 'maxmemory-samples', 'appendonly', 'lazyfree-lazy-eviction', 'lazyfree-lazy-expire', 'activedefrag') as $key) {
+        $value = @$redis->config('GET', $key);
+        if (is_array($value) && array_key_exists($key, $value)) {
+            echo $key . '=' . $value[$key] . "\n";
+        } else {
+            echo $key . "=unavailable\n";
+        }
+    }
+
+    $memory = $redis->info('memory');
+    foreach (array('used_memory_human', 'used_memory_peak_human', 'maxmemory_human', 'mem_fragmentation_ratio') as $key) {
+        if (isset($memory[$key])) {
+            echo $key . '=' . $memory[$key] . "\n";
+        }
+    }
+
+    $stats = $redis->info('stats');
+    foreach (array('keyspace_hits', 'keyspace_misses', 'evicted_keys', 'expired_keys', 'total_commands_processed') as $key) {
+        if (isset($stats[$key])) {
+            echo $key . '=' . $stats[$key] . "\n";
+        }
+    }
+} catch (Throwable $e) {
+    echo "status=unavailable (" . $e->getMessage() . ")\n";
+}
+PHP
+)"
+  block "${redis_output}"
+else
+  skip "Redis stats" "redis service is absent/not running and wordpress service is not running"
+fi
+
+if service_running wordpress; then
+  redis_wp_raw="$(vibe_wp redis status 2>&1 | sed '/^ Container /d' || true)"
+  redis_wp_status="$(printf '%s\n' "${redis_wp_raw}" | grep -E '^(Status:|Client:|Drop-in:|Disabled:|Ping:|Errors:|Error:|RedisException)' | sed -n '1,24p')"
+  if [ -z "${redis_wp_status}" ]; then
+    redis_wp_status="$(printf '%s\n' "${redis_wp_raw}" | sed -n '1,6p')"
+  fi
+  item "Redis Object Cache" "WP-CLI status"
+  block "${redis_wp_status}"
+fi
+
+section "MariaDB"
+if service_running db; then
+  db_output="$(vibe_compose exec -T db sh 2>&1 <<SH | sql_output_from_rows
+mariadb -N -u"\${MARIADB_USER}" -p"\${MARIADB_PASSWORD}" "\${MARIADB_DATABASE}" -e "${db_perf_sql}"
+SH
+)"
+  block "${db_output}"
+elif service_running wordpress; then
+  db_output="$(wp_exec_without_object_cache db query "${db_perf_sql}" --skip-column-names 2>&1 | sql_output_from_rows)"
+  block "${db_output}"
+else
+  skip "MariaDB stats" "db service is absent/not running and wordpress service is not running"
+fi
+
+section "Nginx FastCGI Cache"
+if service_running nginx; then
+  nginx_output="$(vibe_compose exec -T nginx sh 2>&1 <<'SH'
+echo "rendered_config:"
+nginx -T 2>/dev/null | awk '/fastcgi_cache_path|fastcgi_cache_valid|fastcgi_cache_min_uses|fastcgi_cache_use_stale|fastcgi_cache_lock|add_header X-FastCGI-Cache/ { print }'
+if [ -d /var/cache/nginx/wordpress ]; then
+  cache_size="$(du -sh /var/cache/nginx/wordpress 2>/dev/null | awk '{print $1}')"
+  cache_files="$(find /var/cache/nginx/wordpress -type f 2>/dev/null | wc -l | tr -d ' ')"
+  printf "cache_dir_size=%s\n" "${cache_size:-unknown}"
+  printf "cache_files=%s\n" "${cache_files:-unknown}"
+else
+  echo "cache_dir=unavailable"
+fi
+SH
+)"
+  block "${nginx_output}"
+else
+  skip "Nginx cache config" "nginx service is not running"
+fi
+
+if command -v curl >/dev/null 2>&1; then
+  first_code="$(curl -sS -o /dev/null -D "${first_headers}" -w "%{http_code}" --max-time 10 "${site_url}" 2>/dev/null)"
+  if [ "$?" -eq 0 ]; then
+    first_cache="$(grep -i '^X-FastCGI-Cache:' "${first_headers}" | tail -n 1 | cut -d: -f2- | tr -d '\r' | sed 's/^[[:space:]]*//')"
+    [ -n "${first_cache}" ] || first_cache="header missing"
+    item "first request" "HTTP ${first_code}, X-FastCGI-Cache=${first_cache}"
+
+    second_code="$(curl -sS -o /dev/null -D "${second_headers}" -w "%{http_code}" --max-time 10 "${site_url}" 2>/dev/null)"
+    if [ "$?" -eq 0 ]; then
+      second_cache="$(grep -i '^X-FastCGI-Cache:' "${second_headers}" | tail -n 1 | cut -d: -f2- | tr -d '\r' | sed 's/^[[:space:]]*//')"
+      [ -n "${second_cache}" ] || second_cache="header missing"
+      item "second request" "HTTP ${second_code}, X-FastCGI-Cache=${second_cache}"
+      if [ "${second_cache}" = "HIT" ]; then
+        item "HIT check" "ok"
+      else
+        item "HIT check" "not HIT"
+      fi
+    else
+      skip "second request" "curl failed for ${site_url}"
+    fi
+  else
+    skip "HTTP cache check" "curl failed for ${site_url}"
+  fi
+else
+  skip "HTTP cache check" "curl is not installed"
+fi
+
+section "WordPress Baseline"
+if service_running wordpress; then
+  wp_summary="$(wp_exec_without_object_cache core is-installed >/dev/null 2>&1 && echo "core_installed=yes" || echo "core_installed=no"
+wp_exec_without_object_cache core version 2>/dev/null | sed 's/^/core_version=/'
+printf "required_plugins=%s\n" "${VIBE_WP_REQUIRED_PLUGINS:-redis-cache,ai,ai-provider-for-anthropic,ai-provider-for-google,ai-provider-for-openai}"
+printf "remove_plugins=%s\n" "${VIBE_WP_REMOVE_PLUGINS:-hello,hello-dolly}"
+printf "remove_themes=%s\n" "${VIBE_WP_REMOVE_THEMES:-twentytwentythree,twentytwentyfour}"
+echo "plugins:"
+wp_exec_without_object_cache plugin list --fields=name,status,version --format=table 2>&1
+echo "themes:"
+wp_exec_without_object_cache theme list --fields=name,status,version --format=table 2>&1
+)"
+  block "${wp_summary}"
+else
+  skip "WordPress baseline" "wordpress service is not running"
+fi

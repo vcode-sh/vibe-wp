@@ -4,7 +4,7 @@ set -eu
 usage() {
   cat <<'USAGE'
 Usage:
-  ./bin/stage-promote-files --yes [--stage stage] [--prod prod]
+  ./bin/stage-promote-files [--yes] [--stage stage] [--prod prod]
 
 Promotes managed WordPress code files from staging to production:
   - plugins
@@ -12,7 +12,166 @@ Promotes managed WordPress code files from staging to production:
   - mu-plugins
 
 It does not copy uploads and does not copy the database.
+
+Before replacing production files it:
+  - verifies staging and production are distinct environments
+  - prints plugin and theme inventories for both environments
+  - asks for typed confirmation unless --yes is provided
+  - creates and verifies a production safety backup
 USAGE
+}
+
+run_vibe() {
+  env_name="$1"
+  shift
+  VIBE_ENV="${env_name}" "${VIBE_BIN_DIR}/vibe" "${env_name}" "$@"
+}
+
+env_value() {
+  env_name="$1"
+  key="$2"
+  run_vibe "${env_name}" env "${key}"
+}
+
+wp_csv() {
+  env_name="$1"
+  shift
+
+  wp_output="${tmp_dir}/wp-output"
+  wp_error="${tmp_dir}/wp-error"
+
+  if ! run_vibe "${env_name}" wp "$@" > "${wp_output}" 2> "${wp_error}"; then
+    cat "${wp_error}" >&2
+    exit 1
+  fi
+
+  sed '/^ Container /d' "${wp_output}"
+}
+
+collect_inventory() {
+  env_name="$1"
+  plugin_file="$2"
+  theme_file="$3"
+
+  wp_csv "${env_name}" plugin list --fields=name,status,version,update --format=csv > "${plugin_file}"
+  wp_csv "${env_name}" theme list --fields=name,status,version,update --format=csv > "${theme_file}"
+}
+
+print_inventory() {
+  label="$1"
+  file="$2"
+
+  echo "${label}:"
+  sed 's/^/  /' "${file}"
+}
+
+print_diff() {
+  label="$1"
+  before="$2"
+  after="$3"
+
+  echo "${label}:"
+  diff_file="${tmp_dir}/inventory-diff"
+  if diff -u "${before}" "${after}" > "${diff_file}"; then
+    echo "  no differences"
+  else
+    diff_status="$?"
+    if [ "${diff_status}" -gt 1 ]; then
+      echo "  diff failed" >&2
+      exit "${diff_status}"
+    fi
+    sed 's/^/  /' "${diff_file}"
+  fi
+  rm -f "${diff_file}"
+}
+
+print_environment_identity() {
+  stage_home="$(env_value "${stage_env}" WP_HOME)"
+  prod_home="$(env_value "${prod_env}" WP_HOME)"
+  stage_project="$(env_value "${stage_env}" COMPOSE_PROJECT_NAME)"
+  prod_project="$(env_value "${prod_env}" COMPOSE_PROJECT_NAME)"
+
+  if [ -z "${stage_home}" ] || [ -z "${prod_home}" ]; then
+    echo "Both staging and production WP_HOME values are required." >&2
+    exit 1
+  fi
+
+  if [ "${stage_home}" = "${prod_home}" ]; then
+    echo "Staging and production WP_HOME are identical (${stage_home}); refusing to promote." >&2
+    exit 1
+  fi
+
+  if [ -n "${stage_project}" ] && [ "${stage_project}" = "${prod_project}" ]; then
+    echo "Staging and production COMPOSE_PROJECT_NAME are identical (${stage_project}); refusing to promote." >&2
+    exit 1
+  fi
+
+  echo "== Managed WordPress file promotion preflight =="
+  echo "Source staging environment: ${stage_env}"
+  echo "Target production environment: ${prod_env}"
+  echo
+  echo "Environment identity:"
+  echo "  ${stage_env}: WP_HOME=${stage_home} COMPOSE_PROJECT_NAME=${stage_project:-unknown}"
+  echo "  ${prod_env}: WP_HOME=${prod_home} COMPOSE_PROJECT_NAME=${prod_project:-unknown}"
+}
+
+confirm_promotion() {
+  expected="PROMOTE ${stage_env} TO ${prod_env}"
+
+  if [ "${confirm}" = "1" ]; then
+    echo "Confirmation skipped because --yes was provided."
+    return
+  fi
+
+  echo "Confirmation required."
+  echo "This will replace production plugins, themes, and MU plugins with staging copies."
+  printf 'Type "%s" to continue: ' "${expected}"
+  if ! IFS= read -r reply; then
+    echo >&2
+    echo "No confirmation received; aborting before backup or production changes." >&2
+    exit 1
+  fi
+
+  if [ "${reply}" != "${expected}" ]; then
+    echo "Confirmation did not match; aborting before backup or production changes." >&2
+    exit 1
+  fi
+}
+
+absolute_backup_path() {
+  backup_dir_value="$1"
+  case "${backup_dir_value}" in
+    /*) printf '%s' "${backup_dir_value}" ;;
+    *) printf '%s/%s' "${VIBE_ROOT}" "${backup_dir_value}" ;;
+  esac
+}
+
+create_production_backup() {
+  echo
+  echo "== Production safety backup =="
+  echo "Creating production backup from ${prod_env} before replacing files..."
+  backup_output="$(VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/backup" --label pre-stage-file-promote)"
+  printf '%s\n' "${backup_output}"
+  backup_dir="$(printf '%s\n' "${backup_output}" | sed -n 's/^Backup written to //p' | tail -n 1)"
+
+  if [ -z "${backup_dir}" ]; then
+    echo "Could not determine production backup path." >&2
+    exit 1
+  fi
+
+  backup_full_path="$(absolute_backup_path "${backup_dir}")"
+
+  if [ ! -d "${backup_full_path}" ]; then
+    echo "Production backup directory was not created: ${backup_dir}" >&2
+    exit 1
+  fi
+
+  if [ ! -s "${backup_full_path}/database.sql.gz" ] || [ ! -s "${backup_full_path}/wp-content.tar.gz" ] || [ ! -s "${backup_full_path}/manifest.txt" ]; then
+    echo "Production backup is incomplete: ${backup_dir}" >&2
+    exit 1
+  fi
+
+  echo "Production backup verified: ${backup_dir}"
 }
 
 stage_env="stage"
@@ -26,10 +185,20 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --stage)
+      if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+        echo "--stage requires a value." >&2
+        usage >&2
+        exit 1
+      fi
       stage_env="${2:-}"
       shift 2
       ;;
     --prod)
+      if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+        echo "--prod requires a value." >&2
+        usage >&2
+        exit 1
+      fi
       prod_env="${2:-}"
       shift 2
       ;;
@@ -45,22 +214,56 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ "${confirm}" != "1" ]; then
-  echo "Refusing to promote staging files without --yes." >&2
-  usage >&2
+if [ "${stage_env}" = "${prod_env}" ]; then
+  echo "Stage and production environments are the same (${stage_env}); refusing to promote." >&2
   exit 1
 fi
 
-VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-tmp_file="$(mktemp)"
-trap 'rm -f "${tmp_file}"' EXIT INT TERM
+VIBE_BIN_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+VIBE_ROOT="$(CDPATH='' cd -- "${VIBE_BIN_DIR}/.." && pwd)"
+tmp_dir="$(mktemp -d)"
+tmp_file="${tmp_dir}/managed-wp-content.tar.gz"
+trap 'rm -rf "${tmp_dir}"' EXIT INT TERM
 
-echo "Creating production safety backup from ${prod_env}..."
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/backup" --label pre-stage-file-promote
+prod_plugins="${tmp_dir}/prod-plugins.csv"
+stage_plugins="${tmp_dir}/stage-plugins.csv"
+prod_themes="${tmp_dir}/prod-themes.csv"
+stage_themes="${tmp_dir}/stage-themes.csv"
 
+print_environment_identity
+echo
+echo "Collecting production inventory from ${prod_env}..."
+collect_inventory "${prod_env}" "${prod_plugins}" "${prod_themes}"
+
+echo "Collecting staging inventory from ${stage_env}..."
+collect_inventory "${stage_env}" "${stage_plugins}" "${stage_themes}"
+
+echo
+print_inventory "Production plugins" "${prod_plugins}"
+print_inventory "Staging plugins" "${stage_plugins}"
+print_diff "Plugin inventory diff, production -> staging" "${prod_plugins}" "${stage_plugins}"
+
+echo
+print_inventory "Production themes" "${prod_themes}"
+print_inventory "Staging themes" "${stage_themes}"
+print_diff "Theme inventory diff, production -> staging" "${prod_themes}" "${stage_themes}"
+
+echo
+echo "Promotion scope:"
+echo "  copied: wp-content/plugins, wp-content/themes, wp-content/mu-plugins"
+echo "  not copied: database, uploads, cache"
+echo
+
+confirm_promotion
+
+create_production_backup
+
+echo
+echo "== Promote managed wp-content files =="
 echo "Exporting managed wp-content files from ${stage_env}..."
-VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" compose up -d wordpress >/dev/null
-VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" compose exec -T wordpress sh -lc '
+run_vibe "${stage_env}" compose up -d wordpress >/dev/null
+# shellcheck disable=SC2016
+run_vibe "${stage_env}" compose exec -T wordpress sh -lc '
   cd /var/www/html/wp-content
   set -- plugins themes mu-plugins
   existing=""
@@ -70,6 +273,7 @@ VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" compose exec -T wo
     fi
   done
   if [ -z "${existing}" ]; then
+    echo "No managed wp-content directories found to export." >&2
     exit 2
   fi
   # shellcheck disable=SC2086
@@ -77,8 +281,9 @@ VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" compose exec -T wo
 ' > "${tmp_file}"
 
 echo "Importing managed wp-content files into ${prod_env}..."
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose up -d wordpress nginx cron >/dev/null
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose exec -T wordpress sh -lc '
+run_vibe "${prod_env}" compose up -d wordpress nginx cron >/dev/null
+# shellcheck disable=SC2016
+run_vibe "${prod_env}" compose exec -T wordpress sh -lc '
   cd /var/www/html/wp-content
   for path in plugins themes mu-plugins; do
     if [ -e "$path" ]; then
@@ -88,13 +293,16 @@ VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose exec -T word
     fi
   done
 '
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose exec -T wordpress tar -xzf - -C /var/www/html/wp-content < "${tmp_file}"
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose up -d --force-recreate wordpress cron >/dev/null
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose restart nginx >/dev/null
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" wp cache flush >/dev/null || true
-VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" cache-flush >/dev/null || true
+run_vibe "${prod_env}" compose exec -T wordpress tar -xzf - -C /var/www/html/wp-content < "${tmp_file}"
+run_vibe "${prod_env}" compose up -d --force-recreate wordpress cron >/dev/null
+run_vibe "${prod_env}" compose restart nginx >/dev/null
+run_vibe "${prod_env}" wp cache flush >/dev/null || true
+run_vibe "${prod_env}" cache-flush >/dev/null || true
 
 echo "Running production smoke test..."
 VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/smoke"
 
+echo
+echo "== Promotion complete =="
 echo "Managed WordPress files promoted from ${stage_env} to ${prod_env}."
+echo "Production safety backup: ${backup_dir}"

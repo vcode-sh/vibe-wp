@@ -1,0 +1,382 @@
+#!/usr/bin/env sh
+set -eu
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/backup-verify backups/<env>/<timestamp> [--deep]
+
+Verifies that an existing backup directory is structurally restorable without
+touching the selected WordPress environment.
+
+Checks:
+  - manifest.txt exists and points to local backup files
+  - database.sql.gz or database.sql exists and looks like a SQL dump
+  - wp-content.tar.gz exists, lists successfully, and uses safe relative paths
+
+Options:
+  --deep  Decompress SQL and extract wp-content into a temporary directory.
+          The temporary restore surface is removed when verification finishes.
+USAGE
+}
+
+backup_dir=""
+deep=0
+tmp_root=""
+failures=0
+warnings=0
+wp_content_has_links=0
+
+cleanup() {
+  if [ -n "${tmp_root}" ] && [ -d "${tmp_root}" ]; then
+    rm -rf "${tmp_root}"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+ok() {
+  printf 'ok: %s\n' "$1"
+}
+
+warn() {
+  warnings=$((warnings + 1))
+  printf 'warning: %s\n' "$1"
+}
+
+fail() {
+  failures=$((failures + 1))
+  printf 'fail: %s\n' "$1" >&2
+}
+
+make_tmp_root() {
+  if [ -z "${tmp_root}" ]; then
+    tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/vibe-backup-verify.XXXXXX")"
+  fi
+}
+
+manifest_count() {
+  key="$1"
+  awk -F= -v key="${key}" '$1 == key { count++ } END { print count + 0 }' "${manifest_file}"
+}
+
+manifest_value() {
+  key="$1"
+  awk -F= -v key="${key}" '
+    $1 == key {
+      sub(/^[^=]*=/, "")
+      print
+      exit
+    }
+  ' "${manifest_file}"
+}
+
+validate_manifest_key() {
+  key="$1"
+  required="$2"
+  count="$(manifest_count "${key}")"
+
+  if [ "${count}" -eq 0 ]; then
+    if [ "${required}" = "1" ]; then
+      fail "manifest.txt is missing required key: ${key}"
+    else
+      warn "manifest.txt is missing optional key: ${key}"
+    fi
+    return
+  fi
+
+  if [ "${count}" -gt 1 ]; then
+    fail "manifest.txt contains duplicate key: ${key}"
+    return
+  fi
+
+  value="$(manifest_value "${key}")"
+  if [ "${required}" = "1" ] && [ -z "${value}" ]; then
+    fail "manifest.txt key ${key} is empty"
+    return
+  fi
+
+  ok "manifest key ${key} is present"
+}
+
+validate_manifest_file_name() {
+  value="$1"
+  label="$2"
+
+  case "${value}" in
+    ""|.|..|/*|*/*|-*)
+      fail "manifest ${label} value must be a local file name: ${value}"
+      return 1
+      ;;
+  esac
+
+  return 0
+}
+
+sql_stream() {
+  if [ "${database_is_gzip}" = "1" ]; then
+    gzip -cd "${database_file}"
+  else
+    cat "${database_file}"
+  fi
+}
+
+sql_summary() {
+  sql_stream | awk '
+    /^CREATE TABLE/ { tables++ }
+    /^INSERT INTO/ { inserts++ }
+    END {
+      printf "%d table definitions, %d insert batches", tables + 0, inserts + 0
+    }
+  '
+}
+
+validate_sql_shape() {
+  sql_stream | awk '
+    {
+      bytes += length($0) + 1
+      if ($0 ~ /;[[:space:]]*$/) {
+        statements = 1
+      }
+      upper = toupper($0)
+      if (upper ~ /^(CREATE|INSERT|DROP|ALTER|LOCK|UNLOCK)[[:space:]]/ || $0 ~ /^\/\*!/ || $0 ~ /^--/) {
+        dump_signal = 1
+      }
+    }
+    END {
+      if (bytes == 0 || statements == 0 || dump_signal == 0) {
+        exit 1
+      }
+    }
+  '
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --deep)
+      deep=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "${backup_dir}" ]; then
+        echo "Only one backup directory can be provided." >&2
+        usage >&2
+        exit 1
+      fi
+      backup_dir="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ -z "${backup_dir}" ]; then
+  usage >&2
+  exit 1
+fi
+
+if [ ! -d "${backup_dir}" ]; then
+  echo "Backup directory not found: ${backup_dir}" >&2
+  exit 1
+fi
+
+manifest_file="${backup_dir}/manifest.txt"
+if [ ! -f "${manifest_file}" ]; then
+  echo "No manifest.txt found in ${backup_dir}." >&2
+  exit 1
+fi
+
+printf 'Verifying backup: %s\n' "${backup_dir}"
+
+validate_manifest_key created_at 1
+validate_manifest_key environment 1
+validate_manifest_key compose_project_name 0
+validate_manifest_key wp_home 0
+validate_manifest_key database 1
+validate_manifest_key wp_content 1
+
+database_name="$(manifest_value database)"
+wp_content_name="$(manifest_value wp_content)"
+
+if validate_manifest_file_name "${database_name}" database; then
+  database_file="${backup_dir}/${database_name}"
+else
+  database_file=""
+fi
+
+if validate_manifest_file_name "${wp_content_name}" wp_content; then
+  wp_content_file="${backup_dir}/${wp_content_name}"
+else
+  wp_content_file=""
+fi
+
+database_is_gzip=0
+if [ -n "${database_file}" ]; then
+  if [ -f "${database_file}" ]; then
+    ok "database file exists: ${database_name}"
+    if [ -s "${database_file}" ]; then
+      ok "database file is not empty"
+    else
+      fail "database file is empty: ${database_name}"
+    fi
+
+    case "${database_name}" in
+      *.sql.gz)
+        database_is_gzip=1
+        if gzip -t "${database_file}"; then
+          ok "database gzip stream is valid"
+        else
+          fail "database gzip stream is invalid: ${database_name}"
+        fi
+        ;;
+      *.sql)
+        ok "database file is an uncompressed SQL dump"
+        ;;
+      *)
+        fail "unsupported database dump file name: ${database_name}"
+        ;;
+    esac
+
+    if validate_sql_shape; then
+      ok "database dump contains SQL statements"
+      printf 'info: database summary: %s\n' "$(sql_summary)"
+    else
+      fail "database dump does not look like a restorable SQL dump"
+    fi
+  else
+    fail "database file is missing: ${database_name}"
+  fi
+fi
+
+if [ -n "${wp_content_file}" ]; then
+  if [ -f "${wp_content_file}" ]; then
+    ok "wp-content archive exists: ${wp_content_name}"
+    if [ -s "${wp_content_file}" ]; then
+      ok "wp-content archive is not empty"
+    else
+      fail "wp-content archive is empty: ${wp_content_name}"
+    fi
+
+    case "${wp_content_name}" in
+      *.tar.gz|*.tgz)
+        make_tmp_root
+        tar_listing="${tmp_root}/wp-content.list"
+        tar_verbose_listing="${tmp_root}/wp-content.verbose.list"
+        if tar -tzf "${wp_content_file}" > "${tar_listing}"; then
+          ok "wp-content tar stream lists successfully"
+        else
+          fail "wp-content tar stream is invalid: ${wp_content_name}"
+          : > "${tar_listing}"
+        fi
+
+        if tar -tzvf "${wp_content_file}" > "${tar_verbose_listing}"; then
+          link_entry="$(awk '
+            substr($0, 1, 1) == "l" || substr($0, 1, 1) == "h" {
+              print
+              exit
+            }
+          ' "${tar_verbose_listing}")"
+          if [ -n "${link_entry}" ]; then
+            wp_content_has_links=1
+            warn "wp-content archive contains link entries; --deep will not extract it"
+          else
+            ok "wp-content archive contains no symlink or hardlink entries"
+          fi
+        else
+          fail "wp-content verbose tar listing failed: ${wp_content_name}"
+        fi
+
+        entry_count="$(awk 'END { print NR + 0 }' "${tar_listing}")"
+        if [ "${entry_count}" -gt 0 ]; then
+          ok "wp-content archive has ${entry_count} entries"
+        else
+          fail "wp-content archive has no entries"
+        fi
+
+        unsafe_path="$(awk '
+          $0 == "" {
+            print "(empty path)"
+            exit
+          }
+          $0 ~ /^\// {
+            print
+            exit
+          }
+          $0 ~ /(^|\/)\.\.(\/|$)/ {
+            print
+            exit
+          }
+        ' "${tar_listing}")"
+
+        if [ -n "${unsafe_path}" ]; then
+          fail "wp-content archive contains an unsafe path: ${unsafe_path}"
+        else
+          ok "wp-content archive paths are relative and safe"
+        fi
+
+        for expected_dir in uploads plugins themes mu-plugins; do
+          if awk -v dir="${expected_dir}" '
+            {
+              path = $0
+              sub(/^\.\//, "", path)
+              if (path == dir || index(path, dir "/") == 1) {
+                found = 1
+              }
+            }
+            END { exit found ? 0 : 1 }
+          ' "${tar_listing}"; then
+            ok "wp-content archive includes ${expected_dir}"
+          else
+            warn "wp-content archive does not include ${expected_dir}"
+          fi
+        done
+        ;;
+      *)
+        fail "unsupported wp-content archive file name: ${wp_content_name}"
+        ;;
+    esac
+  else
+    fail "wp-content archive is missing: ${wp_content_name}"
+  fi
+fi
+
+if [ "${deep}" = "1" ] && [ "${failures}" -eq 0 ]; then
+  make_tmp_root
+  deep_dir="${tmp_root}/deep"
+  mkdir -p "${deep_dir}/wp-content"
+
+  if sql_stream > "${deep_dir}/database.sql" && [ -s "${deep_dir}/database.sql" ]; then
+    ok "deep check materialized database.sql in a temporary directory"
+  else
+    fail "deep check could not materialize database.sql"
+  fi
+
+  if [ "${wp_content_has_links}" = "1" ]; then
+    fail "deep check refused to extract wp-content because the archive contains link entries"
+  elif tar -xzf "${wp_content_file}" -C "${deep_dir}/wp-content"; then
+    ok "deep check extracted wp-content into a temporary directory"
+  else
+    fail "deep check could not extract wp-content"
+  fi
+
+  printf 'info: deep check used temporary directory %s and will remove it\n' "${tmp_root}"
+elif [ "${deep}" = "1" ]; then
+  warn "deep check skipped because earlier checks failed"
+fi
+
+if [ "${failures}" -gt 0 ]; then
+  printf 'Backup verification failed: %d failure(s), %d warning(s).\n' "${failures}" "${warnings}" >&2
+  exit 1
+fi
+
+printf 'Backup verification passed: %d warning(s).\n' "${warnings}"

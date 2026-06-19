@@ -74,6 +74,18 @@ Local development does not enable these staging safeguards unless you set `VIBE_
 ## Promote Staging Files To Production
 
 ```sh
+./bin/vibe stage promote-files-to-prod
+```
+
+The interactive command prints the staging and production identity, shows plugin and theme inventories with production-to-staging diffs, and then asks for a typed confirmation:
+
+```text
+PROMOTE stage TO prod
+```
+
+Use `--yes` only for an already reviewed maintenance window or automation:
+
+```sh
 ./bin/vibe stage promote-files-to-prod --yes
 ```
 
@@ -83,7 +95,7 @@ This copies only managed code surfaces:
 - `wp-content/themes`
 - `wp-content/mu-plugins`
 
-It does not copy the database, uploads, or cache. The command creates a production backup first, restarts PHP-FPM/Nginx, flushes caches, and runs the production smoke test.
+It does not copy the database, uploads, or cache. After confirmation, the command creates and verifies a production backup before replacing files, then restarts PHP-FPM/Nginx, flushes caches, and runs the production smoke test. The preflight refuses to continue if staging and production resolve to the same `WP_HOME` or `COMPOSE_PROJECT_NAME`.
 
 ## Database Promotion
 

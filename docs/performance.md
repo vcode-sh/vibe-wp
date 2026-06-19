@@ -11,6 +11,17 @@ The template uses four performance layers:
 
 These layers solve different problems. Redis does not replace page cache, and page cache does not remove the need for object cache in admin, logged-in, and dynamic flows.
 
+## Performance Report
+
+Use the read-only performance report when tuning or auditing a VPS:
+
+```sh
+make perf-report
+./bin/vibe prod perf-report
+```
+
+The report prints OPcache configuration, PHP-FPM process memory, Redis memory and hit/miss counters, MariaDB performance variables/status, a quick Nginx FastCGI cache probe, and WordPress plugin/theme baseline status. OPcache hit-rate values from WP-CLI are CLI SAPI values; use WordPress Site Health for the PHP-FPM hit rate shown in wp-admin.
+
 ## OPcache
 
 Defaults:
@@ -56,6 +67,14 @@ Vibe WP intentionally keeps:
 
 `make doctor-runtime` verifies the OPcache baseline from the rendered PHP configuration so future env changes do not silently disable the WordPress-safe defaults.
 
+For a non-mutating performance snapshot, run:
+
+```sh
+make perf-report
+```
+
+The report prints OPcache configuration/status when available, PHP-FPM process RSS, Redis memory and eviction policy stats, MariaDB WordPress performance variables/status, Nginx FastCGI cache settings plus an anonymous header HIT check, and the current WordPress plugin/theme baseline. Use `ENV=stage`, `ENV=prod`, or `ENV=external` to target another configured environment. Use `VIBE_PERF_URL=https://example.com/` to override the URL used for the HTTP cache header check.
+
 ## PHP-FPM
 
 Start with:
@@ -68,6 +87,12 @@ Then measure memory per PHP-FPM child:
 
 ```sh
 docker compose exec wordpress ps -o rss,comm -C php-fpm
+```
+
+Or use the built-in report:
+
+```sh
+make perf-report
 ```
 
 The safe formula is:

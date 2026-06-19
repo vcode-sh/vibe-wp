@@ -2,7 +2,7 @@
 
 ENV ?= local
 
-.PHONY: help init init-prod init-stage doctor doctor-runtime smoke build build-prod build-stage config-prod config-stage config-external up up-prod up-stage down restart ps logs tools wp wp-info wp-shell cache-enable cache-flush backup restore prod-backup stage-backup stage-refresh stage-promote-files clean vibe
+.PHONY: help init init-prod init-stage doctor doctor-runtime smoke build build-prod build-stage config-prod config-stage config-external up up-prod up-stage down restart ps logs tools wp wp-info wp-shell cache-enable cache-flush backup backup-verify restore prod-backup stage-backup stage-refresh stage-promote-files perf-report clean vibe
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "vibe-wp commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -89,6 +89,9 @@ cache-flush: ## Flush WordPress object cache
 backup: ## Create a database and wp-content backup under backups/
 	@VIBE_ENV=$(ENV) ./bin/backup
 
+backup-verify: ## Verify a backup without restoring it: make backup-verify BACKUP=backups/local/<timestamp>
+	@./bin/backup-verify $(BACKUP) $(ARGS)
+
 restore: ## Restore a backup: make restore BACKUP=backups/local/<timestamp> ARGS="--yes"
 	@VIBE_ENV=$(ENV) ./bin/restore $(BACKUP) $(ARGS)
 
@@ -103,6 +106,9 @@ stage-refresh: ## Refresh staging from production: make stage-refresh ARGS="--ye
 
 stage-promote-files: ## Promote managed plugin/theme files from staging to production
 	@./bin/vibe stage promote-files-to-prod $(ARGS)
+
+perf-report: ## Print a read-only WordPress performance report
+	@VIBE_ENV=$(ENV) ./bin/perf-report
 
 vibe: ## Run environment-aware command: make vibe ENV=stage ARGS="wp plugin list"
 	@./bin/vibe $(ENV) $(ARGS)
