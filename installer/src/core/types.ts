@@ -9,8 +9,10 @@ export type PerformancePreset = "conservative" | "balanced" | "high-memory";
 export type BackupPolicy = "manual" | "local-first" | "external-later";
 
 export interface InstallerOptions {
+  adminEmail?: string;
   ascii: boolean;
   compact: boolean;
+  domain?: string;
   dryRun: boolean;
   exportPlan?: string;
   headlessJson: boolean;
@@ -18,10 +20,12 @@ export interface InstallerOptions {
   help: boolean;
   installDir: string;
   local: boolean;
+  mode?: InstallMode;
   noCaddy: boolean;
   noHostInstall: boolean;
   ref: string;
   repo: string;
+  stagingDomain?: string;
   version: boolean;
   yes: boolean;
 }

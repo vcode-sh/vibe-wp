@@ -2,6 +2,7 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
 import { devModeOverride } from "./app/dev-step";
+import { applyCliState } from "./cli/apply-cli-state";
 import { DEFAULT_INSTALL_DIR, parseArgs, usage } from "./cli/args";
 import { runHeadlessJson } from "./cli/headless-cli";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
@@ -57,6 +58,7 @@ async function main() {
   if (options.noCaddy) {
     state.installCaddy = false;
   }
+  applyCliState(state, options);
 
   const plan = buildInstallPlan(state);
 

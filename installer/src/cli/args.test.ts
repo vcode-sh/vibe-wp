@@ -26,4 +26,28 @@ describe("parseArgs", () => {
   test("rejects missing values", () => {
     expect(() => parseArgs(["--repo"])).toThrow("--repo requires a value.");
   });
+
+  test("parses domain, admin email, and mode flags", () => {
+    const options = parseArgs([
+      "--domain",
+      "x.com",
+      "--admin-email",
+      "a@b.com",
+      "--mode",
+      "staging-only"
+    ]);
+
+    expect(options.domain).toBe("x.com");
+    expect(options.adminEmail).toBe("a@b.com");
+    expect(options.mode).toBe("staging-only");
+  });
+
+  test("parses staging-domain flag", () => {
+    const options = parseArgs(["--staging-domain", "stage.x.com"]);
+    expect(options.stagingDomain).toBe("stage.x.com");
+  });
+
+  test("rejects an invalid mode", () => {
+    expect(() => parseArgs(["--mode", "foo"])).toThrow("Invalid --mode value: foo");
+  });
 });

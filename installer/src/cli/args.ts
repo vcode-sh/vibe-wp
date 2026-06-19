@@ -1,6 +1,15 @@
-import type { InstallerOptions } from "../core/types";
+import type { InstallerOptions, InstallMode } from "../core/types";
 
 export const DEFAULT_INSTALL_DIR = "/opt/vibe-wp";
+
+const INSTALL_MODES: InstallMode[] = [
+  "new-site",
+  "manage-existing",
+  "remove-existing",
+  "update-existing",
+  "staging-only",
+  "external-services"
+];
 
 type BooleanOption =
   | "ascii"
@@ -13,7 +22,15 @@ type BooleanOption =
   | "noHostInstall"
   | "version"
   | "yes";
-type StringOption = "exportPlan" | "headlessPlan" | "installDir" | "ref" | "repo";
+type StringOption =
+  | "adminEmail"
+  | "domain"
+  | "exportPlan"
+  | "headlessPlan"
+  | "installDir"
+  | "ref"
+  | "repo"
+  | "stagingDomain";
 
 const booleanFlags = new Map<string, BooleanOption>([
   ["--ascii", "ascii"],
@@ -30,11 +47,14 @@ const booleanFlags = new Map<string, BooleanOption>([
 ]);
 
 const stringFlags = new Map<string, StringOption>([
+  ["--admin-email", "adminEmail"],
+  ["--domain", "domain"],
   ["--export-plan", "exportPlan"],
   ["--headless", "headlessPlan"],
   ["--install-dir", "installDir"],
   ["--ref", "ref"],
-  ["--repo", "repo"]
+  ["--repo", "repo"],
+  ["--staging-domain", "stagingDomain"]
 ]);
 
 export function parseArgs(argv: string[]): InstallerOptions {
@@ -75,10 +95,24 @@ export function parseArgs(argv: string[]): InstallerOptions {
       continue;
     }
 
+    if (arg === "--mode") {
+      options.mode = parseMode(requireValue(argv, index, arg));
+      index += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
   return options;
+}
+
+function parseMode(value: string): InstallMode {
+  const mode = INSTALL_MODES.find((candidate) => candidate === value);
+  if (!mode) {
+    throw new Error(`Invalid --mode value: ${value}. Allowed: ${INSTALL_MODES.join(", ")}.`);
+  }
+  return mode;
 }
 
 function requireValue(argv: string[], index: number, flag: string): string {
@@ -101,6 +135,12 @@ Usage:
   echo '<json>' | vibe-wp-installer --headless-json
 
 Options:
+  --domain <host>        Production domain (derives slug, ports, staging, title)
+  --admin-email <email>  WordPress admin email
+  --staging-domain <h>   Staging domain (enables staging)
+  --mode <mode>          Install mode: new-site, manage-existing,
+                         remove-existing, update-existing, staging-only,
+                         external-services
   --install-dir <path>   Install directory, default /opt/vibe-wp
   --repo <url>           Vibe WP git repository
   --ref <ref>            Git branch or tag, default main
