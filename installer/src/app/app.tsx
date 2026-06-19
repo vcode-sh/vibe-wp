@@ -72,6 +72,16 @@ export function App({ initialState, options }: AppProps) {
     setStepIndex((value) => Math.max(value - 1, 0));
   }
 
+  // Clicking the workflow rail jumps back to an already-completed step only —
+  // never forward (a click must not skip ahead past unfilled steps).
+  function goToStep(index: number) {
+    if (index >= activeIndex || index < 0) {
+      return;
+    }
+    setFocusIndex(0);
+    setStepIndex(index);
+  }
+
   function moveFocus(delta: number) {
     setFocusIndex((value) => (value + delta + current.focusCount) % current.focusCount);
   }
@@ -119,7 +129,9 @@ export function App({ initialState, options }: AppProps) {
         <Header />
         {compact && <CompactStepper activeIndex={activeIndex} steps={flowSteps} />}
         <box flexDirection={compact ? "column" : "row"} flexGrow={1} gap={1}>
-          {!compact && <StepRail activeIndex={activeIndex} steps={flowSteps} />}
+          {!compact && (
+            <StepRail activeIndex={activeIndex} onSelectStep={goToStep} steps={flowSteps} />
+          )}
           <MainPanel {...screenProps} />
           {showHelp && !compact && (
             <HelpPanel current={current} state={state} warnings={plan.warnings} />

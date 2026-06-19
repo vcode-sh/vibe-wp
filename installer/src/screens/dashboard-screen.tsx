@@ -67,7 +67,18 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
       <text fg={color("subtle")} height={1} truncate>
         Pick an action below. Nothing happens until you press Enter.
       </text>
-      <GroupedOpList groups={groups} selectedId={current?.id} />
+      <GroupedOpList
+        groups={groups}
+        onSelect={(id) => {
+          // Click selects only — never runs. Clear any pending danger confirm.
+          const index = ops.findIndex((op) => op.id === id);
+          if (index >= 0) {
+            setSelected(index);
+            setConfirmId(null);
+          }
+        }}
+        selectedId={current?.id}
+      />
       <OpDetail confirmPending={confirmId === current?.id} op={current} status={status} />
       {output.length > 0 && <ResultPanel output={output} status={status} />}
     </box>

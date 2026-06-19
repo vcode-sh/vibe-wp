@@ -4,8 +4,19 @@ import { color } from "../app/theme";
 import { BORDER, RAIL_WIDTH, space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
 import type { GlyphName } from "./glyphs";
+import { clickProps } from "./mouse";
 
-export function StepRail({ activeIndex, steps }: { activeIndex: number; steps: Step[] }) {
+export function StepRail({
+  activeIndex,
+  steps,
+  onSelectStep
+}: {
+  activeIndex: number;
+  steps: Step[];
+  // It's a wizard: only already-completed steps are clickable. The parent also
+  // guards index < activeIndex, but we never even attach a handler otherwise.
+  onSelectStep?: (index: number) => void;
+}) {
   const glyphs = useGlyphs();
   return (
     <box
@@ -24,6 +35,7 @@ export function StepRail({ activeIndex, steps }: { activeIndex: number; steps: S
         const active = index === activeIndex;
         const done = index < activeIndex;
         const marker = stepMarker(glyphs, done, active);
+        const clickHandlers = done && onSelectStep ? clickProps(() => onSelectStep(index)) : {};
         return (
           <box
             backgroundColor={active ? color("selectionBg") : undefined}
@@ -31,6 +43,7 @@ export function StepRail({ activeIndex, steps }: { activeIndex: number; steps: S
             gap={space.sm}
             key={step.id}
             paddingX={1}
+            {...clickHandlers}
           >
             <text fg={stepMarkerColor(done, active)}>{marker}</text>
             <text

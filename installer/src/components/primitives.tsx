@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { color } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
+import { clickProps } from "./mouse";
 
 export function Field({
   label,
@@ -109,6 +110,7 @@ export function ToggleRow({
       height={1}
       justifyContent="space-between"
       paddingX={1}
+      {...clickProps(onToggle)}
     >
       <text attributes={focused ? TextAttributes.BOLD : TextAttributes.NONE} fg={color("text")}>
         {label}
@@ -183,7 +185,13 @@ export function ActionRow({
 
   return (
     <box alignItems="center" flexDirection="row" gap={space.md} height={1} paddingX={1}>
-      <box alignItems="center" backgroundColor={color("accent")} flexDirection="row" paddingX={2}>
+      <box
+        alignItems="center"
+        backgroundColor={color("accent")}
+        flexDirection="row"
+        paddingX={2}
+        {...clickProps(onPrimary)}
+      >
         <text attributes={TextAttributes.BOLD} fg={color("accentText")}>
           {glyphs.enter} {primary}
         </text>
