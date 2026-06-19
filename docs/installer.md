@@ -84,7 +84,18 @@ Recommended settings:
 - volumes: none
 - secrets: none
 
-If the GHCR package is private, add GitHub Container Registry credentials in Dokploy or make this single package public. The service only contains public installer assets.
+The Docker image is hosted in GitHub Container Registry, not Docker Hub. A Docker Hub account is not required.
+
+For `wp.vcode.sh`, the preferred setup is to make only the `vibe-wp-installer-site` GHCR package public. The container contains only public installer assets, and public GHCR packages can be pulled without authentication. In GitHub, open the package, go to Package settings, change visibility to Public, and confirm the package name. GitHub warns that a public package cannot be made private again.
+
+If the GHCR package stays private, configure private registry access in Dokploy:
+
+- registry URL: `ghcr.io`
+- username: the GitHub account that can read the package
+- password: a GitHub personal access token classic with `read:packages`
+- image: `ghcr.io/vcode-sh/vibe-wp-installer-site:latest`
+
+The current `wp-vcode-bootstrap` Dokploy application intentionally uses the public image path. If no registry credentials are configured and the package is private, Docker pull fails with `denied`.
 
 For automatic deployment after the GHCR image is pushed, add these GitHub Actions secrets:
 
