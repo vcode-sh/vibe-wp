@@ -25,8 +25,8 @@ export function NoteBox({
 }) {
   return (
     <box
-      backgroundColor={color("panel")}
-      borderColor={color(tone)}
+      backgroundColor={color("panel3")}
+      borderColor={color(tone === "border" ? "divider" : tone)}
       borderStyle={BORDER.frame}
       flexDirection="column"
       gap={space.xs}

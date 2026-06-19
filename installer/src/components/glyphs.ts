@@ -8,6 +8,8 @@ export type GlyphName =
   | "enter"
   | "tab"
   | "arrows"
+  | "arrowLeft"
+  | "arrowRight"
   | "bullet"
   | "wordmark";
 
@@ -21,6 +23,8 @@ const UNICODE: Record<GlyphName, string> = {
   enter: "⏎",
   tab: "⇥",
   arrows: "↑↓",
+  arrowLeft: "←",
+  arrowRight: "→",
   bullet: "•",
   wordmark: "◇"
 };
@@ -35,6 +39,8 @@ const ASCII: Record<GlyphName, string> = {
   enter: "Enter",
   tab: "Tab",
   arrows: "Up/Dn",
+  arrowLeft: "<",
+  arrowRight: ">",
   bullet: "-",
   wordmark: "#"
 };

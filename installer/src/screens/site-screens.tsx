@@ -1,9 +1,10 @@
-import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
+import { useGlyphs } from "../components/glyph-context";
 import { ActionRow, Panel } from "../components/primitives";
+import { Section } from "../components/section";
 import {
   defaultInstallDir,
   portPairFromSlug,
@@ -92,26 +93,25 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
 }
 
 function SiteInventory({ sites, selected }: { selected: string; sites: ExistingSite[] }) {
+  const glyphs = useGlyphs();
   return (
-    <box backgroundColor={color("panel")} border borderColor={color("border")} padding={1}>
-      <box flexDirection="column" gap={1}>
-        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-          Detected installations
-        </text>
-        {sites.slice(0, 4).map((site) => (
-          <box flexDirection="row" gap={1} key={site.installDir}>
-            <text fg={site.installDir === selected ? color("accent") : color("subtle")}>
-              {site.installDir === selected ? ">" : "-"}
+    <Section title="Detected installations">
+      {sites.slice(0, 4).map((site) => {
+        const isSelected = site.installDir === selected;
+        return (
+          <box flexDirection="row" gap={1} height={1} key={site.installDir} paddingX={1}>
+            <text fg={isSelected ? color("accent") : color("subtle")}>
+              {isSelected ? glyphs.active : glyphs.bullet}
             </text>
             <text fg={color("text")} truncate>
               {site.productionUrl ?? site.installDir}
             </text>
-            <text fg={color("muted")} truncate>
+            <text fg={color("subtle")} truncate>
               {site.productionProject ?? "unknown project"}
             </text>
           </box>
-        ))}
-      </box>
-    </box>
+        );
+      })}
+    </Section>
   );
 }

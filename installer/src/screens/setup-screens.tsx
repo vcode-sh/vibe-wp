@@ -32,13 +32,10 @@ export function WelcomeScreen({ state, next }: ScreenProps) {
         />
       </Section>
       <NoteBox>
-        <text fg={color("text")} wrapMode="word">
-          Prepares env files, Caddy HTTPS, Docker services, WordPress install, staging, backups,
-          smoke checks, and performance reports.
-        </text>
         <text fg={color("muted")} wrapMode="word">
-          Nothing privileged runs until review. Use --dry-run or --export-plan for a non-interactive
-          audit.
+          Prepares env files, Caddy HTTPS, Docker services, WordPress install, staging, backups,
+          smoke checks, and performance reports. Nothing privileged runs until review — use
+          --dry-run or --export-plan for a non-interactive audit.
         </text>
       </NoteBox>
       <ActionRow

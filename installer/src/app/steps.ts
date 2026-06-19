@@ -49,7 +49,7 @@ export const steps: Step[] = [
   },
   {
     id: "mode",
-    focusCount: 2,
+    focusCount: 3,
     title: "Mode",
     help: "Selects whether this is a fresh site, an update, staging, or advanced external services."
   },

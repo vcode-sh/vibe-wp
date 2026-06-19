@@ -36,21 +36,28 @@ export function ChoiceList<T extends string>({
     }
   });
 
+  const activeOption = options.find((option) => option.value === value) ?? options[0];
+
   return (
     <box flexDirection="column" gap={space.xs}>
-      {options.map((option, index) => {
-        const active = option.value === value;
-        return (
-          <ChoiceRow
-            active={active}
-            focused={focused}
-            index={index}
-            key={option.value}
-            marker={active ? glyphs.active : glyphs.bullet}
-            option={option}
-          />
-        );
-      })}
+      {options.map((option, index) => (
+        <ChoiceRow
+          active={option.value === value}
+          focused={focused}
+          index={index}
+          key={option.value}
+          marker={option.value === value ? glyphs.active : " "}
+          name={option.name}
+        />
+      ))}
+      {activeOption && (
+        <box flexDirection="row" gap={space.sm} paddingX={1}>
+          <text fg={color("subtle")}>{glyphs.bullet}</text>
+          <text fg={color("muted")} truncate>
+            {activeOption.description}
+          </text>
+        </box>
+      )}
     </box>
   );
 }
@@ -60,33 +67,45 @@ function ChoiceRow({
   focused,
   index,
   marker,
-  option
+  name
 }: {
   active: boolean;
   focused: boolean;
   index: number;
   marker: string;
-  option: { description: string; name: string; value: string };
+  name: string;
 }) {
-  const markerColor = active ? color(focused ? "accent" : "muted") : color("subtle");
+  // opencode signature: the selected row is a full-width accent bar with
+  // contrasting bold text; only when the list itself is focused.
+  const barColor = rowBackground(active, focused);
+  const textColor = rowTextColor(active, focused);
   return (
     <box
-      backgroundColor={active ? color("selectionBg") : color("panel")}
-      flexDirection="column"
+      alignItems="center"
+      backgroundColor={barColor}
+      flexDirection="row"
+      gap={space.sm}
+      height={1}
       paddingX={1}
     >
-      <box flexDirection="row" gap={space.sm}>
-        <text fg={markerColor}>{marker}</text>
-        <text
-          attributes={active ? TextAttributes.BOLD : TextAttributes.NONE}
-          fg={color(active ? "text" : "muted")}
-        >
-          {index + 1}. {option.name}
-        </text>
-      </box>
-      <text fg={color("subtle")} wrapMode="word">
-        {option.description}
+      <text fg={textColor}>{marker}</text>
+      <text attributes={active ? TextAttributes.BOLD : TextAttributes.NONE} fg={textColor} truncate>
+        {index + 1}. {name}
       </text>
     </box>
   );
+}
+
+function rowBackground(active: boolean, focused: boolean): string | undefined {
+  if (!active) {
+    return;
+  }
+  return focused ? color("accent") : color("selectionBg");
+}
+
+function rowTextColor(active: boolean, focused: boolean): string {
+  if (active && focused) {
+    return color("accentText");
+  }
+  return active ? color("text") : color("muted");
 }

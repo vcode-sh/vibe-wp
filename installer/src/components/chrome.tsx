@@ -122,24 +122,25 @@ export function Footer({
     >
       <KeyHints
         hints={[
-          { key: glyphs.tab, label: "focus" },
           { key: glyphs.arrows, label: "move" },
-          { key: glyphs.enter, label: "select" },
-          { key: "?", label: "context" }
+          { key: glyphs.enter, label: "next" },
+          { key: `${glyphs.arrowLeft}${glyphs.arrowRight}`, label: "steps" },
+          { key: "esc", label: "back" },
+          { key: "?", label: "help" }
         ]}
       />
       <box alignItems="center" flexDirection="row" gap={space.md}>
         {validationCount > 0 ? (
           <box backgroundColor={color("warning")} paddingX={1}>
-            <text fg={color("black")}>
+            <text attributes={TextAttributes.BOLD} fg={color("black")}>
               {validationCount} {glyphs.warn}
             </text>
           </box>
         ) : (
           <text fg={color("success")}>{glyphs.done} valid</text>
         )}
-        <text fg={color("accent")}>
-          Step {currentIndex + 1}/{total}
+        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+          {currentIndex + 1}/{total}
         </text>
       </box>
     </box>

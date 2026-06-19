@@ -35,7 +35,7 @@ export function App({ initialState, options }: AppProps) {
   const renderer = useRenderer();
   const dimensions = useTerminalDimensions();
   const [state, setState] = useState<InstallerState>(initialState);
-  const [stepIndex, setStepIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(initialStepIndex());
   const [focusIndex, setFocusIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -137,12 +137,13 @@ function MainPanel(props: ScreenProps) {
   return (
     <box
       backgroundColor={color("panel2")}
-      borderColor={color("borderStrong")}
+      borderColor={color("border")}
       borderStyle="rounded"
       flexDirection="column"
       flexGrow={1}
       gap={1}
-      padding={1}
+      paddingX={2}
+      paddingY={1}
     >
       <box alignItems="center" flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
@@ -186,6 +187,20 @@ function renderScreen(props: ScreenProps) {
     default:
       return <WelcomeScreen {...props} />;
   }
+}
+
+// Dev-only: jump straight to a step for headless UI capture (VIBE_DEV_STEP=<id|index>).
+function initialStepIndex(): number {
+  const raw = process.env.VIBE_DEV_STEP;
+  if (!raw) {
+    return 0;
+  }
+  const byId = steps.findIndex((step) => step.id === raw);
+  if (byId >= 0) {
+    return byId;
+  }
+  const asNumber = Number(raw);
+  return Number.isInteger(asNumber) && asNumber >= 0 && asNumber < steps.length ? asNumber : 0;
 }
 
 function getStep(index: number) {

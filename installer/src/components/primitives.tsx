@@ -3,7 +3,6 @@ import { useKeyboard } from "@opentui/react";
 import { color } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
-import { KeyCap } from "./keycap";
 
 export function Field({
   label,
@@ -39,16 +38,18 @@ export function Field({
 
   return (
     <box
-      backgroundColor={focused ? color("panel2") : color("panel")}
-      borderColor={focused ? color("focusRing") : color("border")}
-      borderStyle={BORDER.frame}
+      backgroundColor={focused ? color("selectionBg") : undefined}
+      border={["left"]}
+      borderColor={focused ? color("focusRing") : color("divider")}
       flexDirection="column"
-      flexGrow={1}
-      height={hint ? 5 : 4}
+      flexShrink={0}
+      height={hint ? 3 : 2}
       paddingX={1}
     >
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={focused ? color("accent") : color("muted")}>{label}</text>
+      <box flexDirection="row" gap={space.sm} justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={focused ? color("accent") : color("muted")}>
+          {label}
+        </text>
         {focused && <text fg={color("accent")}>{glyphs.active}</text>}
       </box>
       {secret ? (
@@ -57,10 +58,10 @@ export function Field({
         </text>
       ) : (
         <input
-          backgroundColor={focused ? color("panel2") : color("panel")}
+          backgroundColor={focused ? color("selectionBg") : color("panel")}
           cursorColor={color("accent")}
           focused={focused}
-          focusedBackgroundColor={color("panel2")}
+          focusedBackgroundColor={color("selectionBg")}
           onInput={onInput}
           placeholder={label}
           textColor={color("text")}
@@ -119,6 +120,7 @@ export function ToggleRow({
 }
 
 export function Panel({ title, content }: { title: string; content: string }) {
+  const lines = (content || "None").split("\n");
   return (
     <box
       borderColor={color("border")}
@@ -127,12 +129,17 @@ export function Panel({ title, content }: { title: string; content: string }) {
       flexGrow={1}
       padding={space.sm}
     >
-      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-        {title}
-      </text>
-      <text fg={color("text")} wrapMode="word">
-        {content || "None"}
-      </text>
+      <box border={["bottom"]} borderColor={color("divider")} flexDirection="row" height={2}>
+        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+          {title}
+        </text>
+      </box>
+      {lines.map((line, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: preview lines are positional
+        <text fg={color("text")} height={1} key={`${title}-${index}`} truncate>
+          {line}
+        </text>
+      ))}
     </box>
   );
 }
@@ -154,23 +161,13 @@ export function ActionRow({
   });
 
   return (
-    <box
-      alignItems="center"
-      borderColor={color("accent")}
-      borderStyle={BORDER.frame}
-      flexDirection="row"
-      gap={space.sm}
-      height={4}
-      justifyContent="space-between"
-      paddingX={1}
-    >
-      <box alignItems="center" flexDirection="row" gap={space.sm}>
-        <KeyCap>{glyphs.enter}</KeyCap>
-        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-          {primary}
+    <box alignItems="center" flexDirection="row" gap={space.md} height={1} paddingX={1}>
+      <box alignItems="center" backgroundColor={color("accent")} flexDirection="row" paddingX={2}>
+        <text attributes={TextAttributes.BOLD} fg={color("accentText")}>
+          {glyphs.enter} {primary}
         </text>
       </box>
-      <text fg={color("muted")} truncate>
+      <text fg={color("subtle")} truncate>
         {secondary}
       </text>
     </box>
