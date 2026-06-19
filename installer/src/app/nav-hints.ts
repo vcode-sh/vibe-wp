@@ -7,6 +7,7 @@ export type StepKind = "action" | "choice" | "toggles" | "fields" | "mixed" | "d
 const STEP_KIND: Record<StepId, StepKind> = {
   welcome: "action",
   sites: "choice",
+  dashboard: "choice",
   system: "toggles",
   domain: "mixed",
   mode: "fields",

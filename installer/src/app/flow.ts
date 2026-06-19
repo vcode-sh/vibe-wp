@@ -24,6 +24,7 @@ const FULL: StepId[] = [
 function visibleStepIds(mode: InstallMode): StepId[] {
   switch (mode) {
     case "manage-existing":
+      return ["welcome", "sites", "dashboard"];
     case "remove-existing":
       return ["welcome", "sites", "review", "execute", "success"];
     case "update-existing":

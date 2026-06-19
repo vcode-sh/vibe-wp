@@ -1,6 +1,7 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
+import { devModeOverride } from "./app/dev-step";
 import { DEFAULT_INSTALL_DIR, parseArgs, usage } from "./cli/args";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
@@ -31,6 +32,13 @@ async function main() {
 
   const host = options.local ? createLocalSandboxHostFacts() : await detectHostFacts();
   const state = options.local ? applyLocalSandboxDefaults(defaultState(host)) : defaultState(host);
+  const devMode = devModeOverride();
+  if (options.local && devMode) {
+    state.mode = devMode;
+    if (host.existingSites[0]) {
+      state.selectedSiteDir = host.existingSites[0].installDir;
+    }
+  }
   if (!options.local || options.installDir !== DEFAULT_INSTALL_DIR) {
     state.installDir = options.installDir;
   }

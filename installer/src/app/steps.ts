@@ -3,6 +3,7 @@ import type { BackupPolicy, InstallMode, PerformancePreset } from "../core/types
 export type StepId =
   | "welcome"
   | "sites"
+  | "dashboard"
   | "system"
   | "domain"
   | "mode"
@@ -34,6 +35,12 @@ export const steps: Step[] = [
     focusCount: 2,
     title: "Sites",
     help: "Create a new WordPress site or manage one already installed on this VPS."
+  },
+  {
+    id: "dashboard",
+    focusCount: 1,
+    title: "Manage",
+    help: "Run safe checks and maintenance on the selected site, in plain language."
   },
   {
     id: "system",
