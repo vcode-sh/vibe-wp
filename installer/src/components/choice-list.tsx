@@ -1,6 +1,8 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { color } from "../app/theme";
+import { space } from "../app/tokens";
+import { useGlyphs } from "./glyph-context";
 
 export function ChoiceList<T extends string>({
   focused,
@@ -13,6 +15,7 @@ export function ChoiceList<T extends string>({
   options: Array<{ description: string; name: string; value: T }>;
   value: T;
 }) {
+  const glyphs = useGlyphs();
   useKeyboard((key) => {
     if (!focused) {
       return;
@@ -34,43 +37,54 @@ export function ChoiceList<T extends string>({
   });
 
   return (
-    <box flexDirection="column" gap={1}>
-      {options.map((option, index) => (
-        <ChoiceRow
-          active={option.value === value}
-          index={index}
-          key={option.value}
-          option={option}
-        />
-      ))}
+    <box flexDirection="column" gap={space.xs}>
+      {options.map((option, index) => {
+        const active = option.value === value;
+        return (
+          <ChoiceRow
+            active={active}
+            focused={focused}
+            index={index}
+            key={option.value}
+            marker={active ? glyphs.active : glyphs.bullet}
+            option={option}
+          />
+        );
+      })}
     </box>
   );
 }
 
 function ChoiceRow({
   active,
+  focused,
   index,
+  marker,
   option
 }: {
   active: boolean;
+  focused: boolean;
   index: number;
+  marker: string;
   option: { description: string; name: string; value: string };
 }) {
+  const markerColor = active ? color(focused ? "accent" : "muted") : color("subtle");
   return (
     <box
-      backgroundColor={active ? color("panel3") : color("panel")}
-      border
-      borderColor={active ? color("accent") : color("border")}
+      backgroundColor={active ? color("selectionBg") : color("panel")}
       flexDirection="column"
       paddingX={1}
     >
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={active ? TextAttributes.BOLD : TextAttributes.NONE} fg={color("text")}>
+      <box flexDirection="row" gap={space.sm}>
+        <text fg={markerColor}>{marker}</text>
+        <text
+          attributes={active ? TextAttributes.BOLD : TextAttributes.NONE}
+          fg={color(active ? "text" : "muted")}
+        >
           {index + 1}. {option.name}
         </text>
-        {active && <text fg={color("accent")}>selected</text>}
       </box>
-      <text fg={color("muted")} wrapMode="word">
+      <text fg={color("subtle")} wrapMode="word">
         {option.description}
       </text>
     </box>
