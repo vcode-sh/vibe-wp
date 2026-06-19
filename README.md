@@ -97,7 +97,7 @@ See [docs/deployment.md](docs/deployment.md) and [docs/staging.md](docs/staging.
 
 The public installer host is served from `wp.vcode.sh`. It downloads a versioned Linux installer binary, verifies SHA256, and then opens the guided terminal UI.
 
-See [docs/installer.md](docs/installer.md) for the release workflow and Dokploy deployment model.
+Current installer version: `0.1.2`. It is usable for bootstrap verification, dry-run planning, and TUI review, but it is not yet the completed production installer. See [docs/installer.md](docs/installer.md) for current capabilities, production readiness gates, release workflow, and Dokploy deployment model.
 
 ## Research Baseline
 

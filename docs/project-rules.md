@@ -31,3 +31,31 @@ These rules apply to the Vibe WP repository and are enforced first for the insta
 - Every screen must have a clear primary action, focused control, and visible context.
 - The UI should show exact consequences before privileged actions.
 - Do not hide warnings about DNS, public ports, backups, or Docker firewall behavior.
+
+## Installer UX Standard
+
+The installer should feel like a modern operations console for a non-technical VPS owner. It must not feel like a mock, a plain questionnaire, or a developer-only CLI.
+
+- Use neutral dark mode with restrained contrast, one accent color, and semantic colors only for success, warning, and destructive states.
+- Keep layout stable across navigation. Focus changes, validation messages, and long values must not resize the whole screen.
+- Prefer numbered choice cards and clear actions over dense selects when the user is making an important decision.
+- Support `Tab` and `Shift+Tab` for focus, `Up` and `Down` for list movement, `Enter` for action, `Esc` for back/close, and `?` for help.
+- Include a visible footer with available actions on every interactive screen.
+- Mask secrets while typing and redact them from previews, logs, dry-runs, exported plans, summaries, and support bundles.
+- Use typed confirmation for install execution, Caddy changes, safe remove, full delete, and any irreversible action.
+- Destructive actions need a dialog or layer with consequence summary, affected paths, affected Docker resources, backup status, and the exact confirmation phrase.
+- Field errors must appear next to the field and explain the fix in plain English.
+- Technical details belong in a help panel, log drawer, or advanced details area, not in the primary path.
+- Progress should be shown as a timeline with current task, completed tasks, skipped tasks, and retryable failures.
+- The TUI must be checked through real SSH sessions before release acceptance.
+
+## Installer Completion Rules
+
+Do not call the guided installer complete until these product requirements are met:
+
+- persistent state, install logs, summaries, and resume data are written under `.vibe-installer/`
+- failure recovery supports retry, resume, and support bundle export
+- wide, medium, compact, and emergency terminal layouts have snapshot coverage
+- a disposable real-domain production install has passed
+- a disposable real-domain production-plus-staging install has passed
+- post-install checks prove WordPress Site Health REST and loopback, upload directory creation, Redis Object Cache, and FastCGI cache `HIT`

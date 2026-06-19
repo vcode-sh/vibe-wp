@@ -8,6 +8,10 @@ curl -fsSL https://wp.vcode.sh/install.sh | sh
 
 The public `wp.vcode.sh` host is a small static service. It serves the bootstrap script, the latest manifest, checksums, and immutable versioned installer binaries. It does not host WordPress and it does not store secrets.
 
+Current public installer version: `0.1.2`.
+
+Current status: usable for bootstrap verification, dry-run planning, and interactive TUI review. It is not yet certified as a completed unattended production installer. The remaining production gates are documented below and in [../todo/installer.md](../todo/installer.md).
+
 ## Safety Model
 
 The bootstrap script:
@@ -20,6 +24,57 @@ The bootstrap script:
 - supports `VIBE_WP_INSTALLER_NO_EXEC=1` for download and verify only
 
 The bootstrap script does not install Docker, edit host reverse-proxy configuration, clone the repository, write env files, or run Compose. Those actions happen only inside the reviewed TUI flow or through headless `--yes`.
+
+## What The Installer Has Now
+
+Installer `0.1.2` includes:
+
+- integrity-checked public bootstrap through `https://wp.vcode.sh/install.sh`
+- Linux x64 and arm64 release artifacts
+- interactive OpenTUI/React wizard launched correctly from `curl | sh` over SSH
+- clean stdout for `--dry-run`, `--version`, and automation modes
+- site inventory that scans `/opt` and `/srv` for existing Vibe WP installs
+- create, manage, and safe-remove flows
+- per-site slugs, Compose project names, and localhost HTTP ports
+- Caddy snippets under `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy`
+- global Caddy import management instead of overwriting the whole host Caddyfile
+- DNS preflight for new installs
+- blocking for placeholder domains and emails such as `example.com`
+- numbered choice cards instead of cramped native selects
+- a neutral dark visual pass
+- masked secret fields for passwords and API keys
+- typed confirmation before execution
+- a real task runner wired to the interactive Execute screen
+- manage tasks for `ps`, production smoke, performance report, and optional staging smoke
+- safe-remove tasks that back up, stop containers, and disable the site's Caddy snippet without deleting files or Docker volumes
+
+## What The Installer Does Not Have Yet
+
+The installer is not complete until these gaps are closed:
+
+- persistent state, resumable execution, and install logs under `.vibe-installer/`
+- support bundle export with redacted logs and detected host facts
+- first-class modal/dialog layers for destructive actions, failure recovery, and advanced overrides
+- full-delete mode for intentionally removing files and Docker volumes
+- terminal snapshot checks for wide, medium, compact, and emergency layouts
+- real production install proof on a disposable Ubuntu 26.04 VPS with a real domain
+- real production-plus-staging install proof on a disposable Ubuntu 26.04 VPS with real domains
+- post-install proof for WordPress Site Health REST and loopback checks
+- post-install proof for uploads year/month directory creation
+- post-install proof for Redis Object Cache connectivity
+- post-install proof for FastCGI cache `HIT`
+
+## Production Readiness Gate
+
+Do not mark the installer complete or recommend unattended `--headless --yes` production usage until all of these are true:
+
+- the user can install a production WordPress site from a clean Ubuntu 26.04 VPS without reading Docker documentation
+- the same flow can add staging with isolated domains, ports, project names, volumes, and secrets
+- every privileged host change appears in review before execution
+- interruption can be resumed from `.vibe-installer/state.json`
+- failures show plain-English next steps and allow retry or support bundle export
+- secrets are redacted from UI, logs, plans, summaries, and support bundles
+- the TUI has been visually checked on real SSH terminals, not only local terminal sessions
 
 ## Useful Commands
 

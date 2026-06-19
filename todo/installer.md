@@ -1,7 +1,7 @@
 # Vibe WP Installer TUI Plan
 
 Date: 2026-06-19
-Status: productized management pass in progress; not complete
+Status: installer `0.1.2` released; management pass implemented; production readiness not complete
 Primary decision: OpenTUI + React + Bun
 
 ## Current Audit - 2026-06-19
@@ -39,6 +39,78 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - Reworked secret fields so password/API-key entry renders masked content instead of showing the raw input value.
 - Wired the interactive Execute screen to the real task runner with typed confirmation.
 - Added DNS preflight as the first create/install task and blocked placeholder domains/emails such as `example.com`.
+
+## Current Capability Matrix - 2026-06-19
+
+### Available in `0.1.2`
+
+- Public `curl | sh` bootstrap downloads the current manifest, verifies SHA256, and executes the Linux installer from `/dev/tty`.
+- `VIBE_WP_INSTALLER_NO_EXEC=1` verifies the artifact without execution.
+- `--version` and `--dry-run` work without interactive TUI noise on stdout.
+- The TUI opens over SSH and no longer exits immediately after `curl | sh`.
+- New-site planning supports site slugs, per-site Compose project names, per-site loopback HTTP ports, production domain, optional staging, AI keys, backup policy, and performance preset.
+- Existing Vibe WP installs are detected under `/opt` and `/srv` when they expose `bin/vibe` plus env files.
+- Manage mode can plan status, production smoke, performance report, and optional staging smoke tasks.
+- Safe-remove mode can plan backup, stop production/staging containers, and disable the site's Caddy snippet.
+- Caddy integration is site-scoped through `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy`.
+- Secrets are masked in form fields and redacted in generated previews.
+- Execution requires a typed confirmation phrase.
+
+### Partially Available
+
+- The visual system has a first neutral dark-mode pass, but the SSH result has not been accepted as 2026-quality UI.
+- Choice cards are clearer than native selects, but the dashboard still needs stronger hierarchy, better grouping, and better non-technical labels.
+- The task runner is real, but execution state is still in-process only and cannot be resumed after interruption.
+- Safe-remove is intentionally conservative and stop-only; there is no separate full-delete flow for removing files and Docker volumes.
+- DNS validation exists, but the full DNS-not-ready guidance needs better copy, retry UX, and advanced override dialog treatment.
+- Management mode exists, but it is not yet a full site operations console with backups, restore, update, staging refresh, logs, and removal grouped as first-class actions.
+- Headless/export modes exist, but they need the same validation and resume story as interactive installs before being recommended for production.
+
+### Not Implemented
+
+- Persistent `.vibe-installer/state.json`, `install.log`, `summary.txt`, and support bundle export.
+- Resume after failed or interrupted install.
+- Dialog/layer system for destructive actions, advanced overrides, failure recovery, and support bundle export.
+- Full-delete mode with files, Caddy snippets, Docker volumes, and backup confirmation.
+- Terminal screenshot/snapshot acceptance for wide, medium, compact, and emergency layouts.
+- Real end-to-end install proof on a clean Ubuntu 26.04 VPS with a real production domain.
+- Real end-to-end production-plus-staging proof with isolated domains.
+- Post-install proof for WordPress Site Health REST and loopback checks.
+- Post-install proof for uploads year/month directory creation.
+- Post-install proof for Redis Object Cache and FastCGI cache `HIT`.
+
+## UI/UX 2026 Upgrade Backlog
+
+### P0 - Required Before Production Readiness
+
+- Add persistent installer state, resumable execution, install log, and final summary under `.vibe-installer/`.
+- Add a support bundle export that redacts secrets and includes host facts, selected options, command list, recent logs, Docker status, and Caddy validation output.
+- Add a real dialog/layer system for destructive actions, failure recovery, support bundle export, DNS override, and quit-during-execution confirmation.
+- Rework the first screen into a true site dashboard with clear actions: create site, manage detected site, safe remove, full delete when implemented, and open docs.
+- Add a visual progress timeline with current task, completed tasks, skipped tasks, failed task, retry action, and log drawer.
+- Run and record real SSH visual checks at wide, medium, compact, and emergency terminal sizes.
+- Run and record disposable real-domain production and production-plus-staging installs.
+
+### P1 - Required For "Wow" Quality
+
+- Improve visual hierarchy with a calmer top bar, stronger step titles, quieter metadata, and clearer primary/secondary actions.
+- Add a contextual side panel that explains the selected action in non-technical language and shows detected facts.
+- Add inline field validation with exact next steps, not generic error messages.
+- Add a keyboard help overlay reachable with `?`.
+- Add a command palette or quick action layer for advanced users without cluttering the primary path.
+- Add better empty states for "no sites detected", "DNS not ready", "Docker missing", and "Caddy conflict".
+- Make management mode feel like an operations console: status, smoke, performance report, backup, restore, staging refresh, update, logs, safe remove.
+- Add terminal capability fallback for 256-color and ASCII border modes.
+- Add polished compact-mode layouts that still show current context, footer actions, and one focused decision.
+
+### P2 - Later Polish
+
+- Mouse support for selecting actions in terminals that support it.
+- QR code or short URL handoff for opening the WordPress admin URL after install.
+- External backup target wizard for S3/R2-compatible storage.
+- Optional DNS automation for Cloudflare or another provider.
+- Secret-manager mode for AI provider keys instead of storing all optional keys in env files.
+- Plugin/theme bundle selection after the baseline WordPress AI plugin set is installed.
 
 Remaining P0 implementation work:
 
