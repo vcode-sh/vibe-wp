@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
+import { Credits } from "../components/credits";
 import { InfoGrid } from "../components/data-display";
 import { ActionRow, Panel } from "../components/primitives";
 import { NoteBox } from "../components/section";
@@ -49,6 +50,9 @@ export function SuccessScreen({ redactedPlan }: ScreenProps) {
         <text fg={color("muted")}>./bin/vibe prod perf-report</text>
         <text fg={color("muted")}>./bin/vibe prod backup</text>
       </NoteBox>
+      <box paddingTop={1}>
+        <Credits />
+      </box>
     </box>
   );
 }

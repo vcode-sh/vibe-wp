@@ -4,6 +4,7 @@ import { color } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
 import { INSTALLER_VERSION } from "../core/defaults";
 import type { InstallerState } from "../core/types";
+import { Credits } from "./credits";
 import { useGlyphs } from "./glyph-context";
 import { KeyHints } from "./keycap";
 
@@ -75,6 +76,9 @@ export function HelpPanel({
           {glyphs.warn} {warning}
         </text>
       ))}
+      <box border={["top"]} borderColor={color("divider")} flexDirection="column" paddingTop={1}>
+        <Credits layout="column" />
+      </box>
     </box>
   );
 }

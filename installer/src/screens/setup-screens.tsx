@@ -4,6 +4,7 @@ import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { Banner } from "../components/banner";
 import { ChoiceList } from "../components/choice-list";
+import { Credits } from "../components/credits";
 import { InfoGrid } from "../components/data-display";
 import { useGlyphs } from "../components/glyph-context";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
@@ -45,6 +46,7 @@ export function WelcomeScreen({ state, next }: ScreenProps) {
           secondary="Nothing privileged runs until review"
         />
       </box>
+      <Credits />
     </box>
   );
 }
