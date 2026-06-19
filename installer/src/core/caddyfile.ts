@@ -9,7 +9,7 @@ export function renderCaddyfile(state: InstallerState): string {
   const production = `${hosts.join(", ")} {
     encode zstd gzip
     reverse_proxy 127.0.0.1:${state.productionHttpPort} {
-        health_uri /
+        health_uri /healthz
         health_interval 30s
         health_timeout 5s
         transport http {
@@ -28,7 +28,7 @@ export function renderCaddyfile(state: InstallerState): string {
 ${state.stagingDomain.trim().toLowerCase()} {
     encode zstd gzip
     reverse_proxy 127.0.0.1:${state.stagingHttpPort} {
-        health_uri /
+        health_uri /healthz
         health_interval 30s
         health_timeout 5s
         transport http {
