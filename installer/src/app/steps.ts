@@ -49,9 +49,9 @@ export const steps: Step[] = [
   },
   {
     id: "mode",
-    focusCount: 3,
-    title: "Mode",
-    help: "Selects whether this is a fresh site, an update, staging, or advanced external services."
+    focusCount: 2,
+    title: "Location",
+    help: "Where the checkout lives on disk and which git ref to deploy."
   },
   {
     id: "admin",

@@ -1,15 +1,12 @@
 import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
-import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { Banner } from "../components/banner";
-import { ChoiceList } from "../components/choice-list";
 import { Credits } from "../components/credits";
 import { InfoGrid } from "../components/data-display";
 import { useGlyphs } from "../components/glyph-context";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { Section } from "../components/section";
-import type { InstallMode } from "../core/types";
 
 const FEATURES = [
   "Nginx FastCGI cache",
@@ -137,24 +134,23 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
 export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <ChoiceList
-        focused={focusIndex === 0}
-        onChange={(value) => update("mode", value as InstallMode)}
-        options={modeOptions}
-        value={state.mode}
-      />
-      <Field
-        focused={focusIndex === 1}
-        label="Install directory"
-        onInput={(value) => update("installDir", value)}
-        value={state.installDir}
-      />
-      <Field
-        focused={focusIndex === 2}
-        label="Git ref"
-        onInput={(value) => update("ref", value)}
-        value={state.ref}
-      />
+      <Section title="Checkout location">
+        <Field
+          focused={focusIndex === 0}
+          label="Install directory"
+          onInput={(value) => update("installDir", value)}
+          value={state.installDir}
+        />
+        <Field
+          focused={focusIndex === 1}
+          label="Git ref"
+          onInput={(value) => update("ref", value)}
+          value={state.ref}
+        />
+      </Section>
+      <text fg={color("muted")}>
+        Defaults are derived from your domain — change only if needed.
+      </text>
       <ActionRow
         onPrimary={next}
         primary="Continue"

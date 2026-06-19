@@ -2,8 +2,7 @@ import type { ScreenProps } from "../app/screen-props";
 import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
-import { useGlyphs } from "../components/glyph-context";
-import { ActionRow, Panel } from "../components/primitives";
+import { ActionRow } from "../components/primitives";
 import { Section } from "../components/section";
 import {
   defaultInstallDir,
@@ -13,23 +12,22 @@ import {
 } from "../core/site-profile";
 import type { ExistingSite, InstallMode } from "../core/types";
 
+// Intents that act on an already-installed site (so we must ask which one).
+const SITE_MODES = new Set<InstallMode>([
+  "manage-existing",
+  "remove-existing",
+  "update-existing",
+  "staging-only"
+]);
+
 export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
   const sites = state.host.existingSites;
-
-  function selectSite(site: ExistingSite) {
-    update("selectedSiteDir", site.installDir);
-    update("installDir", site.installDir);
-    update("mode", "manage-existing");
-    update("stagingEnabled", site.hasStaging);
-    if (site.productionUrl) {
-      const domain = stripProtocol(site.productionUrl);
-      update("productionDomain", domain);
-      update("siteSlug", siteSlugFromDomain(domain));
-    }
-    if (site.stagingUrl) {
-      update("stagingDomain", stripProtocol(site.stagingUrl));
-    }
-  }
+  const hasSites = sites.length > 0;
+  // Hide existing-site intents when nothing is installed yet.
+  const intents = modeOptions.filter(
+    (option) => hasSites || option.value === "new-site" || option.value === "external-services"
+  );
+  const needsSite = SITE_MODES.has(state.mode) && hasSites;
 
   function setMode(mode: InstallMode) {
     update("mode", mode);
@@ -43,75 +41,66 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
     }
   }
 
+  function selectSite(site: ExistingSite) {
+    update("selectedSiteDir", site.installDir);
+    update("installDir", site.installDir);
+    update("stagingEnabled", site.hasStaging);
+    if (site.productionUrl) {
+      const domain = stripProtocol(site.productionUrl);
+      update("productionDomain", domain);
+      update("siteSlug", siteSlugFromDomain(domain));
+    }
+    if (site.stagingUrl) {
+      update("stagingDomain", stripProtocol(site.stagingUrl));
+    }
+  }
+
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <box flexDirection="row" gap={1}>
-        <Panel
-          content={
-            sites.length
-              ? `${sites.length} Vibe WP installation(s) found on this VPS.`
-              : "No existing Vibe WP installations detected under /opt or /srv."
-          }
-          title="SERVER INVENTORY"
-        />
-        <Panel
-          content={`Selected: ${state.selectedSiteDir || "none"}\nNext install: ${state.installDir}`}
-          title="CURRENT TARGET"
-        />
-      </box>
-      {sites.length > 0 && <SiteInventory selected={state.selectedSiteDir} sites={sites} />}
-      <ChoiceList
-        focused={focusIndex === 0}
-        onChange={(value) => setMode(value)}
-        options={modeOptions}
-        value={state.mode}
-      />
-      {sites.length > 0 && (
+      <Section title="What do you want to do?">
         <ChoiceList
-          focused={focusIndex === 1}
-          onChange={(value) => {
-            const site = sites.find((candidate) => candidate.installDir === value);
-            if (site) {
-              selectSite(site);
-            }
-          }}
-          options={sites.map((site) => ({
-            name: site.productionUrl ?? site.installDir,
-            description: `${site.installDir}${site.hasStaging ? " with staging" : ""}`,
-            value: site.installDir
-          }))}
-          value={state.selectedSiteDir || sites[0]?.installDir || ""}
+          focused={focusIndex === 0}
+          onChange={setMode}
+          options={intents}
+          value={state.mode}
         />
+      </Section>
+      {needsSite ? (
+        <Section title="Which site?">
+          <ChoiceList
+            focused={focusIndex === 1}
+            onChange={(dir) => {
+              const site = sites.find((candidate) => candidate.installDir === dir);
+              if (site) {
+                selectSite(site);
+              }
+            }}
+            options={sites.map((site) => ({
+              name: site.productionUrl ?? site.installDir,
+              description: `${site.installDir}${site.hasStaging ? "  ·  has staging" : ""}`,
+              value: site.installDir
+            }))}
+            value={state.selectedSiteDir || sites[0]?.installDir || ""}
+          />
+        </Section>
+      ) : (
+        <text fg={color("subtle")}>
+          {hasSites
+            ? `${sites.length} existing install(s) detected on this host.`
+            : "No existing Vibe WP installs detected — let's create your first site."}
+        </text>
       )}
-      <ActionRow
-        onPrimary={next}
-        primary="Continue"
-        secondary="Create, manage, and remove flows use different task plans"
-      />
+      <ActionRow onPrimary={next} primary="Continue" secondary={secondaryFor(state.mode)} />
     </box>
   );
 }
 
-function SiteInventory({ sites, selected }: { selected: string; sites: ExistingSite[] }) {
-  const glyphs = useGlyphs();
-  return (
-    <Section title="Detected installations">
-      {sites.slice(0, 4).map((site) => {
-        const isSelected = site.installDir === selected;
-        return (
-          <box flexDirection="row" gap={1} height={1} key={site.installDir} paddingX={1}>
-            <text fg={isSelected ? color("accent") : color("subtle")}>
-              {isSelected ? glyphs.active : glyphs.bullet}
-            </text>
-            <text fg={color("text")} truncate>
-              {site.productionUrl ?? site.installDir}
-            </text>
-            <text fg={color("subtle")} truncate>
-              {site.productionProject ?? "unknown project"}
-            </text>
-          </box>
-        );
-      })}
-    </Section>
-  );
+function secondaryFor(mode: InstallMode): string {
+  if (mode === "manage-existing") {
+    return "Run status, smoke checks, and diagnostics";
+  }
+  if (mode === "remove-existing") {
+    return "Safety backup first, then stop containers";
+  }
+  return "Each intent uses a different task plan";
 }

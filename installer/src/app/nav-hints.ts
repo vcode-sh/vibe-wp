@@ -9,7 +9,7 @@ const STEP_KIND: Record<StepId, StepKind> = {
   sites: "choice",
   system: "toggles",
   domain: "mixed",
-  mode: "mixed",
+  mode: "fields",
   admin: "fields",
   performance: "choice",
   ai: "fields",
