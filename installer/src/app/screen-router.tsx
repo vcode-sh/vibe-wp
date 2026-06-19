@@ -8,8 +8,9 @@ import { DashboardScreen } from "../screens/dashboard-screen";
 import { DomainScreen } from "../screens/domain-screen";
 import { ExecuteScreen } from "../screens/execute-screen";
 import { ReviewScreen, SuccessScreen } from "../screens/review-screens";
-import { AdminScreen, ModeScreen, SystemScreen, WelcomeScreen } from "../screens/setup-screens";
+import { AdminScreen, ModeScreen, SystemScreen } from "../screens/setup-screens";
 import { SitesScreen } from "../screens/site-screens";
+import { WelcomeScreen } from "../screens/welcome-screen";
 import type { ScreenProps } from "./screen-props";
 
 export function renderScreen(props: ScreenProps) {

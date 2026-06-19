@@ -99,6 +99,12 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
             options={SETUP_CHOICES}
             value={state.quickInstall ? "quick" : "custom"}
           />
+          {state.quickInstall && (
+            <text fg={color("subtle")} wrapMode="word">
+              Quick uses safe defaults: balanced performance, local-first backups, no staging yet.
+              You can add staging and tune anything later from "Manage detected site".
+            </text>
+          )}
         </Section>
       )}
       {needsSite && (
