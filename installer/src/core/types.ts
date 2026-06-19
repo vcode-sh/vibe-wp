@@ -70,6 +70,7 @@ export interface InstallerState {
   performancePreset: PerformancePreset;
   productionDomain: string;
   productionHttpPort: string;
+  quickInstall: boolean;
   ref: string;
   repo: string;
   selectedSiteDir: string;

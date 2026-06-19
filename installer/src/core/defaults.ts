@@ -58,6 +58,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     siteTitle: "Vibe WP",
     locale: "en_US",
     performancePreset: preset,
+    quickInstall: false,
     aiOpenAiKey: "",
     aiGoogleKey: "",
     aiAnthropicKey: "",
