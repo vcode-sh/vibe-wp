@@ -113,6 +113,8 @@ block=$(asset_block "$platform" "$manifest_file")
 asset_path=$(printf "%s\n" "$block" | sed -n 's/.*"path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 asset_url=$(printf "%s\n" "$block" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 expected_sha=$(printf "%s\n" "$block" | sed -n 's/.*"sha256"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+download_sha=$(printf "%s\n" "$block" | sed -n 's/.*"downloadSha256"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+compression=$(printf "%s\n" "$block" | sed -n 's/.*"compression"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 
 if [ -z "$version" ] || [ -z "$expected_sha" ]; then
   echo "Installer manifest is incomplete: $manifest_url" >&2
@@ -126,8 +128,34 @@ elif [ -z "$asset_url" ]; then
   exit 1
 fi
 
+download_path="$temp_dir/vibe-wp-installer.download"
 binary_path="$temp_dir/vibe-wp-installer"
-download "$asset_url" "$binary_path"
+download "$asset_url" "$download_path"
+
+if [ -n "$download_sha" ]; then
+  actual_download_sha=$(sha256_file "$download_path")
+  if [ "$actual_download_sha" != "$download_sha" ]; then
+    echo "Checksum mismatch for downloaded asset $asset_url" >&2
+    echo "Expected: $download_sha" >&2
+    echo "Actual:   $actual_download_sha" >&2
+    exit 1
+  fi
+fi
+
+case "$compression" in
+  "")
+    mv "$download_path" "$binary_path"
+    ;;
+  gzip)
+    need_command gzip
+    gzip -dc "$download_path" > "$binary_path"
+    ;;
+  *)
+    echo "Unsupported installer asset compression: $compression" >&2
+    exit 1
+    ;;
+esac
+
 actual_sha=$(sha256_file "$binary_path")
 
 if [ "$actual_sha" != "$expected_sha" ]; then

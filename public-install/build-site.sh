@@ -32,6 +32,8 @@ sha256_file() {
 
 asset_x64="vibe-wp-installer-linux-x64"
 asset_arm64="vibe-wp-installer-linux-arm64"
+asset_x64_download="$asset_x64.gz"
+asset_arm64_download="$asset_arm64.gz"
 
 [ -f "$dist_dir/$asset_x64" ] || {
   echo "Missing $dist_dir/$asset_x64" >&2
@@ -47,17 +49,21 @@ mkdir -p "$release_dir"
 : >"$site_dir/.gitkeep"
 
 cp "$root_dir/public-install/install.sh" "$site_dir/install.sh"
-cp "$dist_dir/$asset_x64" "$release_dir/$asset_x64"
-cp "$dist_dir/$asset_arm64" "$release_dir/$asset_arm64"
-chmod 0644 "$site_dir/install.sh" "$release_dir/$asset_x64" "$release_dir/$asset_arm64"
+gzip -c -9 "$dist_dir/$asset_x64" > "$release_dir/$asset_x64_download"
+gzip -c -9 "$dist_dir/$asset_arm64" > "$release_dir/$asset_arm64_download"
+chmod 0644 "$site_dir/install.sh" "$release_dir/$asset_x64_download" "$release_dir/$asset_arm64_download"
 
-sha_x64=$(sha256_file "$release_dir/$asset_x64")
-sha_arm64=$(sha256_file "$release_dir/$asset_arm64")
+sha_x64=$(sha256_file "$dist_dir/$asset_x64")
+sha_arm64=$(sha256_file "$dist_dir/$asset_arm64")
+download_sha_x64=$(sha256_file "$release_dir/$asset_x64_download")
+download_sha_arm64=$(sha256_file "$release_dir/$asset_arm64_download")
 published_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 cat >"$release_dir/checksums.txt" <<EOF
 $sha_x64  $asset_x64
 $sha_arm64  $asset_arm64
+$download_sha_x64  $asset_x64_download
+$download_sha_arm64  $asset_arm64_download
 EOF
 
 cat >"$release_dir/manifest.json" <<EOF
@@ -66,14 +72,18 @@ cat >"$release_dir/manifest.json" <<EOF
   "publishedAt": "$published_at",
   "assets": {
     "linux-x64": {
-      "path": "/releases/$version/$asset_x64",
-      "url": "$base_url/releases/$version/$asset_x64",
-      "sha256": "$sha_x64"
+      "path": "/releases/$version/$asset_x64_download",
+      "url": "$base_url/releases/$version/$asset_x64_download",
+      "sha256": "$sha_x64",
+      "downloadSha256": "$download_sha_x64",
+      "compression": "gzip"
     },
     "linux-arm64": {
-      "path": "/releases/$version/$asset_arm64",
-      "url": "$base_url/releases/$version/$asset_arm64",
-      "sha256": "$sha_arm64"
+      "path": "/releases/$version/$asset_arm64_download",
+      "url": "$base_url/releases/$version/$asset_arm64_download",
+      "sha256": "$sha_arm64",
+      "downloadSha256": "$download_sha_arm64",
+      "compression": "gzip"
     }
   }
 }

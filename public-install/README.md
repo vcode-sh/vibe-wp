@@ -7,7 +7,7 @@ The public host intentionally does not run WordPress and does not keep secrets. 
 - `install.sh`, the small bootstrap script users run with `curl`.
 - `manifest.json`, the latest installer manifest.
 - `checksums.txt`, the latest checksums.
-- `releases/<version>/...`, immutable versioned installer binaries and manifests.
+- `releases/<version>/...`, immutable versioned gzip-compressed installer binaries and manifests.
 
 Build a local site after compiling installer binaries:
 
@@ -20,4 +20,6 @@ public-install/build-site.sh 0.1.0
 docker build -t vibe-wp-installer-site:test public-install
 ```
 
-The Dokploy application should run the image on internal port `8080` and expose `wp.vcode.sh` through HTTPS. Dokploy/Traefik owns TLS, redirects, certificates, and public routing. The image only serves static files over plain HTTP inside the Dokploy network.
+The release workflow publishes the generated host to the `dokploy/wp-vcode-bootstrap` branch. The Dokploy application should use that branch as a GitHub source, build the Dockerfile at the branch root, run the container on internal port `8080`, and expose `wp.vcode.sh` through HTTPS.
+
+Dokploy/Traefik owns TLS, redirects, certificates, and public routing. The image only serves static files over plain HTTP inside the Dokploy network.
