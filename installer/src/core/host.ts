@@ -1,8 +1,11 @@
 import { emptyHostFacts } from "./defaults";
-import type { HostFacts } from "./types";
+import type { ExistingSite, HostFacts } from "./types";
 
 const osNamePattern = /^PRETTY_NAME="?([^"\n]+)"?/m;
 const osVersionPattern = /^VERSION_ID="?([^"\n]+)"?/m;
+const binVibeSuffixPattern = /\/bin\/vibe$/;
+const envLinePattern = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
+const lineBreakPattern = /\r?\n/;
 
 async function runText(command: string[], timeoutMs = 2500): Promise<string | null> {
   try {
@@ -71,6 +74,64 @@ export async function detectHostFacts(): Promise<HostFacts> {
       ],
       3500
     )) ?? null;
+  facts.existingSites = await detectExistingSites();
 
   return facts;
+}
+
+async function detectExistingSites(): Promise<ExistingSite[]> {
+  const output = await runText([
+    "sh",
+    "-lc",
+    'for root in /opt /srv; do [ -d "$root" ] && find "$root" -maxdepth 4 -type f -path \'*/bin/vibe\' 2>/dev/null; done'
+  ]);
+  const dirs = [
+    ...new Set((output ?? "").split("\n").map((line) => line.replace(binVibeSuffixPattern, "")))
+  ];
+  const sites: ExistingSite[] = [];
+
+  for (const installDir of dirs.filter(Boolean).sort()) {
+    const production = await readEnv(`${installDir}/env/prod.env`);
+    const staging = await readEnv(`${installDir}/env/stage.env`);
+    if (!(production.WP_HOME || staging.WP_HOME)) {
+      continue;
+    }
+    sites.push({
+      installDir,
+      productionUrl: production.WP_HOME ?? null,
+      stagingUrl: staging.WP_HOME ?? null,
+      productionProject: production.COMPOSE_PROJECT_NAME ?? null,
+      stagingProject: staging.COMPOSE_PROJECT_NAME ?? null,
+      hasStaging: Boolean(staging.WP_HOME)
+    });
+  }
+
+  return sites;
+}
+
+async function readEnv(path: string): Promise<Record<string, string>> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
+    return {};
+  }
+
+  const values: Record<string, string> = {};
+  for (const line of (await file.text()).split(lineBreakPattern)) {
+    const match = line.match(envLinePattern);
+    if (match?.[1]) {
+      values[match[1]] = unquote(match[2] ?? "");
+    }
+  }
+  return values;
+}
+
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
 }

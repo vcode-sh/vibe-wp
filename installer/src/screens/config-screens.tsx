@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { backupOptions, performanceOptions } from "../app/steps";
 import { color } from "../app/theme";
+import { ChoiceList } from "../components/choice-list";
 import { ActionRow, Field, InfoGrid, ToggleRow } from "../components/primitives";
 import { performanceValues } from "../core/defaults";
 import type { BackupPolicy, PerformancePreset } from "../core/types";
@@ -10,19 +11,11 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
   const values = performanceValues(state.performancePreset, state.host.totalMemoryMb);
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <select
-        descriptionColor={color("muted")}
+      <ChoiceList
         focused={focusIndex === 0}
-        height={7}
-        onChange={(_, option) =>
-          option?.value && update("performancePreset", option.value as PerformancePreset)
-        }
+        onChange={(value) => update("performancePreset", value as PerformancePreset)}
         options={performanceOptions}
-        selectedBackgroundColor={color("accent")}
-        selectedIndex={performanceOptions.findIndex(
-          (option) => option.value === state.performancePreset
-        )}
-        selectedTextColor={color("black")}
+        value={state.performancePreset}
       />
       <InfoGrid rows={Object.entries(values).slice(0, 8)} />
       <text fg={color("muted")}>
@@ -80,17 +73,11 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
 export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <select
-        descriptionColor={color("muted")}
+      <ChoiceList
         focused={focusIndex === 0}
-        height={8}
-        onChange={(_, option) =>
-          option?.value && update("backupPolicy", option.value as BackupPolicy)
-        }
+        onChange={(value) => update("backupPolicy", value as BackupPolicy)}
         options={backupOptions}
-        selectedBackgroundColor={color("accent")}
-        selectedIndex={backupOptions.findIndex((option) => option.value === state.backupPolicy)}
-        selectedTextColor={color("black")}
+        value={state.backupPolicy}
       />
       <text fg={color("warning")}>
         Local VPS backups are not enough for disaster recovery. The UI keeps that warning visible.

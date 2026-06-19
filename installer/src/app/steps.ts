@@ -2,6 +2,7 @@ import type { BackupPolicy, InstallMode, PerformancePreset } from "../core/types
 
 export type StepId =
   | "welcome"
+  | "sites"
   | "system"
   | "domain"
   | "mode"
@@ -15,6 +16,7 @@ export type StepId =
   | "success";
 
 export interface Step {
+  focusCount: number;
   help: string;
   id: StepId;
   title: string;
@@ -23,67 +25,99 @@ export interface Step {
 export const steps: Step[] = [
   {
     id: "welcome",
+    focusCount: 1,
     title: "Welcome",
     help: "A guided production installer for a real Vibe WP VPS."
   },
   {
+    id: "sites",
+    focusCount: 2,
+    title: "Sites",
+    help: "Create a new WordPress site or manage one already installed on this VPS."
+  },
+  {
     id: "system",
+    focusCount: 2,
     title: "System",
     help: "Checks host readiness before touching Docker, Caddy, or env files."
   },
   {
     id: "domain",
+    focusCount: 6,
     title: "Domain",
     help: "Collects public domains and keeps app ports bound to loopback."
   },
   {
     id: "mode",
+    focusCount: 2,
     title: "Mode",
     help: "Selects whether this is a fresh site, an update, staging, or advanced external services."
   },
   {
     id: "admin",
+    focusCount: 5,
     title: "Admin",
     help: "Creates the first WordPress administrator with generated secrets."
   },
   {
     id: "performance",
+    focusCount: 1,
     title: "Performance",
     help: "Maps VPS memory to PHP-FPM, Redis, MariaDB, and Nginx settings."
   },
   {
     id: "ai",
+    focusCount: 3,
     title: "AI",
     help: "Keeps WordPress AI plugins ready and optionally injects provider keys."
   },
   {
     id: "backup",
+    focusCount: 1,
     title: "Backups",
     help: "Makes backups visible in the install flow instead of an afterthought."
   },
   {
     id: "staging",
+    focusCount: 3,
     title: "Staging",
     help: "Creates a safe private test copy with noindex and mail safeguards."
   },
   {
     id: "review",
+    focusCount: 1,
     title: "Review",
     help: "Shows the exact plan, warnings, env paths, Caddyfile, and commands."
   },
   {
     id: "execute",
+    focusCount: 1,
     title: "Execute",
     help: "Streams planned tasks. Without --yes this is a dry execution preview."
   },
-  { id: "success", title: "Done", help: "Summarizes URLs, commands, and next operational steps." }
+  {
+    id: "success",
+    focusCount: 1,
+    title: "Done",
+    help: "Summarizes URLs, commands, and next operational steps."
+  }
 ];
 
 export const modeOptions: Array<{ name: string; description: string; value: InstallMode }> = [
   {
-    name: "New site on this VPS",
-    description: "Recommended. Creates production and optional staging.",
+    name: "Create a new WordPress",
+    description: "Production, optional staging, isolated ports, and tuned env files.",
     value: "new-site"
+  },
+  {
+    name: "Manage detected site",
+    description: "Run status, smoke checks, and performance diagnostics.",
+    value: "manage-existing"
+  },
+  {
+    name: "Remove detected site",
+    description: "Create a safety backup, then stop containers without deleting data.",
+    value: "remove-existing"
   },
   {
     name: "Update existing checkout",

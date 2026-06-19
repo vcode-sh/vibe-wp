@@ -1,4 +1,10 @@
-export type InstallMode = "new-site" | "update-existing" | "staging-only" | "external-services";
+export type InstallMode =
+  | "new-site"
+  | "manage-existing"
+  | "remove-existing"
+  | "update-existing"
+  | "staging-only"
+  | "external-services";
 export type PerformancePreset = "conservative" | "balanced" | "high-memory";
 export type BackupPolicy = "manual" | "local-first" | "external-later";
 
@@ -25,6 +31,7 @@ export interface HostFacts {
   cpuCount: number | null;
   curl: string | null;
   docker: string | null;
+  existingSites: ExistingSite[];
   git: string | null;
   kernel: string;
   osName: string;
@@ -33,6 +40,15 @@ export interface HostFacts {
   sudo: boolean;
   totalMemoryMb: number | null;
   user: string;
+}
+
+export interface ExistingSite {
+  hasStaging: boolean;
+  installDir: string;
+  productionProject: string | null;
+  productionUrl: string | null;
+  stagingProject: string | null;
+  stagingUrl: string | null;
 }
 
 export interface InstallerState {
@@ -51,11 +67,15 @@ export interface InstallerState {
   mode: InstallMode;
   performancePreset: PerformancePreset;
   productionDomain: string;
+  productionHttpPort: string;
   ref: string;
   repo: string;
+  selectedSiteDir: string;
+  siteSlug: string;
   siteTitle: string;
   stagingDomain: string;
   stagingEnabled: boolean;
+  stagingHttpPort: string;
   wwwAlias: boolean;
 }
 
@@ -87,6 +107,7 @@ export interface InstallPlan {
   installDir: string;
   ref: string;
   repo: string;
+  siteSlug: string;
   summary: Record<string, string>;
   tasks: InstallTask[];
   version: string;

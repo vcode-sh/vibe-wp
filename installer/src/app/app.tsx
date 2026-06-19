@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Footer, Header, HelpPanel, LogStrip, StepRail } from "../components/chrome";
 import { buildInstallPlan } from "../core/install-plan";
 import { redactPlan } from "../core/redaction";
@@ -12,14 +12,12 @@ import {
   PerformanceScreen,
   StagingScreen
 } from "../screens/config-screens";
-import { ExecuteScreen, ReviewScreen, SuccessScreen } from "../screens/review-screens";
-import {
-  AdminScreen,
-  DomainScreen,
-  ModeScreen,
-  SystemScreen,
-  WelcomeScreen
-} from "../screens/setup-screens";
+import { DomainScreen } from "../screens/domain-screen";
+import { ExecuteScreen } from "../screens/execute-screen";
+import { ReviewScreen, SuccessScreen } from "../screens/review-screens";
+import { AdminScreen, ModeScreen, SystemScreen, WelcomeScreen } from "../screens/setup-screens";
+import { SitesScreen } from "../screens/site-screens";
+import { handleAppKey } from "./keyboard";
 import type { ScreenProps } from "./screen-props";
 import { steps } from "./steps";
 import { color } from "./theme";
@@ -50,6 +48,10 @@ export function App({ initialState, options }: AppProps) {
   const redactedPlan = useMemo(() => redactPlan(plan), [plan]);
   const validationErrors = useMemo(() => validateState(state), [state]);
 
+  useEffect(() => {
+    setFocusIndex((value) => Math.min(value, current.focusCount - 1));
+  }, [current.focusCount]);
+
   function update<K extends keyof InstallerState>(key: K, value: InstallerState[K]) {
     setState((previous) => ({ ...previous, [key]: value }));
   }
@@ -64,29 +66,22 @@ export function App({ initialState, options }: AppProps) {
     setStepIndex((value) => Math.max(value - 1, 0));
   }
 
-  useKeyboard((key) => {
-    if (key.ctrl && key.name === "c") {
-      return renderer.destroy();
-    }
-    if (key.name === "escape") {
-      return previous();
-    }
-    if (key.name === "tab") {
-      return setFocusIndex((value) => Math.max(0, value + (key.shift ? -1 : 1)));
-    }
-    if (key.name === "right" && stepIndex < steps.length - 1) {
-      next();
-    }
-    if (key.name === "left") {
-      previous();
-    }
-    if (key.name === "?") {
-      setShowHelp((value) => !value);
-    }
-    if (key.ctrl && key.name === "l") {
-      setLogOpen((value) => !value);
-    }
-  });
+  function moveFocus(delta: number) {
+    setFocusIndex((value) => (value + delta + current.focusCount) % current.focusCount);
+  }
+
+  useKeyboard((key) =>
+    handleAppKey(key, {
+      canGoForward: stepIndex < steps.length - 1,
+      currentId: current.id,
+      destroy: () => renderer.destroy(),
+      moveFocus,
+      next,
+      previous,
+      toggleHelp: () => setShowHelp((value) => !value),
+      toggleLog: () => setLogOpen((value) => !value)
+    })
+  );
 
   const screenProps: ScreenProps = {
     current,
@@ -98,6 +93,7 @@ export function App({ initialState, options }: AppProps) {
     previous,
     compact,
     validationErrors,
+    plan,
     redactedPlan,
     executionLines,
     setExecutionLines,
@@ -157,6 +153,8 @@ function renderScreen(props: ScreenProps) {
   switch (props.current.id) {
     case "welcome":
       return <WelcomeScreen {...props} />;
+    case "sites":
+      return <SitesScreen {...props} />;
     case "system":
       return <SystemScreen {...props} />;
     case "domain":

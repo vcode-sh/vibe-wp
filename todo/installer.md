@@ -1,8 +1,70 @@
 # Vibe WP Installer TUI Plan
 
 Date: 2026-06-19
-Status: execution-ready plan
+Status: productized management pass in progress; not complete
 Primary decision: OpenTUI + React + Bun
+
+## Current Audit - 2026-06-19
+
+The public bootstrap and release host are working, but the installer is not complete against the done definition below.
+
+Verified on test VPS `198.51.100.10`:
+
+- `curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh` downloads and verifies installer `0.1.1`.
+- `curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --dry-run` writes valid JSON when stdout is redirected.
+- The bootstrap now sends status messages to stderr and routes interactive execution through `/dev/tty`, so `curl | sh` can launch the TUI from an SSH session.
+- GitHub Actions `Installer CI` and `Installer Release` pass for `0.1.1`.
+- Dokploy serves the generated GitHub deploy branch, not a private GHCR image.
+
+Important fixes made during the VPS audit:
+
+- `0.1.0` should be treated as superseded because immutable `/releases/0.1.0/...gz` URLs were overwritten during testing and could be cached with mismatched checksums.
+- `0.1.1` is the current public installer version before the management/UI pass is released.
+- `0.1.2` is the next prepared version for the management/UI pass.
+- Bootstrap status output must stay on stderr so `--dry-run`, `--version`, and automation modes keep clean stdout.
+- Interactive `curl | sh` must keep using `/dev/tty`; otherwise OpenTUI receives pipe stdin and exits with terminal escape noise.
+
+Implemented in the management/UI pass after the first VPS TUI audit:
+
+- Added a `Sites` dashboard step before host configuration.
+- Detect existing Vibe WP installations under `/opt` and `/srv` by scanning for `bin/vibe` and reading `env/prod.env` / `env/stage.env`.
+- Added separate create, manage, and safe-remove modes.
+- Added manage mode tasks for `ps`, production smoke, performance report, and optional staging smoke.
+- Added safe-remove mode tasks that create a backup, stop staging/production containers, and disable this site's Caddy snippet without deleting files or volumes.
+- Switched new sites to per-site slug, per-site Compose project names, and per-site localhost ports.
+- Changed Caddy handling from overwriting `/etc/caddy/Caddyfile` to installing `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy` and ensuring a global import.
+- Reworked navigation around `Tab` for focus and `Up`/`Down` for list/form movement.
+- Replaced OpenTUI selects with clearer numbered choice cards.
+- Added a neutral dark theme pass and cleaner chrome copy.
+- Reworked secret fields so password/API-key entry renders masked content instead of showing the raw input value.
+- Wired the interactive Execute screen to the real task runner with typed confirmation.
+- Added DNS preflight as the first create/install task and blocked placeholder domains/emails such as `example.com`.
+
+Remaining P0 implementation work:
+
+- Add persistent installer state, resumable execution, and an install log under `.vibe-installer/`.
+- Add first-class modal/dialog flows for destructive actions, support bundle export, and failure recovery.
+- Decide whether safe-remove should remain stop-only or add a separate full-delete mode that removes files and Docker volumes after a stronger confirmation.
+- Run and record a real production install on a disposable Ubuntu 26.04 VPS with a real domain.
+- Run and record a production-plus-staging install on a disposable Ubuntu 26.04 VPS with real domains.
+- Verify post-install WordPress Site Health REST and loopback, uploads year/month creation, Redis Object Cache, and FastCGI cache HIT.
+- Release the improved installer as a new immutable version after VPS visual acceptance.
+
+Remaining P1 quality work:
+
+- Improve the OpenTUI visual polish after another SSH run; the UI has had a first neutral dark-mode pass but has not been accepted visually.
+- Add terminal-size snapshot checks for wide, medium, compact, and emergency layouts.
+- Add better non-technical copy for failure states and next actions.
+
+Safe commands today:
+
+```sh
+curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh
+curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --dry-run
+curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --version
+```
+
+Do not run `--headless plan.json --yes` or complete a TUI install on a real server until a real domain is configured and the generated plan has been reviewed.
 
 ## Goal
 

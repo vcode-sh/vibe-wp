@@ -9,6 +9,7 @@ export interface ScreenProps {
   focusIndex: number;
   next: () => void;
   options: InstallerOptions;
+  plan: InstallPlan;
   previous: () => void;
   redactedPlan: InstallPlan;
   setExecutionLines: Dispatch<SetStateAction<string[]>>;

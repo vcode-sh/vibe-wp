@@ -1,6 +1,8 @@
 import { renderCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
+import { buildDnsPreflightTask } from "./dns-preflight";
 import { productionEnvValues, stagingEnvValues } from "./env-writer";
+import { buildManageTasks, buildRemoveTasks } from "./operations-plan";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallPlan, InstallTask } from "./types";
 import { validateState } from "./validation";
@@ -18,14 +20,17 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
   }
 
   const tasks = buildTasks(state);
-  const envFiles = [
-    {
-      path: `${state.installDir}/env/prod.env`,
-      values: productionEnvValues(state)
-    }
-  ];
+  const envFiles =
+    state.mode === "manage-existing" || state.mode === "remove-existing"
+      ? []
+      : [
+          {
+            path: `${state.installDir}/env/prod.env`,
+            values: productionEnvValues(state)
+          }
+        ];
 
-  if (state.stagingEnabled) {
+  if (state.stagingEnabled && envFiles.length > 0) {
     envFiles.push({
       path: `${state.installDir}/env/stage.env`,
       values: stagingEnvValues(state)
@@ -38,6 +43,7 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
     installDir: state.installDir,
     repo: state.repo,
     ref: state.ref,
+    siteSlug: state.siteSlug,
     domains: {
       production: state.productionDomain.trim().toLowerCase(),
       wwwAlias: state.wwwAlias,
@@ -45,7 +51,10 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
       staging: state.stagingDomain.trim().toLowerCase()
     },
     envFiles,
-    caddyfile: renderCaddyfile(state),
+    caddyfile:
+      state.mode === "manage-existing" || state.mode === "remove-existing"
+        ? ""
+        : renderCaddyfile(state),
     tasks,
     warnings,
     summary: {
@@ -55,6 +64,7 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
         ? `https://${state.stagingDomain.trim().toLowerCase()}`
         : "disabled",
       installDir: state.installDir,
+      siteSlug: state.siteSlug,
       performancePreset: state.performancePreset,
       backupPolicy: state.backupPolicy
     }
@@ -62,11 +72,20 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
 }
 
 function buildTasks(state: InstallerState): InstallTask[] {
+  if (state.mode === "manage-existing") {
+    return buildManageTasks(state);
+  }
+  if (state.mode === "remove-existing") {
+    return buildRemoveTasks(state);
+  }
+
   const tasks: InstallTask[] = [];
   const sudo = state.host.sudo ? "sudo " : "";
   const installDir = shellQuote(state.installDir);
   const ref = shellQuote(state.ref);
   const repo = shellQuote(state.repo);
+
+  tasks.push(buildDnsPreflightTask(state));
 
   if (state.installDocker && !state.host.docker) {
     tasks.push({
@@ -196,6 +215,5 @@ function buildTasks(state: InstallerState): InstallTask[] {
       command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod backup`]
     });
   }
-
   return tasks;
 }

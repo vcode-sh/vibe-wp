@@ -23,7 +23,6 @@ export function Header({
       paddingX={1}
     >
       <box alignItems="center" flexDirection="row" gap={2}>
-        {!compact && <ascii-font font="tiny" text="Vibe WP" />}
         <box flexDirection="column">
           <text attributes={TextAttributes.BOLD} fg={color("text")}>
             Vibe WP Installer
@@ -55,7 +54,7 @@ export function StepRail({ activeIndex }: { activeIndex: number }) {
       width={22}
     >
       <text attributes={TextAttributes.BOLD} fg={color("muted")}>
-        FLOW
+        WORKFLOW
       </text>
       {steps.map((step, index) => {
         const active = index === activeIndex;
@@ -158,7 +157,7 @@ export function Footer({
       justifyContent="space-between"
       paddingX={1}
     >
-      <text fg={color("muted")}>Esc Back - Enter Continue - Ctrl+C Quit</text>
+      <text fg={color("muted")}>Tab Focus - Up/Down Change - Enter Action - Esc Back</text>
       <text fg={validationCount ? color("warning") : color("success")}>
         {validationCount ? `${validationCount} issue(s)` : "valid"}
       </text>

@@ -16,7 +16,7 @@ cd installer
 bun run build:linux-x64
 bun run build:linux-arm64
 cd ..
-public-install/build-site.sh 0.1.1
+public-install/build-site.sh 0.1.2
 docker build -t vibe-wp-installer-site:test public-install
 ```
 

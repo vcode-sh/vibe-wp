@@ -2,6 +2,15 @@ import type { InstallerState } from "./types";
 
 const domainPattern = /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const siteSlugPattern = /^[a-z0-9][a-z0-9-]{1,48}$/;
+const blockedDomainSuffixes = [".example.com", ".example.net", ".example.org", ".localhost"];
+const blockedDomains = new Set([
+  "example.com",
+  "example.net",
+  "example.org",
+  "localhost",
+  "test.test"
+]);
 
 export function validateDomain(domain: string): string | null {
   const normalized = domain.trim().toLowerCase();
@@ -13,6 +22,14 @@ export function validateDomain(domain: string): string | null {
   }
   if (normalized.length > 253) {
     return "Domain is too long.";
+  }
+  if (
+    blockedDomains.has(normalized) ||
+    blockedDomainSuffixes.some((suffix) => normalized.endsWith(suffix)) ||
+    normalized.endsWith(".test") ||
+    normalized.endsWith(".invalid")
+  ) {
+    return "Use a real domain with DNS pointing to this VPS.";
   }
   if (!domainPattern.test(normalized)) {
     return "Domain contains unsupported characters.";
@@ -38,10 +55,32 @@ export function validateEmail(email: string): string | null {
   if (!emailPattern.test(email.trim())) {
     return "Email does not look valid.";
   }
+  if (email.trim().toLowerCase().endsWith("@example.com")) {
+    return "Use a real mailbox, not example.com.";
+  }
   return null;
 }
 
 export function validateState(state: InstallerState): string[] {
+  if (state.mode === "manage-existing" || state.mode === "remove-existing") {
+    return validateExistingMode(state);
+  }
+
+  return [...validateSiteIdentity(state), ...validatePorts(state)];
+}
+
+function validateExistingMode(state: InstallerState): string[] {
+  const errors: string[] = [];
+  if (!state.selectedSiteDir) {
+    errors.push("Select an existing Vibe WP installation first.");
+  }
+  if (state.selectedSiteDir && !state.selectedSiteDir.startsWith("/")) {
+    errors.push("Selected site directory must be an absolute path.");
+  }
+  return errors;
+}
+
+function validateSiteIdentity(state: InstallerState): string[] {
   const errors: string[] = [];
   const productionDomainError = validateDomain(state.productionDomain);
   if (productionDomainError) {
@@ -68,6 +107,26 @@ export function validateState(state: InstallerState): string[] {
   }
   if (!state.installDir.startsWith("/")) {
     errors.push("Install directory must be an absolute path.");
+  }
+  if (!siteSlugPattern.test(state.siteSlug)) {
+    errors.push("Site slug must use lowercase letters, numbers, and dashes.");
+  }
+  return errors;
+}
+
+function validatePorts(state: InstallerState): string[] {
+  const errors: string[] = [];
+  for (const [label, port] of [
+    ["Production HTTP port", state.productionHttpPort],
+    ["Staging HTTP port", state.stagingHttpPort]
+  ] as const) {
+    const parsed = Number(port);
+    if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65_535) {
+      errors.push(`${label} must be a TCP port between 1024 and 65535.`);
+    }
+  }
+  if (state.stagingEnabled && state.productionHttpPort === state.stagingHttpPort) {
+    errors.push("Production and staging HTTP ports must be different.");
   }
   return errors;
 }

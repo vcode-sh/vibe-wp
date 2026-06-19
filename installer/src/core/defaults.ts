@@ -1,7 +1,13 @@
 import { randomPassword } from "./secrets";
+import {
+  defaultInstallDir,
+  portPairFromSlug,
+  siteSlugFromDomain,
+  stripProtocol
+} from "./site-profile";
 import type { HostFacts, InstallerState, PerformancePreset } from "./types";
 
-export const INSTALLER_VERSION = "0.1.1";
+export const INSTALLER_VERSION = "0.1.2";
 
 export function emptyHostFacts(): HostFacts {
   return {
@@ -18,23 +24,35 @@ export function emptyHostFacts(): HostFacts {
     curl: null,
     totalMemoryMb: null,
     cpuCount: null,
-    publicIp: null
+    publicIp: null,
+    existingSites: []
   };
 }
 
 export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState {
   const preset = choosePreset(host.totalMemoryMb);
+  const siteSlug = siteSlugFromDomain("example.com");
+  const ports = portPairFromSlug(siteSlug);
+  const firstSite = host.existingSites[0];
 
   return {
-    installDir: "/opt/vibe-wp",
+    installDir: firstSite?.installDir ?? defaultInstallDir(siteSlug, host.existingSites.length),
     repo: "https://github.com/vcode-sh/vibe-wp.git",
     ref: "main",
-    mode: "new-site",
-    productionDomain: "example.com",
+    mode: firstSite ? "manage-existing" : "new-site",
+    selectedSiteDir: firstSite?.installDir ?? "",
+    siteSlug,
+    productionDomain: firstSite?.productionUrl
+      ? stripProtocol(firstSite.productionUrl)
+      : "example.com",
     wwwAlias: true,
-    stagingEnabled: true,
-    stagingDomain: "stage.example.com",
-    adminEmail: "admin@example.com",
+    stagingEnabled: firstSite ? firstSite.hasStaging : true,
+    stagingDomain: firstSite?.stagingUrl
+      ? stripProtocol(firstSite.stagingUrl)
+      : "stage.example.com",
+    productionHttpPort: ports.production,
+    stagingHttpPort: ports.staging,
+    adminEmail: firstSite ? "admin@change-me.local" : "admin@example.com",
     adminUser: "owner",
     adminPassword: randomPassword(22),
     siteTitle: "Vibe WP",

@@ -7,34 +7,67 @@ export function Field({
   value,
   focused,
   onInput,
-  secret = false
+  secret = false,
+  hint
 }: {
+  hint?: string;
   label: string;
   value: string;
   focused: boolean;
   onInput: (value: string) => void;
   secret?: boolean;
 }) {
+  useKeyboard((key) => {
+    if (!(secret && focused)) {
+      return;
+    }
+    if (key.name === "backspace") {
+      onInput(value.slice(0, -1));
+      return;
+    }
+    if (key.ctrl || key.meta || key.name.length > 1) {
+      return;
+    }
+    if (key.raw.length === 1) {
+      onInput(`${value}${key.raw}`);
+    }
+  });
+
   return (
     <box
       backgroundColor={focused ? color("panel3") : color("panel")}
       border
       borderColor={focused ? color("accent") : color("border")}
       flexDirection="column"
-      height={4}
+      flexGrow={1}
+      height={hint ? 5 : 4}
       paddingX={1}
     >
-      <text fg={focused ? color("accent") : color("muted")}>{label}</text>
-      <input
-        backgroundColor={focused ? color("panel3") : color("panel")}
-        cursorColor={color("accent")}
-        focused={focused}
-        focusedBackgroundColor={color("panel3")}
-        onInput={(inputValue) => onInput(secret && inputValue === "********" ? value : inputValue)}
-        placeholder={label}
-        textColor={color("text")}
-        value={secret && value ? "********" : value}
-      />
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={focused ? color("accent") : color("muted")}>{label}</text>
+        {focused && <text fg={color("subtle")}>editing</text>}
+      </box>
+      {secret ? (
+        <text fg={value ? color("text") : color("subtle")} truncate>
+          {value ? "*".repeat(Math.min(value.length, 32)) : "Type secret value"}
+        </text>
+      ) : (
+        <input
+          backgroundColor={focused ? color("panel3") : color("panel")}
+          cursorColor={color("accent")}
+          focused={focused}
+          focusedBackgroundColor={color("panel3")}
+          onInput={onInput}
+          placeholder={label}
+          textColor={color("text")}
+          value={value}
+        />
+      )}
+      {hint && (
+        <text fg={color("subtle")} truncate>
+          {hint}
+        </text>
+      )}
     </box>
   );
 }

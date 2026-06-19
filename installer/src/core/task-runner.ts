@@ -11,6 +11,16 @@ export interface TaskResult {
   status: TaskStatus;
 }
 
+export interface RunPlanEvents {
+  onTaskResult?: (
+    task: InstallTask,
+    result: TaskResult,
+    index: number,
+    total: number
+  ) => void | Promise<void>;
+  onTaskStart?: (task: InstallTask, index: number, total: number) => void | Promise<void>;
+}
+
 export async function runTask(
   task: InstallTask,
   apply: boolean,
@@ -62,11 +72,17 @@ export async function runTask(
   };
 }
 
-export async function runPlan(plan: InstallPlan, apply: boolean): Promise<TaskResult[]> {
+export async function runPlan(
+  plan: InstallPlan,
+  apply: boolean,
+  events: RunPlanEvents = {}
+): Promise<TaskResult[]> {
   const results: TaskResult[] = [];
-  for (const task of plan.tasks) {
+  for (const [index, task] of plan.tasks.entries()) {
+    await events.onTaskStart?.(task, index, plan.tasks.length);
     const result = await runTask(task, apply, plan);
     results.push(result);
+    await events.onTaskResult?.(task, result, index, plan.tasks.length);
     if (result.status === "failed") {
       break;
     }
@@ -104,11 +120,19 @@ async function runSpecialWrite(
     if (phase === "before" && task.id === "caddyfile") {
       const tempPath = `/tmp/vibe-wp-caddyfile-${Date.now()}`;
       await Bun.write(tempPath, plan.caddyfile);
+      const sitePath = `/etc/caddy/sites-enabled/vibe-wp-${plan.siteSlug}.caddy`;
       const install = Bun.spawn(
         [
           "sh",
           "-lc",
-          `if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi; if [ -f /etc/caddy/Caddyfile ]; then $SUDO cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.vibe-wp.$(date -u +%Y%m%dT%H%M%SZ).bak; fi; $SUDO install -m 0644 ${tempPath} /etc/caddy/Caddyfile`
+          [
+            'if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi',
+            "$SUDO install -d -m 0755 /etc/caddy/sites-enabled",
+            "if [ -f /etc/caddy/Caddyfile ]; then $SUDO cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.vibe-wp.$(date -u +%Y%m%dT%H%M%SZ).bak; fi",
+            "if [ ! -f /etc/caddy/Caddyfile ]; then printf '%s\\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee /etc/caddy/Caddyfile >/dev/null; fi",
+            "grep -q 'sites-enabled/\\*.caddy' /etc/caddy/Caddyfile || printf '\\n%s\\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null",
+            `$SUDO install -m 0644 ${tempPath} ${sitePath}`
+          ].join("; ")
         ],
         {
           stdout: "pipe",
@@ -131,7 +155,7 @@ async function runSpecialWrite(
       return {
         id: task.id,
         status: "done",
-        output: "Installed /etc/caddy/Caddyfile with backup.",
+        output: `Installed ${sitePath} and ensured the global Caddy import.`,
         code: 0
       };
     }

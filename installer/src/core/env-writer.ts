@@ -39,8 +39,8 @@ function sharedSecrets(state: InstallerState, suffix: string): Record<string, st
 
 export function productionEnvValues(state: InstallerState): Record<string, string> {
   return {
-    COMPOSE_PROJECT_NAME: "vibe-wp-prod",
-    HTTP_PORT: "127.0.0.1:8080",
+    COMPOSE_PROJECT_NAME: `vibe-wp-${state.siteSlug}-prod`,
+    HTTP_PORT: `127.0.0.1:${state.productionHttpPort}`,
     WP_HOME: `https://${state.productionDomain.trim().toLowerCase()}`,
     WP_SITEURL: `https://${state.productionDomain.trim().toLowerCase()}`,
     WP_ENVIRONMENT_TYPE: "production",
@@ -64,8 +64,8 @@ export function productionEnvValues(state: InstallerState): Record<string, strin
 
 export function stagingEnvValues(state: InstallerState): Record<string, string> {
   return {
-    COMPOSE_PROJECT_NAME: "vibe-wp-stage",
-    HTTP_PORT: "127.0.0.1:8082",
+    COMPOSE_PROJECT_NAME: `vibe-wp-${state.siteSlug}-stage`,
+    HTTP_PORT: `127.0.0.1:${state.stagingHttpPort}`,
     WP_HOME: `https://${state.stagingDomain.trim().toLowerCase()}`,
     WP_SITEURL: `https://${state.stagingDomain.trim().toLowerCase()}`,
     WP_ENVIRONMENT_TYPE: "staging",

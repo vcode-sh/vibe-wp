@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
+import { ChoiceList } from "../components/choice-list";
 import { ActionRow, Field, InfoGrid, Metric, ToggleRow } from "../components/primitives";
 import type { InstallMode } from "../core/types";
 
@@ -88,52 +89,14 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
   );
 }
 
-export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
-  return (
-    <box flexDirection="column" flexGrow={1} gap={1}>
-      <Field
-        focused={focusIndex === 0}
-        label="Production domain"
-        onInput={(value) => update("productionDomain", value)}
-        value={state.productionDomain}
-      />
-      <ToggleRow
-        focused={focusIndex === 1}
-        label="Also serve www alias"
-        onToggle={() => update("wwwAlias", !state.wwwAlias)}
-        value={state.wwwAlias}
-      />
-      <Field
-        focused={focusIndex === 2}
-        label="Staging domain"
-        onInput={(value) => update("stagingDomain", value)}
-        value={state.stagingDomain}
-      />
-      <text fg={color("muted")}>
-        Production binds to 127.0.0.1:8080. Staging binds to 127.0.0.1:8082.
-      </text>
-      <ActionRow
-        onPrimary={next}
-        primary="Continue"
-        secondary="DNS checks are part of the execution plan"
-      />
-    </box>
-  );
-}
-
 export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <select
-        descriptionColor={color("muted")}
+      <ChoiceList
         focused={focusIndex === 0}
-        height={9}
-        onChange={(_, option) => option?.value && update("mode", option.value as InstallMode)}
+        onChange={(value) => update("mode", value as InstallMode)}
         options={modeOptions}
-        selectedBackgroundColor={color("accent")}
-        selectedIndex={modeOptions.findIndex((option) => option.value === state.mode)}
-        selectedTextColor={color("black")}
-        showScrollIndicator
+        value={state.mode}
       />
       <Field
         focused={focusIndex === 1}

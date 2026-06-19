@@ -24,61 +24,8 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
       <Panel content={redactedPlan.caddyfile} title="CADDYFILE PREVIEW" />
       <ActionRow
         onPrimary={next}
-        primary="Execute preview"
-        secondary="Run with --yes to apply commands"
-      />
-    </box>
-  );
-}
-
-export function ExecuteScreen({
-  redactedPlan,
-  executionLines,
-  setExecutionLines,
-  next,
-  options
-}: ScreenProps) {
-  const lines = executionLines.length > 12 ? executionLines.slice(-12) : executionLines;
-  return (
-    <box flexDirection="column" flexGrow={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={options.yes ? color("warning") : color("accent")}>
-        {options.yes
-          ? "Ready to run real host commands."
-          : "Dry execution preview. No host changes will be made."}
-      </text>
-      <scrollbox
-        backgroundColor={color("panel")}
-        border
-        borderColor={color("border")}
-        flexGrow={1}
-        padding={1}
-      >
-        <box flexDirection="column" gap={1}>
-          {redactedPlan.tasks.map((task, index) => (
-            <box flexDirection="row" gap={1} key={task.id}>
-              <text fg={color("accent")}>{String(index + 1).padStart(2, "0")}</text>
-              <text fg={color("text")} truncate>
-                {task.title}
-              </text>
-              <text fg={task.privileged ? color("warning") : color("muted")}>
-                {task.privileged ? "privileged" : "safe"}
-              </text>
-            </box>
-          ))}
-        </box>
-      </scrollbox>
-      <Panel content={lines.join("\n")} title="LATEST LOG" />
-      <ActionRow
-        onPrimary={() => {
-          setExecutionLines((previous) => [
-            ...previous,
-            "Interactive execution preview completed.",
-            "Use --export-plan and --headless for non-interactive execution."
-          ]);
-          next();
-        }}
-        primary={options.yes ? "I reviewed it; continue to success screen" : "Preview accepted"}
-        secondary="Real task runner is available through --headless plan.json --yes"
+        primary="Open execution"
+        secondary="Execution is blocked until confirmation"
       />
     </box>
   );
