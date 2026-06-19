@@ -3,6 +3,7 @@ import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
 import { devModeOverride } from "./app/dev-step";
 import { DEFAULT_INSTALL_DIR, parseArgs, usage } from "./cli/args";
+import { runHeadlessJson } from "./cli/headless-cli";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
 import { buildInstallPlan } from "./core/install-plan";
@@ -20,6 +21,11 @@ async function main() {
 
   if (options.version) {
     console.log(INSTALLER_VERSION);
+    return;
+  }
+
+  if (options.headlessJson) {
+    await runHeadlessJson();
     return;
   }
 

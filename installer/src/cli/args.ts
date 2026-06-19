@@ -6,6 +6,7 @@ type BooleanOption =
   | "ascii"
   | "compact"
   | "dryRun"
+  | "headlessJson"
   | "help"
   | "local"
   | "noCaddy"
@@ -18,6 +19,7 @@ const booleanFlags = new Map<string, BooleanOption>([
   ["--ascii", "ascii"],
   ["--compact", "compact"],
   ["--dry-run", "dryRun"],
+  ["--headless-json", "headlessJson"],
   ["--help", "help"],
   ["-h", "help"],
   ["--local", "local"],
@@ -48,7 +50,8 @@ export function parseArgs(argv: string[]): InstallerOptions {
     noCaddy: false,
     noHostInstall: false,
     version: false,
-    help: false
+    help: false,
+    headlessJson: false
   };
 
   let index = 0;
@@ -95,6 +98,7 @@ Usage:
   vibe-wp-installer --local
   vibe-wp-installer --export-plan install-plan.json
   vibe-wp-installer --headless install-plan.json [--yes]
+  echo '<json>' | vibe-wp-installer --headless-json
 
 Options:
   --install-dir <path>   Install directory, default /opt/vibe-wp

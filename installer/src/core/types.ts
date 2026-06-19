@@ -13,6 +13,7 @@ export interface InstallerOptions {
   compact: boolean;
   dryRun: boolean;
   exportPlan?: string;
+  headlessJson: boolean;
   headlessPlan?: string;
   help: boolean;
   installDir: string;
