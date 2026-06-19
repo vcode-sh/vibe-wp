@@ -1,3 +1,14 @@
+```
+██╗   ██╗██╗██████╗ ███████╗   ██╗    ██╗██████╗
+██║   ██║██║██╔══██╗██╔════╝   ██║    ██║██╔══██╗
+██║   ██║██║██████╔╝█████╗     ██║ █╗ ██║██████╔╝
+╚██╗ ██╔╝██║██╔══██╗██╔══╝     ██║███╗██║██╔═══╝
+ ╚████╔╝ ██║██████╔╝███████╗   ╚███╔███╔╝██║
+  ╚═══╝  ╚═╝╚═════╝ ╚══════╝    ╚══╝╚══╝ ╚═╝
+
+  Managed WordPress on Docker, tuned for VPS production.
+```
+
 # vibe-wp
 
 `vibe-wp` is a modern WordPress Docker template built for a fast, modular, production-shaped local stack:
