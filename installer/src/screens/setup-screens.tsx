@@ -7,6 +7,7 @@ import { InfoGrid } from "../components/data-display";
 import { useGlyphs } from "../components/glyph-context";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { Section } from "../components/section";
+import { checkEmail } from "../core/field-checks";
 
 const FEATURES = [
   "Nginx FastCGI cache",
@@ -176,6 +177,7 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
         value={state.adminUser}
       />
       <Field
+        feedback={checkEmail(state.adminEmail)}
         focused={focusIndex === 2}
         label="Admin email"
         onInput={(value) => update("adminEmail", value)}

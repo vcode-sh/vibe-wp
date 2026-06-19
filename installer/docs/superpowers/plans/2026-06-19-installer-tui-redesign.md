@@ -1,5 +1,30 @@
 # Installer TUI Redesign Implementation Plan
 
+## Status — 2026-06-19
+
+**All 12 original tasks DONE**, plus substantial scope beyond the original plan
+(the installer grew into a VPS manager). Shipped on branch `installer-tui-redesign`:
+
+- ✅ Design language: opencode/t1code-inspired layered surfaces, **WordPress-blue** accent,
+  glyphs, muted-blue selection + bright left accent bar, ASCII fallback, motion (spinner +
+  progress), tinted card surfaces.
+- ✅ Navigation made intuitive: Space toggles (Enter never double-fires), context-aware
+  footer hints per screen, full mouse support (click choices/toggles/button/ops/completed
+  rail steps).
+- ✅ Dynamic wizard flow (`app/flow.ts`): steps branch by mode; Sites is the single intent
+  picker; old "Mode" → "Location"; **Quick vs Custom** new-site fork (Quick = domain + email).
+- ✅ Friendly **Manage dashboard** (`screens/dashboard-screen.tsx` + `core/manage-operations.ts`):
+  grouped plain-language ops over `bin/vibe`, color-coded safety, confirm-on-danger, status cards.
+- ✅ **Headless core** (Phase 3): `core/index.ts` facade, `runHeadless` dispatcher,
+  `core/boundary.test.ts` guard, `--headless-json` entrypoint.
+- ✅ Welcome hero with ASCII wordmark + author credits (`core/credits.ts`).
+
+Gate green throughout: `bun run quality` (≤220 lines, typecheck, Biome, 26 tests).
+Roadmap: `docs/product-roadmap.md`. **In progress:** a screen-by-screen idiot-proofing pass
+(inline validation, plain-language help) — see commits after this date.
+
+---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the installer's flat box-in-box TUI with a restrained modern design language (one accent, glyphs, filled selection, key-cap chips, capped/centered content column) without touching any `core/` business logic.

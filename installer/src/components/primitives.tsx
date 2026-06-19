@@ -1,9 +1,16 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { color } from "../app/theme";
+import { color, type ThemeColor } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
+import type { FieldFeedback } from "../core/field-checks";
 import { useGlyphs } from "./glyph-context";
 import { clickProps } from "./mouse";
+
+const FEEDBACK_COLOR: Record<FieldFeedback["tone"], ThemeColor> = {
+  ok: "success",
+  warn: "warning",
+  error: "danger"
+};
 
 export function Field({
   label,
@@ -12,8 +19,10 @@ export function Field({
   onInput,
   secret = false,
   hint,
+  feedback,
   grow = false
 }: {
+  feedback?: FieldFeedback;
   grow?: boolean;
   hint?: string;
   label: string;
@@ -48,7 +57,7 @@ export function Field({
       flexDirection="column"
       flexGrow={grow ? 1 : 0}
       flexShrink={grow ? 1 : 0}
-      height={hint ? 3 : 2}
+      height={hint || feedback ? 3 : 2}
       paddingX={1}
     >
       <box flexDirection="row" gap={space.sm} justifyContent="space-between">
@@ -73,10 +82,16 @@ export function Field({
           value={value}
         />
       )}
-      {hint && (
-        <text fg={color("subtle")} truncate>
-          {hint}
+      {feedback ? (
+        <text fg={color(FEEDBACK_COLOR[feedback.tone])} truncate>
+          {feedback.tone === "ok" ? glyphs.done : glyphs.warn} {feedback.text}
         </text>
+      ) : (
+        hint && (
+          <text fg={color("subtle")} truncate>
+            {hint}
+          </text>
+        )
       )}
     </box>
   );

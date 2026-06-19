@@ -28,7 +28,7 @@ export function App({ initialState, options }: AppProps) {
   const renderer = useRenderer();
   const dimensions = useTerminalDimensions();
   const [state, setState] = useState<InstallerState>(initialState);
-  const [stepIndex, setStepIndex] = useState(initialStepIndex());
+  const [stepIndex, setStepIndex] = useState(() => initialStepIndex(initialState.mode));
   const [focusIndex, setFocusIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [logOpen, setLogOpen] = useState(false);

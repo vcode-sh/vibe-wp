@@ -1,6 +1,7 @@
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
+import { checkDomain } from "../core/field-checks";
 import { defaultInstallDir, portPairFromSlug, siteSlugFromDomain } from "../core/site-profile";
 
 export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
@@ -19,6 +20,7 @@ export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <Field
+        feedback={checkDomain(state.productionDomain)}
         focused={focusIndex === 0}
         label="Production domain"
         onInput={updateProductionDomain}
