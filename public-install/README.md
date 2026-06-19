@@ -1,0 +1,23 @@
+# Vibe WP Public Installer Host
+
+This directory builds the static content served from `https://wp.vcode.sh`.
+
+The public host intentionally does not run WordPress and does not keep secrets. It serves:
+
+- `install.sh`, the small bootstrap script users run with `curl`.
+- `manifest.json`, the latest installer manifest.
+- `checksums.txt`, the latest checksums.
+- `releases/<version>/...`, immutable versioned installer binaries and manifests.
+
+Build a local site after compiling installer binaries:
+
+```sh
+cd installer
+bun run build:linux-x64
+bun run build:linux-arm64
+cd ..
+public-install/build-site.sh 0.1.0
+docker build -t vibe-wp-installer-site:test public-install
+```
+
+The Dokploy application should run the image on internal port `8080` and expose `wp.vcode.sh` through HTTPS.

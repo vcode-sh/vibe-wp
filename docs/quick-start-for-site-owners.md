@@ -68,6 +68,16 @@ make down
 
 Use this when the site should run on a VPS.
 
+Recommended guided path:
+
+```sh
+curl -fsSL https://wp.vcode.sh/install.sh | sh
+```
+
+The installer asks questions, prepares the production configuration, can set up staging, and shows the exact actions before changing the server.
+
+Manual path:
+
 Generate production settings:
 
 ```sh

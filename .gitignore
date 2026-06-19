@@ -42,3 +42,6 @@ installer/node_modules/
 installer/dist/
 installer/.vibe-installer-plan.json
 installer/*.tsbuildinfo
+
+public-install/site/*
+!public-install/site/.gitkeep

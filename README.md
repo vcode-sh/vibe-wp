@@ -15,6 +15,12 @@
 
 If you are not technical, start with [docs/quick-start-for-site-owners.md](docs/quick-start-for-site-owners.md). It explains local use, VPS setup, staging, backups, and safe plugin/theme updates without Docker internals.
 
+For a new Ubuntu VPS, the guided installer is the intended path:
+
+```sh
+curl -fsSL https://wp.vcode.sh/install.sh | sh
+```
+
 ```sh
 make init
 make up
@@ -86,6 +92,12 @@ See [docs/configuration.md](docs/configuration.md) for the complete contract, [d
 - External MariaDB/Redis preset: `./bin/vibe external up`
 
 See [docs/deployment.md](docs/deployment.md) and [docs/staging.md](docs/staging.md).
+
+## Guided VPS Installer
+
+The public installer host is served from `wp.vcode.sh`. It downloads a versioned Linux installer binary, verifies SHA256, and then opens the guided terminal UI.
+
+See [docs/installer.md](docs/installer.md) for the release workflow and Dokploy deployment model.
 
 ## Research Baseline
 
