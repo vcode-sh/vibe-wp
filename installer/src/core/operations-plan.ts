@@ -1,5 +1,96 @@
+import { buildDnsPreflightTask } from "./dns-preflight";
+import { productionEnvValues, stagingEnvValues } from "./env-writer";
 import { shellQuote } from "./shell";
-import type { InstallerState, InstallTask } from "./types";
+import type { EnvFilePlan, InstallerState, InstallMode, InstallTask } from "./types";
+
+const NO_PROD_REWRITE_MODES = new Set<InstallMode>([
+  "manage-existing",
+  "remove-existing",
+  "update-existing"
+]);
+
+export function skipCaddyForMode(mode: InstallMode): boolean {
+  return NO_PROD_REWRITE_MODES.has(mode) || mode === "staging-only";
+}
+
+export function buildEnvFiles(state: InstallerState): EnvFilePlan[] {
+  const dir = state.selectedSiteDir || state.installDir;
+  if (state.mode === "staging-only") {
+    // Staging-only attaches to a live prod site: emit only the stage env file.
+    return [{ path: `${dir}/env/stage.env`, values: stagingEnvValues(state) }];
+  }
+  // manage/remove/update preserve existing secrets and regenerate nothing.
+  if (NO_PROD_REWRITE_MODES.has(state.mode)) {
+    return [];
+  }
+  const envFiles: EnvFilePlan[] = [
+    { path: `${state.installDir}/env/prod.env`, values: productionEnvValues(state) }
+  ];
+  if (state.stagingEnabled) {
+    envFiles.push({ path: `${state.installDir}/env/stage.env`, values: stagingEnvValues(state) });
+  }
+  return envFiles;
+}
+
+export function buildStagingOnlyTasks(state: InstallerState): InstallTask[] {
+  const installDir = shellQuote(state.selectedSiteDir || state.installDir);
+  return [
+    buildDnsPreflightTask(state),
+    {
+      id: "stage-config",
+      title: "Validate staging Compose",
+      description: "Check staging Compose config before starting containers.",
+      command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe stage config`]
+    },
+    {
+      id: "stage-up",
+      title: "Start staging",
+      description: "Build, install, and smoke-test the isolated staging stack.",
+      command: [
+        "sh",
+        "-lc",
+        `cd ${installDir} && ./bin/vibe stage up && ./bin/vibe stage install && ./bin/vibe stage smoke`
+      ]
+    }
+  ];
+}
+
+export function buildUpdateTasks(state: InstallerState): InstallTask[] {
+  const dir = state.selectedSiteDir || state.installDir;
+  const installDir = shellQuote(dir);
+  const ref = shellQuote(state.ref);
+  const repo = shellQuote(state.repo);
+  return [
+    {
+      id: "checkout",
+      title: "Update Vibe WP checkout",
+      description: "Fetch and fast-forward the existing repository without touching data.",
+      command: [
+        "sh",
+        "-lc",
+        `if [ -d ${shellQuote(`${dir}/.git`)} ]; then git -C ${installDir} fetch --all --prune && git -C ${installDir} checkout ${ref} && git -C ${installDir} pull --ff-only; else mkdir -p ${installDir} && git clone --branch ${ref} ${repo} ${installDir}; fi`
+      ]
+    },
+    {
+      id: "prod-config",
+      title: "Validate production Compose",
+      description: "Check Docker Compose config before restarting containers.",
+      command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod config`]
+    },
+    {
+      id: "prod-up",
+      title: "Rebuild and restart production",
+      description: "Rebuild and restart the production stack in place.",
+      command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod up`]
+    },
+    {
+      id: "prod-smoke",
+      title: "Run production smoke test",
+      description: "Verify HTTP, REST loopback, uploads, Redis, and FastCGI cache.",
+      command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod smoke`]
+    }
+  ];
+}
 
 export function buildManageTasks(state: InstallerState): InstallTask[] {
   const installDir = shellQuote(state.selectedSiteDir || state.installDir);

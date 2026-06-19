@@ -1,8 +1,14 @@
 import { renderCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
-import { productionEnvValues, stagingEnvValues } from "./env-writer";
-import { buildManageTasks, buildRemoveTasks } from "./operations-plan";
+import {
+  buildEnvFiles,
+  buildManageTasks,
+  buildRemoveTasks,
+  buildStagingOnlyTasks,
+  buildUpdateTasks,
+  skipCaddyForMode
+} from "./operations-plan";
 import { buildPlanWarnings } from "./plan-warnings";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallPlan, InstallTask } from "./types";
@@ -10,22 +16,8 @@ import type { InstallerState, InstallPlan, InstallTask } from "./types";
 export function buildInstallPlan(state: InstallerState): InstallPlan {
   const warnings = buildPlanWarnings(state);
   const tasks = buildTasks(state);
-  const envFiles =
-    state.mode === "manage-existing" || state.mode === "remove-existing"
-      ? []
-      : [
-          {
-            path: `${state.installDir}/env/prod.env`,
-            values: productionEnvValues(state)
-          }
-        ];
-
-  if (state.stagingEnabled && envFiles.length > 0) {
-    envFiles.push({
-      path: `${state.installDir}/env/stage.env`,
-      values: stagingEnvValues(state)
-    });
-  }
+  const envFiles = buildEnvFiles(state);
+  const skipCaddy = skipCaddyForMode(state.mode);
 
   return {
     version: INSTALLER_VERSION,
@@ -42,10 +34,7 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
       staging: state.stagingDomain.trim().toLowerCase()
     },
     envFiles,
-    caddyfile:
-      state.mode === "manage-existing" || state.mode === "remove-existing"
-        ? ""
-        : renderCaddyfile(state),
+    caddyfile: skipCaddy ? "" : renderCaddyfile(state),
     tasks,
     warnings,
     summary: {
@@ -69,6 +58,14 @@ function buildTasks(state: InstallerState): InstallTask[] {
   if (state.mode === "remove-existing") {
     return buildRemoveTasks(state);
   }
+  if (state.mode === "staging-only") {
+    return buildStagingOnlyTasks(state);
+  }
+  if (state.mode === "update-existing") {
+    return buildUpdateTasks(state);
+  }
+  // external-services intentionally falls through to the full install flow for now,
+  // pending a dedicated bring-your-own-services plan.
 
   const tasks: InstallTask[] = [];
   const sudo = state.host.sudo ? "sudo " : "";
