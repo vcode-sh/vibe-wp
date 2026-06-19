@@ -140,6 +140,7 @@ export function App({ initialState, options }: AppProps) {
         {logOpen && <LogStrip lines={executionLines} />}
         <Footer
           currentIndex={activeIndex}
+          focusCount={current.focusCount}
           kind={stepKind(current.id)}
           total={flowSteps.length}
           validationCount={validationErrors.length}

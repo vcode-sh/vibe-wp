@@ -109,15 +109,17 @@ export function Footer({
   currentIndex,
   total,
   validationCount,
-  kind
+  kind,
+  focusCount
 }: {
   currentIndex: number;
   total: number;
   validationCount: number;
   kind: StepKind;
+  focusCount: number;
 }) {
   const glyphs = useGlyphs();
-  const hints = footerHints(kind, glyphs);
+  const hints = footerHints(kind, focusCount, glyphs);
   return (
     <box
       alignItems="center"
@@ -155,16 +157,24 @@ interface Hint {
 
 // Context-aware footer: lead with the keys that actually do something on THIS
 // screen, then the universal nav keys. Fixes "I don't know how to select."
-function footerHints(kind: StepKind, glyphs: Record<GlyphName, string>): Hint[] {
+function footerHints(
+  kind: StepKind,
+  focusCount: number,
+  glyphs: Record<GlyphName, string>
+): Hint[] {
+  // Tab switches between controls — surface it whenever a screen has more than
+  // one, so users don't get stuck on the first field/list.
+  const multi = focusCount > 1;
+  const tab: Hint[] = multi ? [{ key: glyphs.tab, label: "switch" }] : [];
   const input: Hint[] = [];
   if (kind === "choice") {
-    input.push({ key: glyphs.arrows, label: "choose" });
+    input.push({ key: glyphs.arrows, label: "choose" }, ...tab);
   } else if (kind === "toggles") {
-    input.push({ key: glyphs.arrows, label: "move" }, { key: "space", label: "toggle" });
+    input.push(...tab, { key: "space", label: "toggle" });
   } else if (kind === "fields") {
-    input.push({ key: "type", label: "edit" }, { key: glyphs.arrows, label: "move" });
+    input.push(...tab, { key: "type", label: "edit" });
   } else if (kind === "mixed") {
-    input.push({ key: glyphs.arrows, label: "move" }, { key: "space", label: "toggle" });
+    input.push(...tab, { key: "space", label: "toggle" });
   }
   const tail: Hint[] = [
     { key: glyphs.enter, label: kind === "done" ? "finish" : "continue" },
