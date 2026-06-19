@@ -2,47 +2,93 @@ import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
+import { Banner } from "../components/banner";
 import { ChoiceList } from "../components/choice-list";
-import { InfoGrid, Metric } from "../components/data-display";
+import { InfoGrid } from "../components/data-display";
+import { useGlyphs } from "../components/glyph-context";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
-import { NoteBox, Section } from "../components/section";
+import { Section } from "../components/section";
 import type { InstallMode } from "../core/types";
+
+const FEATURES = [
+  "Nginx FastCGI cache",
+  "Redis object cache",
+  "Auto HTTPS",
+  "Staging",
+  "Backups",
+  "Smoke tests"
+];
 
 export function WelcomeScreen({ state, next }: ScreenProps) {
   return (
-    <box flexDirection="column" flexGrow={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={color("text")}>
-        Welcome to Vibe WP
-      </text>
-      <text fg={color("muted")} wrapMode="word">
-        A production WordPress installer that shows every important choice before it touches the
-        server.
-      </text>
-      <Section title="Host">
-        <Metric label="Host" tone="accent" value={state.host.osName} />
-        <Metric
+    <box alignItems="center" flexDirection="column" flexGrow={1} gap={1} justifyContent="center">
+      <Banner />
+      <text fg={color("muted")}>Managed WordPress on Docker, tuned for VPS production.</text>
+      <box flexDirection="row" gap={2} paddingY={1}>
+        <ReadyChip label="Host" tone="accent" value={state.host.osName} />
+        <ReadyChip
           label="Docker"
           tone={state.host.docker ? "success" : "warning"}
           value={state.host.docker ? "detected" : "missing"}
         />
-        <Metric
+        <ReadyChip
           label="Caddy"
           tone={state.host.caddy ? "success" : "warning"}
           value={state.host.caddy ? "detected" : "missing"}
         />
-      </Section>
-      <NoteBox>
-        <text fg={color("muted")} wrapMode="word">
-          Prepares env files, Caddy HTTPS, Docker services, WordPress install, staging, backups,
-          smoke checks, and performance reports. Nothing privileged runs until review — use
-          --dry-run or --export-plan for a non-interactive audit.
-        </text>
-      </NoteBox>
-      <ActionRow
-        onPrimary={next}
-        primary="Start guided install"
-        secondary="Review every step first"
-      />
+      </box>
+      <FeatureStrip />
+      <box paddingY={1}>
+        <ActionRow
+          onPrimary={next}
+          primary="Start guided install"
+          secondary="Nothing privileged runs until review"
+        />
+      </box>
+    </box>
+  );
+}
+
+function ReadyChip({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: string;
+  tone: "accent" | "success" | "warning";
+}) {
+  const glyphs = useGlyphs();
+  return (
+    <box
+      alignItems="center"
+      backgroundColor={color("panel3")}
+      flexDirection="row"
+      gap={1}
+      height={1}
+      paddingX={2}
+    >
+      <text fg={color(tone)}>{tone === "success" ? glyphs.ok : glyphs.bullet}</text>
+      <text attributes={TextAttributes.BOLD} fg={color("text")}>
+        {label}
+      </text>
+      <text fg={color("muted")} truncate>
+        {value}
+      </text>
+    </box>
+  );
+}
+
+function FeatureStrip() {
+  const glyphs = useGlyphs();
+  return (
+    <box alignItems="center" flexDirection="row" gap={2}>
+      {FEATURES.map((feature) => (
+        <box flexDirection="row" gap={1} key={feature}>
+          <text fg={color("accent")}>{glyphs.bullet}</text>
+          <text fg={color("muted")}>{feature}</text>
+        </box>
+      ))}
     </box>
   );
 }
