@@ -92,9 +92,9 @@ export function ToggleRow({
   focused: boolean;
   onToggle: () => void;
 }) {
-  const glyphs = useGlyphs();
+  // Space toggles (Enter is reserved for "continue" so it never double-fires).
   useKeyboard((key) => {
-    if (focused && (key.name === "return" || key.name === "enter" || key.name === "space")) {
+    if (focused && key.name === "space") {
       onToggle();
     }
   });
@@ -102,22 +102,24 @@ export function ToggleRow({
   return (
     <box
       alignItems="center"
-      backgroundColor={focused ? color("selectionBg") : color("panel")}
-      borderColor={focused ? color("focusRing") : color("border")}
-      borderStyle={BORDER.frame}
+      backgroundColor={focused ? color("selectionBg") : undefined}
+      border={["left"]}
+      borderColor={focused ? color("focusRing") : color("divider")}
       flexDirection="row"
-      height={3}
+      height={1}
       justifyContent="space-between"
       paddingX={1}
     >
-      <text fg={color("text")}>{label}</text>
-      <box flexDirection="row" gap={space.sm}>
-        <text fg={value ? color("success") : color("subtle")}>
-          {value ? glyphs.ok : glyphs.pending}
-        </text>
-        <text attributes={TextAttributes.BOLD} fg={value ? color("success") : color("muted")}>
-          {value ? "on" : "off"}
-        </text>
+      <text attributes={focused ? TextAttributes.BOLD : TextAttributes.NONE} fg={color("text")}>
+        {label}
+      </text>
+      <box alignItems="center" flexDirection="row" gap={space.md}>
+        {focused && <text fg={color("subtle")}>space to toggle</text>}
+        <box backgroundColor={value ? color("success") : color("elevated")} paddingX={1}>
+          <text attributes={TextAttributes.BOLD} fg={value ? color("black") : color("muted")}>
+            {value ? "ON" : "OFF"}
+          </text>
+        </box>
       </box>
     </box>
   );

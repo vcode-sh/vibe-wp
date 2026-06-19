@@ -23,6 +23,7 @@ import { AdminScreen, ModeScreen, SystemScreen, WelcomeScreen } from "../screens
 import { SitesScreen } from "../screens/site-screens";
 import { initialStepIndex } from "./dev-step";
 import { handleAppKey } from "./keyboard";
+import { stepKind } from "./nav-hints";
 import type { ScreenProps } from "./screen-props";
 import { steps } from "./steps";
 import { color } from "./theme";
@@ -126,6 +127,7 @@ export function App({ initialState, options }: AppProps) {
         {logOpen && <LogStrip lines={executionLines} />}
         <Footer
           currentIndex={stepIndex}
+          kind={stepKind(current.id)}
           total={steps.length}
           validationCount={validationErrors.length}
         />

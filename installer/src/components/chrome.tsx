@@ -1,4 +1,5 @@
 import { TextAttributes } from "@opentui/core";
+import type { StepKind } from "../app/nav-hints";
 import type { Step } from "../app/steps";
 import { color } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
@@ -6,6 +7,7 @@ import { INSTALLER_VERSION } from "../core/defaults";
 import type { InstallerState } from "../core/types";
 import { Credits } from "./credits";
 import { useGlyphs } from "./glyph-context";
+import type { GlyphName } from "./glyphs";
 import { KeyHints } from "./keycap";
 
 export function Header() {
@@ -106,13 +108,16 @@ export function LogStrip({ lines }: { lines: string[] }) {
 export function Footer({
   currentIndex,
   total,
-  validationCount
+  validationCount,
+  kind
 }: {
   currentIndex: number;
   total: number;
   validationCount: number;
+  kind: StepKind;
 }) {
   const glyphs = useGlyphs();
+  const hints = footerHints(kind, glyphs);
   return (
     <box
       alignItems="center"
@@ -124,15 +129,7 @@ export function Footer({
       justifyContent="space-between"
       paddingX={1}
     >
-      <KeyHints
-        hints={[
-          { key: glyphs.arrows, label: "move" },
-          { key: glyphs.enter, label: "next" },
-          { key: `${glyphs.arrowLeft}${glyphs.arrowRight}`, label: "steps" },
-          { key: "esc", label: "back" },
-          { key: "?", label: "help" }
-        ]}
-      />
+      <KeyHints hints={hints} />
       <box alignItems="center" flexDirection="row" gap={space.md}>
         {validationCount > 0 ? (
           <box backgroundColor={color("warning")} paddingX={1}>
@@ -149,4 +146,30 @@ export function Footer({
       </box>
     </box>
   );
+}
+
+interface Hint {
+  key: string;
+  label: string;
+}
+
+// Context-aware footer: lead with the keys that actually do something on THIS
+// screen, then the universal nav keys. Fixes "I don't know how to select."
+function footerHints(kind: StepKind, glyphs: Record<GlyphName, string>): Hint[] {
+  const input: Hint[] = [];
+  if (kind === "choice") {
+    input.push({ key: glyphs.arrows, label: "choose" });
+  } else if (kind === "toggles") {
+    input.push({ key: glyphs.arrows, label: "move" }, { key: "space", label: "toggle" });
+  } else if (kind === "fields") {
+    input.push({ key: "type", label: "edit" }, { key: glyphs.arrows, label: "move" });
+  } else if (kind === "mixed") {
+    input.push({ key: glyphs.arrows, label: "move" }, { key: "space", label: "toggle" });
+  }
+  const tail: Hint[] = [
+    { key: glyphs.enter, label: kind === "done" ? "finish" : "continue" },
+    { key: "esc", label: "back" },
+    { key: "?", label: "help" }
+  ];
+  return [...input, ...tail];
 }
