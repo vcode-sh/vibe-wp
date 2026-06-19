@@ -8,7 +8,7 @@ Primary decision: OpenTUI + React + Bun
 
 The public bootstrap and release host are working, but the installer is not complete against the done definition below.
 
-Verified on test VPS `198.51.100.10`:
+Verified on a disposable test VPS:
 
 - `curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh` downloads and verifies installer `0.1.2`.
 - `curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --dry-run` writes valid JSON when stdout is redirected.
