@@ -36,24 +36,23 @@ export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
         onInput={(value) => update("stagingDomain", value)}
         value={state.stagingDomain}
       />
-      <box flexDirection="row" gap={1}>
-        <Field
-          focused={focusIndex === 3}
-          hint="Used for Compose project names and cache prefixes"
-          label="Site slug"
-          onInput={(value) => update("siteSlug", value)}
-          value={state.siteSlug}
-        />
+      <Field
+        focused={focusIndex === 3}
+        label="Site slug"
+        onInput={(value) => update("siteSlug", value)}
+        value={state.siteSlug}
+      />
+      <box flexDirection="row" gap={2}>
         <Field
           focused={focusIndex === 4}
-          hint="Production localhost port"
+          grow
           label="Production port"
           onInput={(value) => update("productionHttpPort", value)}
           value={state.productionHttpPort}
         />
         <Field
           focused={focusIndex === 5}
-          hint="Staging localhost port"
+          grow
           label="Staging port"
           onInput={(value) => update("stagingHttpPort", value)}
           value={state.stagingHttpPort}

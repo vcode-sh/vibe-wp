@@ -108,7 +108,7 @@ export function ExecuteScreen({
           value={confirmation}
         />
       )}
-      <Panel content={lines.join("\n")} title="LATEST LOG" />
+      <Panel content={lines.join("\n")} maxLines={5} title="LATEST LOG" />
       <ActionRow
         onPrimary={() => {
           execute();
@@ -134,8 +134,9 @@ function TaskList({
       borderColor={color("border")}
       borderStyle="rounded"
       flexGrow={1}
+      maxHeight={12}
     >
-      <box flexDirection="column" gap={1} padding={1}>
+      <box flexDirection="column" padding={1}>
         {tasks.map((task, index) => {
           const result = resultById.get(task.id);
           return (

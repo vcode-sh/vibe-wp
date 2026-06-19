@@ -10,8 +10,10 @@ export function Field({
   focused,
   onInput,
   secret = false,
-  hint
+  hint,
+  grow = false
 }: {
+  grow?: boolean;
   hint?: string;
   label: string;
   value: string;
@@ -41,8 +43,10 @@ export function Field({
       backgroundColor={focused ? color("selectionBg") : undefined}
       border={["left"]}
       borderColor={focused ? color("focusRing") : color("divider")}
+      flexBasis={grow ? 0 : undefined}
       flexDirection="column"
-      flexShrink={0}
+      flexGrow={grow ? 1 : 0}
+      flexShrink={grow ? 1 : 0}
       height={hint ? 3 : 2}
       paddingX={1}
     >
@@ -63,7 +67,7 @@ export function Field({
           focused={focused}
           focusedBackgroundColor={color("selectionBg")}
           onInput={onInput}
-          placeholder={label}
+          placeholder=""
           textColor={color("text")}
           value={value}
         />
@@ -119,8 +123,18 @@ export function ToggleRow({
   );
 }
 
-export function Panel({ title, content }: { title: string; content: string }) {
-  const lines = (content || "None").split("\n");
+export function Panel({
+  title,
+  content,
+  maxLines = 10
+}: {
+  title: string;
+  content: string;
+  maxLines?: number;
+}) {
+  const allLines = (content || "None").split("\n");
+  const lines = allLines.slice(0, maxLines);
+  const overflow = allLines.length - lines.length;
   return (
     <box
       borderColor={color("border")}
@@ -140,6 +154,11 @@ export function Panel({ title, content }: { title: string; content: string }) {
           {line}
         </text>
       ))}
+      {overflow > 0 && (
+        <text fg={color("subtle")} height={1}>
+          … +{overflow} more
+        </text>
+      )}
     </box>
   );
 }

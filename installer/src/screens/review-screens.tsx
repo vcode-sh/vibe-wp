@@ -19,11 +19,11 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
           Plan is valid. Review before execution.
         </text>
       )}
-      <box flexDirection="row" flexGrow={1} gap={1}>
-        <Panel content={envPaths} title="ENV FILES" />
-        <Panel content={commands} title="TASKS" />
+      <box flexDirection="row" gap={2}>
+        <Panel content={envPaths} maxLines={6} title="ENV FILES" />
+        <Panel content={commands} maxLines={6} title="TASKS" />
       </box>
-      <Panel content={redactedPlan.caddyfile} title="CADDYFILE PREVIEW" />
+      <Panel content={redactedPlan.caddyfile} maxLines={6} title="CADDYFILE PREVIEW" />
       <ActionRow
         onPrimary={next}
         primary="Open execution"
