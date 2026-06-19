@@ -5,6 +5,7 @@ import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
 import { InfoGrid } from "../components/data-display";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
+import { NoteBox } from "../components/section";
 import { performanceValues } from "../core/defaults";
 import type { BackupPolicy, PerformancePreset } from "../core/types";
 
@@ -107,20 +108,14 @@ export function StagingScreen({ state, update, focusIndex, next }: ScreenProps) 
         onInput={(value) => update("stagingDomain", value)}
         value={state.stagingDomain}
       />
-      <box
-        backgroundColor={color("panel")}
-        border
-        borderColor={color("border")}
-        flexDirection="column"
-        padding={1}
-      >
+      <NoteBox tone="success">
         <text attributes={TextAttributes.BOLD} fg={color("success")}>
           Staging safeguards
         </text>
         <text fg={color("muted")}>VIBE_WP_FORCE_NOINDEX=1</text>
         <text fg={color("muted")}>VIBE_WP_DISABLE_OUTBOUND_MAIL=1</text>
         <text fg={color("muted")}>Separate Compose project, DB, Redis, and wp-content volume.</text>
-      </box>
+      </NoteBox>
       <ActionRow
         onPrimary={next}
         primary="Continue"

@@ -5,16 +5,20 @@ import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
 import { InfoGrid, Metric } from "../components/data-display";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
+import { NoteBox, Section } from "../components/section";
 import type { InstallMode } from "../core/types";
 
 export function WelcomeScreen({ state, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-        A production WordPress installer that shows every important choice before it changes the
+      <text attributes={TextAttributes.BOLD} fg={color("text")}>
+        Welcome to Vibe WP
+      </text>
+      <text fg={color("muted")} wrapMode="word">
+        A production WordPress installer that shows every important choice before it touches the
         server.
       </text>
-      <box flexDirection="row" gap={1}>
+      <Section title="Host">
         <Metric label="Host" tone="accent" value={state.host.osName} />
         <Metric
           label="Docker"
@@ -26,24 +30,17 @@ export function WelcomeScreen({ state, next }: ScreenProps) {
           tone={state.host.caddy ? "success" : "warning"}
           value={state.host.caddy ? "detected" : "missing"}
         />
-      </box>
-      <box
-        backgroundColor={color("panel")}
-        border
-        borderColor={color("border")}
-        flexDirection="column"
-        gap={1}
-        padding={1}
-      >
-        <text fg={color("text")}>
-          This wizard prepares env files, Caddy HTTPS, Docker services, WordPress install, staging,
-          backups, smoke checks, and performance reports.
+      </Section>
+      <NoteBox>
+        <text fg={color("text")} wrapMode="word">
+          Prepares env files, Caddy HTTPS, Docker services, WordPress install, staging, backups,
+          smoke checks, and performance reports.
         </text>
-        <text fg={color("muted")}>
+        <text fg={color("muted")} wrapMode="word">
           Nothing privileged runs until review. Use --dry-run or --export-plan for a non-interactive
           audit.
         </text>
-      </box>
+      </NoteBox>
       <ActionRow
         onPrimary={next}
         primary="Start guided install"
@@ -68,7 +65,9 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
   ];
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <InfoGrid rows={rows} />
+      <Section title="Host facts">
+        <InfoGrid rows={rows} />
+      </Section>
       <ToggleRow
         focused={focusIndex === 0}
         label="Install Docker if missing"

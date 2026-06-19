@@ -3,6 +3,7 @@ import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { InfoGrid } from "../components/data-display";
 import { ActionRow, Panel } from "../components/primitives";
+import { NoteBox } from "../components/section";
 
 export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenProps) {
   const envPaths = redactedPlan.envFiles.map((env) => env.path).join("\n");
@@ -39,13 +40,7 @@ export function SuccessScreen({ redactedPlan }: ScreenProps) {
         Vibe WP installer plan is ready.
       </text>
       <InfoGrid rows={Object.entries(redactedPlan.summary)} />
-      <box
-        backgroundColor={color("panel")}
-        border
-        borderColor={color("border")}
-        flexDirection="column"
-        padding={1}
-      >
+      <NoteBox>
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
           Daily commands after install
         </text>
@@ -53,26 +48,20 @@ export function SuccessScreen({ redactedPlan }: ScreenProps) {
         <text fg={color("muted")}>./bin/vibe prod smoke</text>
         <text fg={color("muted")}>./bin/vibe prod perf-report</text>
         <text fg={color("muted")}>./bin/vibe prod backup</text>
-      </box>
+      </NoteBox>
     </box>
   );
 }
 
 function ValidationErrors({ errors }: { errors: string[] }) {
   return (
-    <box
-      backgroundColor={color("panel")}
-      border
-      borderColor={color("danger")}
-      flexDirection="column"
-      padding={1}
-    >
+    <NoteBox tone="danger">
       <text attributes={TextAttributes.BOLD} fg={color("danger")}>
         Fix before running
       </text>
       <text fg={color("text")} wrapMode="word">
         {errors.join("\n")}
       </text>
-    </box>
+    </NoteBox>
   );
 }

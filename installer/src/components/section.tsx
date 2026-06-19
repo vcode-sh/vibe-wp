@@ -29,3 +29,24 @@ export function Card({ children }: { children: ReactNode }) {
     </box>
   );
 }
+
+export function NoteBox({
+  children,
+  tone = "border"
+}: {
+  children: ReactNode;
+  tone?: "border" | "success" | "danger";
+}) {
+  return (
+    <box
+      backgroundColor={color("panel")}
+      borderColor={color(tone)}
+      borderStyle={BORDER.frame}
+      flexDirection="column"
+      gap={space.xs}
+      padding={space.sm}
+    >
+      {children}
+    </box>
+  );
+}
