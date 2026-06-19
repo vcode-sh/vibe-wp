@@ -2,7 +2,15 @@ import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { checkDomain } from "../core/field-checks";
-import { defaultInstallDir, portPairFromSlug, siteSlugFromDomain } from "../core/site-profile";
+import {
+  defaultInstallDir,
+  portPairFromSlug,
+  siteSlugFromDomain,
+  stagingDomainFor,
+  titleFromDomain
+} from "../core/site-profile";
+
+const DEFAULT_TITLES = new Set(["", "Vibe WP", "My Site"]);
 
 export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
   function updateProductionDomain(value: string) {
@@ -12,6 +20,12 @@ export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
     update("siteSlug", slug);
     update("productionHttpPort", ports.production);
     update("stagingHttpPort", ports.staging);
+    // Smart defaults so non-technical users barely fill anything: staging follows
+    // the domain, and the title is guessed until they customise it.
+    update("stagingDomain", stagingDomainFor(value));
+    if (DEFAULT_TITLES.has(state.siteTitle.trim())) {
+      update("siteTitle", titleFromDomain(value) || state.siteTitle);
+    }
     if (!state.selectedSiteDir && state.mode === "new-site") {
       update("installDir", defaultInstallDir(slug, state.host.existingSites.length));
     }
