@@ -5,6 +5,12 @@
 
 .DS_Store
 
+# Local agent instructions. Keep machine-specific notes and SSH details out of Git.
+AGENTS.md
+CLAUDE.md
+agents.md
+claude.md
+
 backups/*
 !backups/.gitkeep
 
