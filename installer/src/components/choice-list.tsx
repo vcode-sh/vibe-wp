@@ -1,8 +1,10 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
+import { useState } from "react";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
+import { clickProps } from "./mouse";
 
 export function ChoiceList<T extends string>({
   focused,
@@ -47,6 +49,7 @@ export function ChoiceList<T extends string>({
           index={index}
           key={option.value}
           name={option.name}
+          onSelect={() => onChange(option.value)}
         />
       ))}
       {activeOption && (
@@ -65,28 +68,36 @@ function ChoiceRow({
   active,
   focused,
   index,
-  name
+  name,
+  onSelect
 }: {
   active: boolean;
   focused: boolean;
   index: number;
   name: string;
+  onSelect: () => void;
 }) {
   // t1code pattern: a 1-char left accent bar (bright when focused) plus a
   // muted-blue surface; normal bold text. No border prop (it mis-renders).
+  // Click selects the row (same effect as arrowing onto it); hover brightens.
+  const [hovered, setHovered] = useState(false);
   const barColor = activeBarColor(active, focused);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI <box> is a terminal renderable, not a DOM element; mouse hover/select mirror the existing keyboard nav.
     <box
       alignItems="stretch"
-      backgroundColor={active ? color("selectionBg") : undefined}
+      backgroundColor={rowBackground(active, hovered)}
       flexDirection="row"
       height={1}
+      onMouseOut={() => setHovered(false)}
+      onMouseOver={() => setHovered(true)}
+      {...clickProps(onSelect)}
     >
       <box backgroundColor={barColor} flexShrink={0} width={1} />
       <box alignItems="center" flexDirection="row" flexGrow={1} paddingX={1}>
         <text
           attributes={active ? TextAttributes.BOLD : TextAttributes.NONE}
-          fg={active ? color("text") : color("muted")}
+          fg={active || hovered ? color("text") : color("muted")}
           truncate
         >
           {index + 1}. {name}
@@ -94,6 +105,16 @@ function ChoiceRow({
       </box>
     </box>
   );
+}
+
+function rowBackground(active: boolean, hovered: boolean): string | undefined {
+  if (active) {
+    return color("selectionBg");
+  }
+  if (hovered) {
+    return color("panel3");
+  }
+  return;
 }
 
 function activeBarColor(active: boolean, focused: boolean): string | undefined {

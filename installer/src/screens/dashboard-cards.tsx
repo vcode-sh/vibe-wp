@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import { color, type ThemeColor } from "../app/theme";
 import { space } from "../app/tokens";
 import { useGlyphs } from "../components/glyph-context";
+import { clickProps } from "../components/mouse";
 import type { ManageOperation, OpGroupView, OpSafety } from "../core/manage-operations";
 import type { InstallerState } from "../core/types";
 
@@ -74,10 +75,14 @@ function StatusCard({ card }: { card: CardSpec }) {
 
 export function GroupedOpList({
   groups,
-  selectedId
+  selectedId,
+  onSelect
 }: {
   groups: OpGroupView[];
   selectedId: string | undefined;
+  // Click only ever selects an op — running stays gated behind Enter so a
+  // stray click can never fire a caution/danger operation.
+  onSelect?: (id: string) => void;
 }) {
   return (
     <box flexDirection="column" gap={space.sm}>
@@ -92,7 +97,7 @@ export function GroupedOpList({
             {group.title}
           </text>
           {group.operations.map((op) => (
-            <OpRow active={op.id === selectedId} key={op.id} op={op} />
+            <OpRow active={op.id === selectedId} key={op.id} onSelect={onSelect} op={op} />
           ))}
         </box>
       ))}
@@ -100,14 +105,24 @@ export function GroupedOpList({
   );
 }
 
-function OpRow({ active, op }: { active: boolean; op: ManageOperation }) {
+function OpRow({
+  active,
+  op,
+  onSelect
+}: {
+  active: boolean;
+  op: ManageOperation;
+  onSelect?: (id: string) => void;
+}) {
   const glyphs = useGlyphs();
+  const clickHandlers = onSelect ? clickProps(() => onSelect(op.id)) : {};
   return (
     <box
       alignItems="stretch"
       backgroundColor={active ? color("selectionBg") : undefined}
       flexDirection="row"
       height={1}
+      {...clickHandlers}
     >
       <box backgroundColor={active ? color("accentBar") : undefined} flexShrink={0} width={1} />
       <box alignItems="center" flexDirection="row" gap={space.sm} paddingX={1}>
