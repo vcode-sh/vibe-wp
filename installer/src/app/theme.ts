@@ -13,7 +13,11 @@ export const theme = {
   danger: "#FCA5A5",
   border: "#252B35",
   borderStrong: "#4C5A70",
-  black: "#020617"
+  black: "#020617",
+  focusRing: "#8EA4FF",
+  activeStep: "#8EA4FF",
+  selectionBg: "#1A2133",
+  divider: "#1C222B"
 } as const;
 
 export type ThemeColor = keyof typeof theme;
