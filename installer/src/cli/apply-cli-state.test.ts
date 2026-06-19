@@ -52,6 +52,28 @@ describe("applyCliState", () => {
     expect(state.adminEmail).toBe("me@example.com");
   });
 
+  test("--mode new-site clears an inherited site and derives a fresh install dir", () => {
+    const base = defaultState();
+    // Simulate host detection having pre-selected an existing site.
+    base.selectedSiteDir = "/opt/vibe-wp";
+    base.host = {
+      ...base.host,
+      existingSites: [
+        {
+          installDir: "/opt/vibe-wp",
+          hasStaging: false,
+          productionProject: "p",
+          productionUrl: "https://live.com",
+          stagingProject: null,
+          stagingUrl: null
+        }
+      ]
+    };
+    const state = applyCliState(base, options({ mode: "new-site", domain: "fresh.com" }));
+    expect(state.selectedSiteDir).toBe("");
+    expect(state.installDir).not.toBe("/opt/vibe-wp");
+  });
+
   test("leaves state untouched when flags are absent", () => {
     const base = defaultState();
     const before = base.productionDomain;

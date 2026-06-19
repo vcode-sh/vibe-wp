@@ -16,6 +16,11 @@ const DEFAULT_TITLES = new Set(["", "Vibe WP", "My Site"]);
 export function applyCliState(state: InstallerState, options: InstallerOptions): InstallerState {
   if (options.mode) {
     state.mode = options.mode;
+    // An explicit "new site" must not inherit a site auto-selected from host
+    // detection, or its install dir would target the existing site and clobber it.
+    if (options.mode === "new-site") {
+      state.selectedSiteDir = "";
+    }
   }
 
   if (options.domain) {
