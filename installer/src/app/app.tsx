@@ -1,9 +1,11 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useMemo, useState } from "react";
-import { Footer, Header, HelpPanel, LogStrip, StepRail } from "../components/chrome";
+import { Footer, Header, HelpPanel, LogStrip } from "../components/chrome";
 import { GlyphProvider } from "../components/glyph-context";
 import { shouldUseAscii } from "../components/glyphs";
+import { Column } from "../components/layout";
+import { CompactStepper, StepRail } from "../components/step-rail";
 import { buildInstallPlan } from "../core/install-plan";
 import { redactPlan } from "../core/redaction";
 import type { InstallerOptions, InstallerState } from "../core/types";
@@ -35,7 +37,7 @@ export function App({ initialState, options }: AppProps) {
   const [state, setState] = useState<InstallerState>(initialState);
   const [stepIndex, setStepIndex] = useState(0);
   const [focusIndex, setFocusIndex] = useState(0);
-  const [showHelp, setShowHelp] = useState(true);
+  const [showHelp, setShowHelp] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [executionLines, setExecutionLines] = useState<string[]>([
     "Execution is armed only after the review step.",
@@ -111,7 +113,8 @@ export function App({ initialState, options }: AppProps) {
         padding={1}
         width="100%"
       >
-        <Header compact={compact} dimensions={dimensions} />
+        <Header />
+        {compact && <CompactStepper activeIndex={stepIndex} />}
         <box flexDirection={compact ? "column" : "row"} flexGrow={1} gap={1}>
           {!compact && <StepRail activeIndex={stepIndex} />}
           <MainPanel {...screenProps} />
@@ -134,8 +137,8 @@ function MainPanel(props: ScreenProps) {
   return (
     <box
       backgroundColor={color("panel2")}
-      border
       borderColor={color("borderStrong")}
+      borderStyle="rounded"
       flexDirection="column"
       flexGrow={1}
       gap={1}
@@ -145,9 +148,9 @@ function MainPanel(props: ScreenProps) {
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
           {props.current.title}
         </text>
-        <text fg={color("muted")}>Tab focus - arrows steps - ? help - Ctrl+L logs</text>
+        <text fg={color("subtle")}>? context · Ctrl+L logs</text>
       </box>
-      {renderScreen(props)}
+      <Column>{renderScreen(props)}</Column>
     </box>
   );
 }

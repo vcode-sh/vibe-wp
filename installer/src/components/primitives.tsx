@@ -5,8 +5,6 @@ import { BORDER, space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
 import { KeyCap } from "./keycap";
 
-export { InfoGrid, Metric } from "./data-display";
-
 export function Field({
   label,
   value,

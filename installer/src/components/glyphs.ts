@@ -39,6 +39,8 @@ const ASCII: Record<GlyphName, string> = {
   wordmark: "#"
 };
 
+const UTF8_PATTERN = /utf-?8/i;
+
 export function resolveGlyphs(ascii: boolean): Record<GlyphName, string> {
   return ascii ? ASCII : UNICODE;
 }
@@ -49,14 +51,12 @@ export function shouldUseAscii(opts: { ascii: boolean; env?: NodeJS.ProcessEnv }
   }
   const env = opts.env ?? process.env;
   const locale = env.LC_ALL || env.LANG || "";
-  if (locale && !/utf-?8/i.test(locale)) {
+  if (locale && !UTF8_PATTERN.test(locale)) {
     return true;
   }
   return env.TERM === "dumb";
 }
 
 export function spinnerFrames(ascii: boolean): string[] {
-  return ascii
-    ? ["|", "/", "-", "\\"]
-    : ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  return ascii ? ["|", "/", "-", "\\"] : ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 }

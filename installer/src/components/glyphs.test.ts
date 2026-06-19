@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { resolveGlyphs, shouldUseAscii, spinnerFrames } from "./glyphs";
 
+const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
+
 test("unicode glyphs by default", () => {
   expect(resolveGlyphs(false).done).toBe("✓");
 });
@@ -8,7 +10,7 @@ test("unicode glyphs by default", () => {
 test("ascii fallback swaps every glyph to ascii-safe", () => {
   const g = resolveGlyphs(true);
   for (const v of Object.values(g)) {
-    expect(/^[\x20-\x7e]+$/.test(v)).toBe(true);
+    expect(PRINTABLE_ASCII.test(v)).toBe(true);
   }
 });
 

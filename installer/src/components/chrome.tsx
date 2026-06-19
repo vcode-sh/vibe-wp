@@ -1,75 +1,34 @@
 import { TextAttributes } from "@opentui/core";
 import type { Step } from "../app/steps";
-import { steps } from "../app/steps";
 import { color } from "../app/theme";
+import { BORDER, space } from "../app/tokens";
 import { INSTALLER_VERSION } from "../core/defaults";
 import type { InstallerState } from "../core/types";
+import { useGlyphs } from "./glyph-context";
+import { KeyHints } from "./keycap";
 
-export function Header({
-  compact,
-  dimensions
-}: {
-  compact: boolean;
-  dimensions: { width: number; height: number };
-}) {
+export function Header() {
+  const glyphs = useGlyphs();
   return (
     <box
       alignItems="center"
       backgroundColor={color("panel")}
-      border
       borderColor={color("border")}
-      height={compact ? 4 : 6}
+      borderStyle={BORDER.frame}
+      flexDirection="row"
+      height={3}
       justifyContent="space-between"
       paddingX={1}
     >
-      <box alignItems="center" flexDirection="row" gap={2}>
-        <box flexDirection="column">
-          <text attributes={TextAttributes.BOLD} fg={color("text")}>
-            Vibe WP Installer
-          </text>
-          <text fg={color("muted")} truncate>
-            Managed WordPress on Docker, tuned for VPS production.
-          </text>
-        </box>
-      </box>
-      <box alignItems="flex-end" flexDirection="column">
-        <text fg={color("accent")}>v{INSTALLER_VERSION}</text>
-        <text fg={color("subtle")}>
-          {dimensions.width}x{dimensions.height}
+      <box alignItems="center" flexDirection="row" gap={space.sm}>
+        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+          {glyphs.wordmark} VIBE WP
+        </text>
+        <text fg={color("subtle")} truncate>
+          Managed WordPress on Docker, tuned for VPS production.
         </text>
       </box>
-    </box>
-  );
-}
-
-export function StepRail({ activeIndex }: { activeIndex: number }) {
-  return (
-    <box
-      backgroundColor={color("panel")}
-      border
-      borderColor={color("border")}
-      flexDirection="column"
-      gap={1}
-      padding={1}
-      width={22}
-    >
-      <text attributes={TextAttributes.BOLD} fg={color("muted")}>
-        WORKFLOW
-      </text>
-      {steps.map((step, index) => {
-        const active = index === activeIndex;
-        const done = index < activeIndex;
-        const marker = stepMarker(done, active);
-        const markerColor = stepMarkerColor(done, active);
-        return (
-          <box flexDirection="row" gap={1} key={step.id}>
-            <text fg={markerColor}>{marker}</text>
-            <text fg={active ? color("text") : color("muted")} truncate>
-              {step.title}
-            </text>
-          </box>
-        );
-      })}
+      <text fg={color("muted")}>v{INSTALLER_VERSION}</text>
     </box>
   );
 }
@@ -83,13 +42,14 @@ export function HelpPanel({
   state: InstallerState;
   warnings: string[];
 }) {
+  const glyphs = useGlyphs();
   return (
     <box
       backgroundColor={color("panel")}
-      border
       borderColor={color("border")}
+      borderStyle={BORDER.frame}
       flexDirection="column"
-      gap={1}
+      gap={space.sm}
       padding={1}
       width={32}
     >
@@ -112,7 +72,7 @@ export function HelpPanel({
       </text>
       {warnings.slice(0, 4).map((warning) => (
         <text fg={color("warning")} key={warning} wrapMode="word">
-          - {warning}
+          {glyphs.warn} {warning}
         </text>
       ))}
     </box>
@@ -123,15 +83,17 @@ export function LogStrip({ lines }: { lines: string[] }) {
   return (
     <box
       backgroundColor={color("panel")}
-      border
-      borderColor={color("border")}
+      border={["top"]}
+      borderColor={color("divider")}
       flexDirection="column"
       height={5}
       paddingX={1}
     >
-      <text fg={color("accent")}>LOG</text>
-      <text fg={color("muted")} truncate>
-        {lines.slice(-3).join(" | ")}
+      <text attributes={TextAttributes.BOLD} fg={color("muted")}>
+        LOG
+      </text>
+      <text fg={color("subtle")} truncate>
+        {lines.slice(-3).join("  ·  ")}
       </text>
     </box>
   );
@@ -146,44 +108,40 @@ export function Footer({
   total: number;
   validationCount: number;
 }) {
+  const glyphs = useGlyphs();
   return (
     <box
       alignItems="center"
       backgroundColor={color("panel")}
-      border
       borderColor={color("border")}
+      borderStyle={BORDER.frame}
       flexDirection="row"
       height={3}
       justifyContent="space-between"
       paddingX={1}
     >
-      <text fg={color("muted")}>Tab Focus - Up/Down Change - Enter Action - Esc Back</text>
-      <text fg={validationCount ? color("warning") : color("success")}>
-        {validationCount ? `${validationCount} issue(s)` : "valid"}
-      </text>
-      <text fg={color("accent")}>
-        Step {currentIndex + 1}/{total}
-      </text>
+      <KeyHints
+        hints={[
+          { key: glyphs.tab, label: "focus" },
+          { key: glyphs.arrows, label: "move" },
+          { key: glyphs.enter, label: "select" },
+          { key: "?", label: "context" }
+        ]}
+      />
+      <box alignItems="center" flexDirection="row" gap={space.md}>
+        {validationCount > 0 ? (
+          <box backgroundColor={color("warning")} paddingX={1}>
+            <text fg={color("black")}>
+              {validationCount} {glyphs.warn}
+            </text>
+          </box>
+        ) : (
+          <text fg={color("success")}>{glyphs.done} valid</text>
+        )}
+        <text fg={color("accent")}>
+          Step {currentIndex + 1}/{total}
+        </text>
+      </box>
     </box>
   );
-}
-
-function stepMarker(done: boolean, active: boolean): string {
-  if (done) {
-    return "*";
-  }
-  if (active) {
-    return ">";
-  }
-  return "-";
-}
-
-function stepMarkerColor(done: boolean, active: boolean): string {
-  if (done) {
-    return color("success");
-  }
-  if (active) {
-    return color("accent");
-  }
-  return color("subtle");
 }

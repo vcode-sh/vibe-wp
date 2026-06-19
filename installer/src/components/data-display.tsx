@@ -4,17 +4,15 @@ import { useGlyphs } from "./glyph-context";
 
 type MetricTone = "accent" | "success" | "warning";
 
-export function Metric({
-  label,
-  value,
-  tone
-}: {
-  label: string;
-  value: string;
-  tone: MetricTone;
-}) {
+const TONE_GLYPH: Record<MetricTone, "ok" | "missing" | "bullet"> = {
+  accent: "bullet",
+  success: "ok",
+  warning: "missing"
+};
+
+export function Metric({ label, value, tone }: { label: string; value: string; tone: MetricTone }) {
   const glyphs = useGlyphs();
-  const marker = tone === "success" ? glyphs.ok : tone === "warning" ? glyphs.missing : glyphs.bullet;
+  const marker = glyphs[TONE_GLYPH[tone]];
   return (
     <box alignItems="center" flexDirection="row" flexGrow={1} gap={space.sm} paddingX={1}>
       <text fg={color(tone)}>{marker}</text>

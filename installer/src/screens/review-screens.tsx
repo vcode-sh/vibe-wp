@@ -1,7 +1,8 @@
 import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
-import { ActionRow, InfoGrid, Panel } from "../components/primitives";
+import { InfoGrid } from "../components/data-display";
+import { ActionRow, Panel } from "../components/primitives";
 
 export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenProps) {
   const envPaths = redactedPlan.envFiles.map((env) => env.path).join("\n");

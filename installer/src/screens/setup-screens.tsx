@@ -3,7 +3,8 @@ import type { ScreenProps } from "../app/screen-props";
 import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
-import { ActionRow, Field, InfoGrid, Metric, ToggleRow } from "../components/primitives";
+import { InfoGrid, Metric } from "../components/data-display";
+import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import type { InstallMode } from "../core/types";
 
 export function WelcomeScreen({ state, next }: ScreenProps) {

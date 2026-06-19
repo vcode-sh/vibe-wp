@@ -3,7 +3,8 @@ import type { ScreenProps } from "../app/screen-props";
 import { backupOptions, performanceOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
-import { ActionRow, Field, InfoGrid, ToggleRow } from "../components/primitives";
+import { InfoGrid } from "../components/data-display";
+import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { performanceValues } from "../core/defaults";
 import type { BackupPolicy, PerformancePreset } from "../core/types";
 
