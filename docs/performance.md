@@ -32,6 +32,30 @@ PHP_OPCACHE_REVALIDATE_FREQ=0
 
 Do not use those values for local theme and plugin editing unless you are comfortable restarting PHP-FPM after code changes.
 
+The VPS presets default to managed WordPress mode, so production keeps timestamp validation enabled with a longer revalidate interval. That allows plugin and theme updates from wp-admin without requiring a PHP-FPM restart.
+
+### Reading WordPress Site Health
+
+Healthy OPcache signals for a normal WordPress site:
+
+- OPcache is enabled.
+- Memory usage is well below the configured limit.
+- Interned strings usage is well below the configured limit.
+- The cache is not full.
+- Hit rate rises after warmup and stays high under normal traffic.
+
+For example, `60 MB of 256 MB` memory usage, `35% of 32 MB` interned strings usage, and `Is the Opcode cache full? No` are healthy. They mean the cache has plenty of headroom and does not need more memory yet.
+
+The hit rate can be lower right after container restarts, plugin updates, theme edits, cache resets, or heavy wp-admin work. On a warmed production site it should trend very high. If it remains below roughly `98%` during normal anonymous and logged-in traffic, investigate cold restarts, too many uncached script variants, plugin churn, or an undersized `PHP_OPCACHE_MAX_ACCELERATED_FILES`.
+
+Vibe WP intentionally keeps:
+
+- `opcache.save_comments=1`, because WordPress plugins and PHP libraries can rely on PHP comments and annotations.
+- `opcache.enable_file_override=0`, because stale file-existence checks are not worth the compatibility risk.
+- `opcache.jit=0`, because WordPress is usually database, filesystem, and network bound rather than CPU-bound PHP numeric code.
+
+`make doctor-runtime` verifies the OPcache baseline from the rendered PHP configuration so future env changes do not silently disable the WordPress-safe defaults.
+
 ## PHP-FPM
 
 Start with:

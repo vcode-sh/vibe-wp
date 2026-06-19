@@ -1,14 +1,12 @@
 #!/usr/bin/env sh
 set -eu
 
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker is required to run WP-CLI." >&2
   exit 1
 fi
 
-if [ ! -f .env ]; then
-  echo ".env is missing. Run make init first." >&2
-  exit 1
-fi
-
-exec docker compose run --rm wp "$@"
+vibe_wp "$@"

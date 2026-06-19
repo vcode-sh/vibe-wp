@@ -1,6 +1,31 @@
 #!/usr/bin/env sh
 set -eu
 
+file_env() {
+  var="$1"
+  file_var="${var}_FILE"
+  value="${2:-}"
+
+  eval "current_value=\"\${${var}:-}\""
+  eval "file_value=\"\${${file_var}:-}\""
+
+  if [ -n "${current_value}" ] && [ -n "${file_value}" ]; then
+    echo "Both ${var} and ${file_var} are set; use only one." >&2
+    exit 1
+  fi
+
+  if [ -n "${file_value}" ]; then
+    value="$(cat "${file_value}")"
+  elif [ -n "${current_value}" ]; then
+    value="${current_value}"
+  fi
+
+  export "${var}=${value}"
+  unset "${file_var}"
+}
+
+file_env REDIS_PASSWORD
+
 export REDIS_BIND="${REDIS_BIND:-0.0.0.0}"
 export REDIS_PORT="${REDIS_PORT:-6379}"
 export REDIS_PROTECTED_MODE="${REDIS_PROTECTED_MODE:-yes}"

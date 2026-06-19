@@ -1,19 +1,77 @@
 #!/usr/bin/env sh
 set -eu
 
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+label=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --label)
+      label="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage:
+  ./bin/backup [--label LABEL]
+
+Creates a backup for the selected VIBE_ENV. The archive is written under:
+  backups/<env>/<timestamp>[-label]/
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
 timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
-target="backups/${timestamp}"
+safe_env="$(printf '%s' "${VIBE_ENV}" | tr -c 'A-Za-z0-9_.-' '-')"
+safe_label="$(printf '%s' "${label}" | tr -c 'A-Za-z0-9_.-' '-')"
+
+if [ -n "${safe_label}" ]; then
+  target="backups/${safe_env}/${timestamp}-${safe_label}"
+else
+  target="backups/${safe_env}/${timestamp}"
+fi
 
 mkdir -p "${target}"
 
+vibe_require_env_file
+services="wordpress"
+if vibe_compose_service_exists db; then
+  services="db ${services}"
+fi
+if vibe_compose_service_exists redis; then
+  services="redis ${services}"
+fi
+# shellcheck disable=SC2086
+vibe_compose up -d ${services} >/dev/null
+
 echo "Dumping MariaDB..."
-docker compose exec -T db sh -c 'mariadb-dump --single-transaction --routines --triggers -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' | gzip > "${target}/database.sql.gz"
+database_sql="${target}/database.sql"
+if vibe_compose_service_exists db; then
+  vibe_compose exec -T db sh -c 'mariadb-dump --single-transaction --routines --triggers -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' > "${database_sql}"
+else
+  vibe_wp_stdin db export - --single-transaction --routines --triggers > "${database_sql}"
+fi
+gzip -f "${database_sql}"
 
 echo "Archiving wp-content..."
-tar -czf "${target}/wp-content.tar.gz" -C content .
+vibe_compose exec -T wordpress tar -czf - -C /var/www/html/wp-content . > "${target}/wp-content.tar.gz"
+
+wp_home="$(vibe_env_value WP_HOME 2>/dev/null || true)"
+project_name="$(vibe_env_value COMPOSE_PROJECT_NAME 2>/dev/null || true)"
 
 cat > "${target}/manifest.txt" <<EOF
 created_at=${timestamp}
+environment=${VIBE_ENV}
+compose_project_name=${project_name}
+wp_home=${wp_home}
 database=database.sql.gz
 wp_content=wp-content.tar.gz
 EOF

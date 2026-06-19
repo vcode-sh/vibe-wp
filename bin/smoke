@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
 failures=0
 
 fail() {
@@ -14,20 +17,18 @@ ok() {
 
 site_url="${WP_HOME:-http://localhost:${HTTP_PORT:-8080}}"
 
-if [ -f .env ]; then
-  set -a
-  . ./.env
-  set +a
+if [ -f "${VIBE_ENV_FILE}" ]; then
+  vibe_load_env
   site_url="${WP_HOME:-${site_url}}"
 fi
 
-if ./bin/doctor-runtime; then
+if "${VIBE_BIN_DIR}/doctor-runtime"; then
   ok "runtime doctor"
 else
   fail "runtime doctor"
 fi
 
-docker compose exec -T nginx sh -c 'rm -rf /var/cache/nginx/wordpress/*' >/dev/null 2>&1 || true
+vibe_clear_nginx_cache
 
 first_headers="$(mktemp)"
 second_headers="$(mktemp)"
@@ -51,7 +52,7 @@ else
   fail "Nginx FastCGI cache did not reach HIT"
 fi
 
-if ./bin/wp eval '$u = wp_upload_dir("2099/12"); if ($u["error"]) { fwrite(STDERR, $u["error"] . PHP_EOL); exit(1); } file_put_contents($u["path"] . "/vibe-wp-smoke.txt", "ok"); echo $u["path"];' >/tmp/vibe-wp-smoke-upload-path 2>/tmp/vibe-wp-smoke-upload-error; then
+if vibe_wp eval '$u = wp_upload_dir("2099/12"); if ($u["error"]) { fwrite(STDERR, $u["error"] . PHP_EOL); exit(1); } file_put_contents($u["path"] . "/vibe-wp-smoke.txt", "ok"); echo $u["path"];' >/tmp/vibe-wp-smoke-upload-path 2>/tmp/vibe-wp-smoke-upload-error; then
   upload_path="$(cat /tmp/vibe-wp-smoke-upload-path)"
   ok "WordPress can create future year/month upload directories"
 else
@@ -61,13 +62,13 @@ else
 fi
 
 if [ -n "${upload_path}" ]; then
-  if docker compose exec -T wordpress sh -lc 'test "$(stat -c "%U:%G %a" /var/www/html/wp-content/uploads/2099/12/vibe-wp-smoke.txt)" = "www-data:www-data 644"'; then
+  if vibe_compose exec -T wordpress sh -lc 'test "$(stat -c "%U:%G %a" /var/www/html/wp-content/uploads/2099/12/vibe-wp-smoke.txt)" = "www-data:www-data 644"'; then
     ok "upload smoke file owner/mode is www-data:www-data 644"
   else
     fail "upload smoke file owner/mode is unexpected"
   fi
 
-  docker compose exec -T wordpress sh -lc 'rm -f /var/www/html/wp-content/uploads/2099/12/vibe-wp-smoke.txt; rmdir /var/www/html/wp-content/uploads/2099/12 /var/www/html/wp-content/uploads/2099 2>/dev/null || true' >/dev/null 2>&1 || true
+  vibe_compose exec -T wordpress sh -lc 'rm -f /var/www/html/wp-content/uploads/2099/12/vibe-wp-smoke.txt; rmdir /var/www/html/wp-content/uploads/2099/12 /var/www/html/wp-content/uploads/2099 2>/dev/null || true' >/dev/null 2>&1 || true
 fi
 
 rm -f /tmp/vibe-wp-smoke-upload-path /tmp/vibe-wp-smoke-upload-error

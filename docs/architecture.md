@@ -13,6 +13,7 @@ Workers and tools:
   - cron runs due WordPress events through WP-CLI.
   - wp is an on-demand WP-CLI service.
   - adminer is an optional tools profile.
+  - bin/vibe selects local, stage, prod, or external Compose environments.
 ```
 
 ## Services
@@ -89,4 +90,4 @@ Custom project code should live in:
 - `content/plugins`
 - `content/mu-plugins`
 
-For production teams that want immutable deploys, move custom themes/plugins into a separate build step and treat this template as the runtime substrate.
+The default VPS operating model is managed WordPress: WordPress core is image-managed, while plugins, themes, uploads, and MU plugins live in persistent `wp-content`. See [staging.md](staging.md) for staging refresh and promotion workflows.

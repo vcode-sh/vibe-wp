@@ -6,11 +6,14 @@
 - Nginx with FastCGI page cache for anonymous traffic.
 - MariaDB LTS with rendered WordPress-oriented performance config.
 - Redis 8 object cache with a rendered performance config and the PhpRedis extension.
+- WordPress 7.0 AI plugin and default Anthropic, Google, and OpenAI connector plugins.
 - Separate runtime surfaces for uploads, plugins, themes, and MU plugins.
 - Dedicated cron worker instead of request-triggered WP-Cron.
-- WP-CLI, Adminer, backup tooling, and configuration from `.env`.
+- Environment-aware WP-CLI, Adminer, backup/restore, staging refresh, and managed WordPress workflows.
 
 ## Quick Start
+
+If you are not technical, start with [docs/quick-start-for-site-owners.md](docs/quick-start-for-site-owners.md). It explains local use, VPS setup, staging, backups, and safe plugin/theme updates without Docker internals.
 
 ```sh
 make init
@@ -24,6 +27,8 @@ Open:
 - Adminer: `make tools`, then http://localhost:8081
 
 The generated `.env` contains database passwords, Redis password, WordPress salts, and a local admin password. The admin values are printed by `make install`.
+
+`make install` also installs the baseline plugins, activates the WordPress AI connector plugins, enables Redis Object Cache, and removes Hello Dolly plus old bundled default themes.
 
 ## Repository Layout
 
@@ -52,7 +57,9 @@ make doctor-runtime
 make smoke
 make cache-enable
 make backup
-make restore BACKUP=backups/<timestamp> ARGS="--yes"
+make restore BACKUP=backups/local/<timestamp> ARGS="--yes"
+./bin/vibe stage refresh-from-prod --yes
+./bin/vibe stage promote-files-to-prod --yes
 make down
 ```
 
@@ -74,10 +81,11 @@ See [docs/configuration.md](docs/configuration.md) for the complete contract, [d
 ## Deployment Modes
 
 - Local/dev: `docker compose up -d --build`
-- Production volume preset: `docker compose -f compose.yaml -f compose.prod.yaml up -d --build`
-- External MariaDB/Redis preset: `docker compose -f compose.external.yaml up -d --build`
+- Production volume preset: `./bin/vibe prod up`
+- Staging volume preset: `./bin/vibe stage up`
+- External MariaDB/Redis preset: `./bin/vibe external up`
 
-See [docs/deployment.md](docs/deployment.md).
+See [docs/deployment.md](docs/deployment.md) and [docs/staging.md](docs/staging.md).
 
 ## Research Baseline
 

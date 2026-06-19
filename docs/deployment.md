@@ -23,8 +23,8 @@ This mode uses:
 Use the production override when the stack should manage MariaDB and Redis locally, but `wp-content` should live in a Docker named volume instead of the repository checkout:
 
 ```sh
-cp .env.production.example .env
-docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+make init-prod
+./bin/vibe prod up
 ```
 
 The production override changes:
@@ -33,18 +33,48 @@ The production override changes:
 - `WP_ENVIRONMENT_TYPE=production`
 - `FORCE_SSL_ADMIN=1`
 - `NGINX_ENABLE_HSTS=1`
-- `PHP_OPCACHE_VALIDATE_TIMESTAMPS=0`
-- `PHP_OPCACHE_REVALIDATE_FREQ=0`
+- `WP_AUTO_UPDATE_CORE=false`
+- `PHP_OPCACHE_VALIDATE_TIMESTAMPS=1`
+- `PHP_OPCACHE_REVALIDATE_FREQ=60`
 
 Only enable HSTS after the public HTTPS domain is permanently configured.
+
+Production uses managed WordPress mode: plugins and themes can be updated in wp-admin, while WordPress core is upgraded by changing `WORDPRESS_IMAGE` and rebuilding the stack.
+
+## Staging Preset
+
+Use staging as a second isolated Compose project on the same VPS:
+
+```sh
+make init-stage
+./bin/vibe stage up
+./bin/vibe stage install
+```
+
+Then refresh staging from production:
+
+```sh
+./bin/vibe stage refresh-from-prod --yes
+```
+
+Staging uses:
+
+- `COMPOSE_PROJECT_NAME=vibe-wp-stage`
+- its own database volume
+- its own Redis volume
+- its own `wp_content` volume
+- `WP_ENVIRONMENT_TYPE=staging`
+- noindex and outbound-mail safeguards
+
+See [staging.md](staging.md).
 
 ## External MariaDB And Redis
 
 Use the external stack when MariaDB and Redis are provided by a hosting platform, Dokploy services, a managed database, or another Compose project:
 
 ```sh
-cp .env.external.example .env
-docker compose -f compose.external.yaml up -d --build
+cp env/external.env.example env/external.env
+./bin/vibe external up
 ```
 
 This mode includes only:
@@ -73,6 +103,13 @@ After deploy:
 ```sh
 make doctor-runtime
 make smoke
+```
+
+Environment-aware validation:
+
+```sh
+./bin/vibe prod smoke
+./bin/vibe stage smoke
 ```
 
 For production override config validation:

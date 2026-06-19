@@ -53,6 +53,34 @@ Sources:
 - https://hub.docker.com/_/wordpress
 - https://github.com/docker-library/wordpress/blob/master/wp-config-docker.php
 
+## WordPress 7.0 AI Baseline
+
+WordPress 7.0 includes the AI Client foundation in core, but user-facing AI features still require plugins. The canonical WordPress.org `ai` plugin provides the AI admin/editor experience, while provider connectors register specific AI services with the WordPress AI Client.
+
+The WordPress AI team identifies Anthropic, Google, and OpenAI connector plugins as the default connector options surfaced in WordPress 7.0. The template therefore installs and activates:
+
+- `ai`
+- `ai-provider-for-anthropic`
+- `ai-provider-for-google`
+- `ai-provider-for-openai`
+
+The provider plugins support environment-provided API keys:
+
+- `ANTHROPIC_API_KEY`
+- `GOOGLE_API_KEY`
+- `OPENAI_API_KEY`
+
+These keys are optional. Without credentials, the plugins are present and ready, but AI requests cannot be completed.
+
+Sources:
+
+- https://make.wordpress.org/core/2026/03/24/introducing-the-ai-client-in-wordpress-7-0/
+- https://make.wordpress.org/ai/2026/03/25/call-for-testing-community-ai-connector-plugins/
+- https://wordpress.org/plugins/ai/
+- https://wordpress.org/plugins/ai-provider-for-anthropic/
+- https://wordpress.org/plugins/ai-provider-for-google/
+- https://wordpress.org/plugins/ai-provider-for-openai/
+
 ## MariaDB
 
 The official MariaDB image provides `latest` and `lts` tags. Docker Hub currently maps the LTS family to MariaDB 12.3.x, and this template uses the `12.3` series by default while keeping the image configurable through `.env`.

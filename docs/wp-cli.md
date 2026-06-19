@@ -5,9 +5,11 @@ WP-CLI is a first-class part of this template. It is installed in the custom Wor
 ```sh
 ./bin/wp
 make wp ARGS="..."
+./bin/vibe stage wp plugin list
+./bin/vibe prod wp redis status
 ```
 
-Both forms run inside Docker Compose. They do not use a host-installed `wp` binary.
+All forms run inside Docker Compose. They do not use a host-installed `wp` binary.
 
 ## Why This Shape
 
@@ -52,6 +54,13 @@ The service also bootstraps the official WordPress files and `wp-config.php` bef
 ```
 
 Use `make backup` for a file-based database and `wp-content` backup.
+
+For staging and production, prefer the environment-aware form:
+
+```sh
+./bin/vibe prod backup
+./bin/vibe stage backup
+```
 
 ## URL Migration
 

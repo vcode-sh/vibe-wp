@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
 failures=0
 
 check_command() {
@@ -15,10 +18,10 @@ check_command() {
 check_command docker
 check_command openssl
 
-if [ -f .env ]; then
-  echo "ok: .env exists"
+if [ -f "${VIBE_ENV_FILE}" ]; then
+  echo "ok: ${VIBE_ENV_FILE} exists"
 else
-  echo "missing: .env. Run make init." >&2
+  echo "missing: ${VIBE_ENV_FILE}. Run make init, make init-prod, or make init-stage." >&2
   failures=$((failures + 1))
 fi
 
@@ -31,8 +34,8 @@ for dir in content/uploads content/plugins content/themes content/mu-plugins bac
   fi
 done
 
-if docker compose config >/tmp/vibe-wp-compose-config.$$ 2>/tmp/vibe-wp-compose-config.err.$$; then
-  echo "ok: docker compose config"
+if vibe_compose config >/tmp/vibe-wp-compose-config.$$ 2>/tmp/vibe-wp-compose-config.err.$$; then
+  echo "ok: docker compose config for ${VIBE_ENV}"
 else
   echo "failed: docker compose config" >&2
   cat /tmp/vibe-wp-compose-config.err.$$ >&2 || true

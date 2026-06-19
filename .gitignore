@@ -21,7 +21,15 @@ content/mu-plugins/*
 !content/plugins/.gitkeep
 !content/themes/.gitkeep
 !content/mu-plugins/.gitkeep
+!content/mu-plugins/vibe-wp-environment.php
+!content/mu-plugins/vibe-wp-loopback.php
 !content/mu-plugins/vibe-wp-redis.php
+
+env/*.env
+!env/*.env.example
+
+secrets/*
+!secrets/.gitkeep
 
 *.log
 tmp/

@@ -42,6 +42,7 @@ COPY entrypoint.sh /usr/local/bin/vibe-wp-entrypoint.sh
 COPY cron.sh /usr/local/bin/vibe-wp-cron.sh
 COPY php.ini.template /usr/local/share/vibe-wp/php.ini.template
 COPY php-fpm-www.conf.template /usr/local/share/vibe-wp/php-fpm-www.conf.template
+COPY mu-plugins/ /usr/local/share/vibe-wp/mu-plugins/
 
 RUN chmod +x /usr/local/bin/vibe-wp-entrypoint.sh /usr/local/bin/vibe-wp-cron.sh
 

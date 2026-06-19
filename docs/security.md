@@ -10,6 +10,20 @@ make init
 
 to generate local secrets.
 
+For VPS environments, generate and keep these files off Git:
+
+```sh
+make init-prod
+make init-stage
+```
+
+This creates:
+
+- `env/prod.env`
+- `env/stage.env`
+
+The repository tracks only `env/*.env.example`.
+
 The generated values include:
 
 - MariaDB user password
@@ -53,6 +67,8 @@ NGINX_ENABLE_HSTS=1
 ## Redis
 
 Redis is internal to the Compose network and password-protected. Do not publish port `6379` to the internet.
+
+The custom Redis entrypoint also supports `REDIS_PASSWORD_FILE` for secret-file based deployments.
 
 ## Database
 

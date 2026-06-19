@@ -1,8 +1,59 @@
 #!/usr/bin/env sh
 set -eu
 
-if [ -f .env ] && [ "${1:-}" != "--force" ]; then
-  echo ".env already exists. Use ./bin/init-env --force to replace it." >&2
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/init-env [--force] [--template FILE] [--target FILE]
+
+Defaults:
+  --template .env.example
+  --target .env
+
+Examples:
+  ./bin/init-env
+  ./bin/init-env --template env/prod.env.example --target env/prod.env
+  ./bin/init-env --template env/stage.env.example --target env/stage.env
+USAGE
+}
+
+force=0
+template=".env.example"
+target=".env"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --force)
+      force=1
+      shift
+      ;;
+    --template)
+      template="${2:-}"
+      shift 2
+      ;;
+    --target)
+      target="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ ! -f "${template}" ]; then
+  echo "Template not found: ${template}" >&2
+  exit 1
+fi
+
+if [ -f "${target}" ] && [ "${force}" != "1" ]; then
+  echo "${target} already exists. Use ./bin/init-env --force --target ${target} to replace it." >&2
   exit 1
 fi
 
@@ -61,11 +112,16 @@ while IFS= read -r line || [ -n "${line}" ]; do
   done
 
   printf '%s\n' "${line}" >> "${tmp_file}"
-done < .env.example
+done < "${template}"
 
-mv "${tmp_file}" .env
+target_dir="$(dirname -- "${target}")"
+if [ "${target_dir}" != "." ]; then
+  mkdir -p "${target_dir}"
+fi
+
+mv "${tmp_file}" "${target}"
 mkdir -p content/uploads content/plugins content/themes content/mu-plugins backups
 
-echo "Created .env with generated local secrets."
+echo "Created ${target} with generated secrets."
 echo "WordPress admin user: admin"
 echo "WordPress admin password: ${admin_password}"

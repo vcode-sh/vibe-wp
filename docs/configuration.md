@@ -27,6 +27,9 @@ Production and external-service examples are available in:
 
 - `.env.production.example`
 - `.env.external.example`
+- `env/prod.env.example`
+- `env/stage.env.example`
+- `env/external.env.example`
 
 ## Public URL
 
@@ -163,6 +166,57 @@ The template generates common constants from env:
 - Redis constants
 
 Use `WORDPRESS_CONFIG_EXTRA` only for project-specific constants not already covered.
+
+## Managed WordPress Mode
+
+The VPS presets assume managed WordPress:
+
+```env
+DISALLOW_FILE_EDIT=1
+DISALLOW_FILE_MODS=0
+WP_AUTO_UPDATE_CORE=false
+PHP_OPCACHE_VALIDATE_TIMESTAMPS=1
+PHP_OPCACHE_REVALIDATE_FREQ=60
+```
+
+This allows plugin and theme updates while keeping WordPress core image-managed. Do not enable WordPress core auto-updates unless `/var/www/html` is made persistent intentionally; otherwise core updates made inside a running container can disappear after an image recreate.
+
+Staging additionally uses:
+
+```env
+WP_ENVIRONMENT_TYPE=staging
+VIBE_WP_FORCE_NOINDEX=1
+VIBE_WP_DISABLE_OUTBOUND_MAIL=1
+VIBE_WP_INTERNAL_URL=http://nginx:8080
+```
+
+`VIBE_WP_INTERNAL_URL` is the internal Docker URL used for WordPress self-requests such as REST API checks and loopback requests. Keep `WP_HOME` and `WP_SITEURL` as the public browser URL; do not change them to `http://nginx:8080`.
+
+## Baseline Plugins And Themes
+
+`make install` applies a repeatable WordPress baseline after core installation:
+
+```env
+VIBE_WP_REQUIRED_PLUGINS=redis-cache,ai,ai-provider-for-anthropic,ai-provider-for-google,ai-provider-for-openai
+VIBE_WP_REMOVE_PLUGINS=hello,hello-dolly
+VIBE_WP_REMOVE_THEMES=twentytwentythree,twentytwentyfour
+```
+
+Required plugins are installed and activated idempotently. The default required set includes Redis Object Cache, the canonical WordPress AI plugin, and the WordPress 7.0 AI connector plugins for Anthropic, Google, and OpenAI.
+
+Unwanted plugins are deactivated and deleted when present. Unwanted themes are deleted only when they are inactive; the installer will not remove the active theme because that can break a live site.
+
+The WordPress image entrypoint also excludes Hello Dolly and the Twenty Twenty-Three and Twenty Twenty-Four themes from the default WordPress content seed, so they do not reappear after container recreation.
+
+AI connector credentials are optional:
+
+```env
+OPENAI_API_KEY=
+GOOGLE_API_KEY=
+ANTHROPIC_API_KEY=
+```
+
+Leave them empty when the site owner will configure connectors manually in `Settings -> Connectors`. Set them in the environment when the server operator should provide managed connector credentials.
 
 ## Content Permissions
 

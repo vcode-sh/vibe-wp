@@ -1,0 +1,119 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/vibe <local|stage|prod|external> <command> [args...]
+
+Commands:
+  compose <args...>          Run docker compose for the selected environment
+  config                     Validate the selected Compose config
+  up [services...]           Start the selected environment
+  down [args...]             Stop the selected environment
+  restart [services...]      Restart services
+  ps                         Show service status
+  logs [args...]             Follow logs
+  install                    Install WordPress and Redis Object Cache
+  wp <args...>               Run WP-CLI
+  backup [args...]           Create a DB and wp-content backup
+  restore <backup> [args...] Restore a backup
+  doctor-runtime             Run runtime checks
+  smoke                      Run smoke tests
+  cache-flush                Flush object cache and Nginx page cache
+  refresh-from-prod --yes    Refresh this staging env from prod
+  promote-files-to-prod --yes Promote managed plugin/theme files to prod
+  env <KEY>                  Print a value from the selected env file
+USAGE
+}
+
+if [ "$#" -lt 2 ]; then
+  usage >&2
+  exit 1
+fi
+
+export VIBE_ENV="$1"
+shift
+
+command="$1"
+shift
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+case "${command}" in
+  compose)
+    vibe_compose "$@"
+    ;;
+  config)
+    if [ ! -f "${VIBE_ENV_FILE}" ] && [ -f "${VIBE_ENV_FILE}.example" ]; then
+      VIBE_ENV_FILE="${VIBE_ENV_FILE}.example"
+    fi
+    vibe_compose config >/dev/null
+    echo "${VIBE_ENV} compose config ok"
+    ;;
+  up)
+    vibe_require_env_file
+    vibe_compose up -d --build "$@"
+    if [ "$#" -eq 0 ] || printf '%s\n' "$@" | grep -qx wordpress; then
+      vibe_compose restart nginx >/dev/null 2>&1 || true
+    fi
+    ;;
+  down)
+    vibe_compose down "$@"
+    ;;
+  restart)
+    vibe_compose restart "$@"
+    ;;
+  ps)
+    vibe_compose ps "$@"
+    ;;
+  logs)
+    vibe_compose logs -f --tail=200 "$@"
+    ;;
+  install)
+    "${VIBE_BIN_DIR}/install-wordpress" "$@"
+    ;;
+  wp)
+    vibe_wp "$@"
+    ;;
+  backup)
+    "${VIBE_BIN_DIR}/backup" "$@"
+    ;;
+  restore)
+    "${VIBE_BIN_DIR}/restore" "$@"
+    ;;
+  doctor-runtime)
+    "${VIBE_BIN_DIR}/doctor-runtime" "$@"
+    ;;
+  smoke)
+    "${VIBE_BIN_DIR}/smoke" "$@"
+    ;;
+  cache-flush)
+    vibe_wp cache flush >/dev/null || true
+    vibe_clear_nginx_cache
+    echo "Caches flushed for ${VIBE_ENV}."
+    ;;
+  refresh-from-prod)
+    "${VIBE_BIN_DIR}/stage-refresh" --stage "${VIBE_ENV}" "$@"
+    ;;
+  promote-files-to-prod)
+    "${VIBE_BIN_DIR}/stage-promote-files" --stage "${VIBE_ENV}" "$@"
+    ;;
+  env)
+    if [ "$#" -ne 1 ]; then
+      echo "Usage: ./bin/vibe ${VIBE_ENV} env <KEY>" >&2
+      exit 1
+    fi
+    vibe_env_value "$1"
+    printf '\n'
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: ${command}" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

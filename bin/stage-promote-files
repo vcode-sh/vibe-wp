@@ -1,0 +1,100 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/stage-promote-files --yes [--stage stage] [--prod prod]
+
+Promotes managed WordPress code files from staging to production:
+  - plugins
+  - themes
+  - mu-plugins
+
+It does not copy uploads and does not copy the database.
+USAGE
+}
+
+stage_env="stage"
+prod_env="prod"
+confirm=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --yes)
+      confirm=1
+      shift
+      ;;
+    --stage)
+      stage_env="${2:-}"
+      shift 2
+      ;;
+    --prod)
+      prod_env="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ "${confirm}" != "1" ]; then
+  echo "Refusing to promote staging files without --yes." >&2
+  usage >&2
+  exit 1
+fi
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+tmp_file="$(mktemp)"
+trap 'rm -f "${tmp_file}"' EXIT INT TERM
+
+echo "Creating production safety backup from ${prod_env}..."
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/backup" --label pre-stage-file-promote
+
+echo "Exporting managed wp-content files from ${stage_env}..."
+VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" compose up -d wordpress >/dev/null
+VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" compose exec -T wordpress sh -lc '
+  cd /var/www/html/wp-content
+  set -- plugins themes mu-plugins
+  existing=""
+  for path in "$@"; do
+    if [ -e "$path" ]; then
+      existing="${existing} ${path}"
+    fi
+  done
+  if [ -z "${existing}" ]; then
+    exit 2
+  fi
+  # shellcheck disable=SC2086
+  tar -czf - ${existing}
+' > "${tmp_file}"
+
+echo "Importing managed wp-content files into ${prod_env}..."
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose up -d wordpress nginx cron >/dev/null
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose exec -T wordpress sh -lc '
+  cd /var/www/html/wp-content
+  for path in plugins themes mu-plugins; do
+    if [ -e "$path" ]; then
+      find "$path" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    else
+      mkdir -p "$path"
+    fi
+  done
+'
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose exec -T wordpress tar -xzf - -C /var/www/html/wp-content < "${tmp_file}"
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose up -d --force-recreate wordpress cron >/dev/null
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" compose restart nginx >/dev/null
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" wp cache flush >/dev/null || true
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" cache-flush >/dev/null || true
+
+echo "Running production smoke test..."
+VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/smoke"
+
+echo "Managed WordPress files promoted from ${stage_env} to ${prod_env}."

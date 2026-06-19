@@ -37,7 +37,14 @@ mkdir -p \
   /var/www/html/wp-content/mu-plugins \
   /var/www/html/wp-content/upgrade
 
-rsync -a --ignore-existing /usr/src/wordpress/wp-content/ /var/www/html/wp-content/
+rsync -a --ignore-existing \
+  --exclude='plugins/hello.php' \
+  --exclude='plugins/hello' \
+  --exclude='plugins/hello-dolly' \
+  --exclude='themes/twentytwentythree' \
+  --exclude='themes/twentytwentyfour' \
+  /usr/src/wordpress/wp-content/ /var/www/html/wp-content/
+rsync -a --ignore-existing /usr/local/share/vibe-wp/mu-plugins/ /var/www/html/wp-content/mu-plugins/
 
 if [ ! -f /var/www/html/wp-includes/version.php ]; then
   find /usr/src/wordpress -mindepth 1 -maxdepth 1 ! -name wp-content -exec cp -a {} /var/www/html/ \;
@@ -47,10 +54,16 @@ if [ ! -f /var/www/html/wp-config.php ] && [ -f /usr/src/wordpress/wp-config-doc
   cp /usr/src/wordpress/wp-config-docker.php /var/www/html/wp-config.php
 fi
 
-if [ "${WP_CONTENT_FIX_PERMISSIONS:-1}" = "1" ] && [ "${1:-}" != "wp" ]; then
-  chown -R www-data:www-data /var/www/html/wp-content || true
-  find /var/www/html/wp-content -type d -exec chmod u+rwX,go+rX,go-w {} + || true
-  find /var/www/html/wp-content -type f -exec chmod u+rw,go+r,go-w {} + || true
+if [ "${WP_CONTENT_FIX_PERMISSIONS:-1}" = "1" ]; then
+  if [ "${1:-}" != "wp" ]; then
+    chown -R www-data:www-data /var/www/html/wp-content || true
+    find /var/www/html/wp-content -type d -exec chmod u+rwX,go+rX,go-w {} + || true
+    find /var/www/html/wp-content -type f -exec chmod u+rw,go+r,go-w {} + || true
+  else
+    chown www-data:www-data /var/www/html/wp-content/mu-plugins /var/www/html/wp-content/mu-plugins/vibe-wp-*.php 2>/dev/null || true
+    chmod u+rwX,go+rX,go-w /var/www/html/wp-content/mu-plugins 2>/dev/null || true
+    chmod u+rw,go+r,go-w /var/www/html/wp-content/mu-plugins/vibe-wp-*.php 2>/dev/null || true
+  fi
 fi
 
 envsubst '

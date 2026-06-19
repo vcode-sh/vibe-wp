@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
 failures=0
 
 fail() {
@@ -12,9 +15,17 @@ ok() {
   echo "ok: $*"
 }
 
+vibe_wp_list() {
+  printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d'
+}
+
 require_service() {
   service="$1"
-  if docker compose ps --status running --services 2>/dev/null | grep -qx "${service}"; then
+  if ! vibe_compose_service_exists "${service}"; then
+    return 0
+  fi
+
+  if vibe_compose_service_running "${service}"; then
     ok "${service} is running"
   else
     fail "${service} is not running"
@@ -26,87 +37,175 @@ require_service redis
 require_service wordpress
 require_service nginx
 
-if docker compose exec -T db healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
-  ok "MariaDB healthcheck passes"
-else
-  fail "MariaDB healthcheck failed"
+if vibe_compose_service_exists db; then
+  if vibe_compose exec -T db healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+    ok "MariaDB healthcheck passes"
+  else
+    fail "MariaDB healthcheck failed"
+  fi
+
+  if vibe_compose exec -T db test -s /etc/mysql/conf.d/z-vibe-wp.cnf >/dev/null 2>&1; then
+    ok "MariaDB rendered config is present"
+  else
+    fail "MariaDB rendered config is missing"
+  fi
+
+  db_runtime_values='SELECT @@character_set_server, @@collation_server, @@innodb_file_per_table, @@skip_name_resolve, @@innodb_flush_log_at_trx_commit;'
+  if vibe_compose exec -T db sh -c 'mariadb -N -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$0"' "${db_runtime_values}" 2>/dev/null | grep -Eq '^utf8mb4[[:space:]]+utf8mb4_unicode_ci[[:space:]]+1[[:space:]]+1[[:space:]]+1$'; then
+    ok "MariaDB WordPress baseline variables are active"
+  else
+    fail "MariaDB WordPress baseline variables are not active"
+  fi
 fi
 
-if docker compose exec -T db test -s /etc/mysql/conf.d/z-vibe-wp.cnf >/dev/null 2>&1; then
-  ok "MariaDB rendered config is present"
+if vibe_wp db check >/dev/null 2>&1; then
+  ok "WordPress database connection works"
 else
-  fail "MariaDB rendered config is missing"
+  fail "WordPress database connection failed"
 fi
 
-db_runtime_values='SELECT @@character_set_server, @@collation_server, @@innodb_file_per_table, @@skip_name_resolve, @@innodb_flush_log_at_trx_commit;'
-if docker compose exec -T db sh -c 'mariadb -N -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" -e "$0"' "${db_runtime_values}" 2>/dev/null | grep -Eq '^utf8mb4[[:space:]]+utf8mb4_unicode_ci[[:space:]]+1[[:space:]]+1[[:space:]]+1$'; then
-  ok "MariaDB WordPress baseline variables are active"
-else
-  fail "MariaDB WordPress baseline variables are not active"
-fi
+if vibe_compose_service_exists redis; then
+  if vibe_compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG' >/dev/null 2>&1; then
+    ok "Redis responds to authenticated ping"
+  else
+    fail "Redis ping failed"
+  fi
 
-if docker compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping 2>/dev/null | grep -q PONG' >/dev/null 2>&1; then
-  ok "Redis responds to authenticated ping"
-else
-  fail "Redis ping failed"
-fi
+  if vibe_compose exec -T redis test -s /usr/local/etc/redis/redis.conf >/dev/null 2>&1; then
+    ok "Redis rendered config is present"
+  else
+    fail "Redis rendered config is missing"
+  fi
 
-if docker compose exec -T redis test -s /usr/local/etc/redis/redis.conf >/dev/null 2>&1; then
-  ok "Redis rendered config is present"
-else
-  fail "Redis rendered config is missing"
-fi
-
-redis_runtime_check='
+  redis_runtime_check='
 policy="$(redis-cli -a "$REDIS_PASSWORD" --raw CONFIG GET maxmemory-policy 2>/dev/null | sed -n "2p")"
 memory="$(redis-cli -a "$REDIS_PASSWORD" --raw CONFIG GET maxmemory 2>/dev/null | sed -n "2p")"
 appendonly="$(redis-cli -a "$REDIS_PASSWORD" --raw CONFIG GET appendonly 2>/dev/null | sed -n "2p")"
 test "$policy" = "$REDIS_MAXMEMORY_POLICY" && test "$memory" -gt 0 && test "$appendonly" = "$REDIS_APPENDONLY"
 '
-if docker compose exec -T redis sh -c "${redis_runtime_check}" >/dev/null 2>&1; then
-  ok "Redis cache runtime settings are active"
-else
-  fail "Redis cache runtime settings are not active"
+  if vibe_compose exec -T redis sh -c "${redis_runtime_check}" >/dev/null 2>&1; then
+    ok "Redis cache runtime settings are active"
+  else
+    fail "Redis cache runtime settings are not active"
+  fi
 fi
 
-if ./bin/wp core is-installed >/dev/null 2>&1; then
+if vibe_wp core is-installed >/dev/null 2>&1; then
   ok "WordPress is installed"
 else
   fail "WordPress is not installed"
 fi
 
-if ./bin/wp redis status 2>/dev/null | grep -q '^Status: Connected'; then
+required_plugins="$(vibe_env_value VIBE_WP_REQUIRED_PLUGINS)"
+required_plugins="${required_plugins:-redis-cache,ai,ai-provider-for-anthropic,ai-provider-for-google,ai-provider-for-openai}"
+missing_required_plugins=0
+for plugin in $(vibe_wp_list "${required_plugins}"); do
+  if ! vibe_wp plugin is-installed "${plugin}" >/dev/null 2>&1 || ! vibe_wp plugin is-active "${plugin}" >/dev/null 2>&1; then
+    missing_required_plugins=1
+  fi
+done
+if [ "${missing_required_plugins}" -eq 0 ]; then
+  ok "WordPress baseline plugins are installed and active"
+else
+  fail "one or more WordPress baseline plugins are missing or inactive"
+fi
+
+removed_plugins="$(vibe_env_value VIBE_WP_REMOVE_PLUGINS)"
+removed_plugins="${removed_plugins:-hello,hello-dolly}"
+unexpected_removed_plugins=0
+for plugin in $(vibe_wp_list "${removed_plugins}"); do
+  if vibe_wp plugin is-installed "${plugin}" >/dev/null 2>&1; then
+    unexpected_removed_plugins=1
+  fi
+done
+if [ "${unexpected_removed_plugins}" -eq 0 ]; then
+  ok "unwanted bundled plugins are absent"
+else
+  fail "one or more unwanted bundled plugins are still installed"
+fi
+
+removed_themes="$(vibe_env_value VIBE_WP_REMOVE_THEMES)"
+removed_themes="${removed_themes:-twentytwentythree,twentytwentyfour}"
+unexpected_removed_themes=0
+for theme in $(vibe_wp_list "${removed_themes}"); do
+  if vibe_wp theme is-installed "${theme}" >/dev/null 2>&1; then
+    unexpected_removed_themes=1
+  fi
+done
+if [ "${unexpected_removed_themes}" -eq 0 ]; then
+  ok "unwanted bundled themes are absent"
+else
+  fail "one or more unwanted bundled themes are still installed"
+fi
+
+opcache_runtime_check='
+$cfg = opcache_get_configuration();
+$directives = is_array($cfg) && isset($cfg["directives"]) ? $cfg["directives"] : array();
+
+$enabled = !empty($directives["opcache.enable"]);
+$memory = (int) ($directives["opcache.memory_consumption"] ?? 0);
+$interned = (int) ($directives["opcache.interned_strings_buffer"] ?? 0);
+$maxFiles = (int) ($directives["opcache.max_accelerated_files"] ?? 0);
+$saveComments = !empty($directives["opcache.save_comments"]);
+$fileOverride = !empty($directives["opcache.enable_file_override"]);
+$jitBuffer = (int) ($directives["opcache.jit_buffer_size"] ?? 0);
+
+if ($enabled && $memory >= 134217728 && $interned >= 16 && $maxFiles >= 20000 && $saveComments && !$fileOverride && $jitBuffer === 0) {
+    echo "ok";
+} else {
+    echo "bad";
+}
+'
+if vibe_wp eval "${opcache_runtime_check}" 2>/dev/null | grep -q '^ok$'; then
+  ok "PHP OPcache WordPress baseline is active"
+else
+  fail "PHP OPcache WordPress baseline is not active"
+fi
+
+if vibe_wp redis status 2>/dev/null | grep -q '^Status: Connected'; then
   ok "Redis Object Cache is connected"
 else
   fail "Redis Object Cache is not connected"
 fi
 
-if ./bin/wp eval 'echo defined("WP_REDIS_SELECTIVE_FLUSH") && WP_REDIS_SELECTIVE_FLUSH && defined("WP_REDIS_GRACEFUL") && WP_REDIS_GRACEFUL && defined("WP_REDIS_MAXTTL") && WP_REDIS_MAXTTL >= 86400 ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
+if vibe_wp eval '$r = wp_remote_get(home_url("/wp-json/wp/v2/types/post?context=edit"), array("timeout" => 10)); if (is_wp_error($r)) { fwrite(STDERR, $r->get_error_message() . PHP_EOL); exit(1); } echo "ok";' 2>/dev/null | grep -q '^ok$'; then
+  ok "WordPress REST self-request is reachable"
+else
+  fail "WordPress REST self-request failed"
+fi
+
+if vibe_wp eval '$r = wp_remote_get(site_url("/wp-cron.php?doing_wp_cron=" . microtime(true)), array("timeout" => 10)); if (is_wp_error($r)) { fwrite(STDERR, $r->get_error_message() . PHP_EOL); exit(1); } echo "ok";' 2>/dev/null | grep -q '^ok$'; then
+  ok "WordPress loopback request is reachable"
+else
+  fail "WordPress loopback request failed"
+fi
+
+if vibe_wp eval 'echo defined("WP_REDIS_SELECTIVE_FLUSH") && WP_REDIS_SELECTIVE_FLUSH && defined("WP_REDIS_GRACEFUL") && WP_REDIS_GRACEFUL && defined("WP_REDIS_MAXTTL") && WP_REDIS_MAXTTL >= 86400 ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
   ok "Redis Object Cache performance constants are active"
 else
   fail "Redis Object Cache performance constants are not active"
 fi
 
-if ./bin/wp eval 'echo function_exists("vibe_wp_redis_add_cache_groups") ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
+if vibe_wp eval 'echo function_exists("vibe_wp_redis_add_cache_groups") ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
   ok "Vibe WP Redis MU plugin is loaded"
 else
   fail "Vibe WP Redis MU plugin is not loaded"
 fi
 
-if ./bin/wp eval 'printf("%o %o", FS_CHMOD_DIR, FS_CHMOD_FILE);' 2>/dev/null | grep -q '^755 644$'; then
+if vibe_wp eval 'printf("%o %o", FS_CHMOD_DIR, FS_CHMOD_FILE);' 2>/dev/null | grep -q '^755 644$'; then
   ok "WordPress filesystem chmod constants are 755/644"
 else
   fail "WordPress filesystem chmod constants are unexpected"
 fi
 
-if docker compose exec -T wordpress sh -lc 'su -s /bin/sh www-data -c "test -w /var/www/html/wp-content/uploads && test -w /var/www/html/wp-content/plugins && test -w /var/www/html/wp-content/themes && test -w /var/www/html/wp-content/mu-plugins"' >/dev/null 2>&1; then
+if vibe_compose exec -T wordpress sh -lc 'su -s /bin/sh www-data -c "test -w /var/www/html/wp-content/uploads && test -w /var/www/html/wp-content/plugins && test -w /var/www/html/wp-content/themes && test -w /var/www/html/wp-content/mu-plugins"' >/dev/null 2>&1; then
   ok "wp-content writable surfaces are writable"
 else
   fail "one or more wp-content writable surfaces are not writable"
 fi
 
 permission_find='find /var/www/html/wp-content -maxdepth 3 \( -perm -0002 -o -user root \) -print -quit'
-if [ -z "$(docker compose exec -T wordpress sh -lc "${permission_find}")" ]; then
+if [ -z "$(vibe_compose exec -T wordpress sh -lc "${permission_find}")" ]; then
   ok "wp-content has no root-owned or world-writable entries within depth 3"
 else
   fail "wp-content contains root-owned or world-writable entries"

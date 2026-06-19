@@ -1,20 +1,62 @@
 #!/usr/bin/env sh
 set -eu
 
-if [ ! -f .env ]; then
-  echo ".env is missing. Run make init first." >&2
-  exit 1
-fi
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
 
-set -a
-. ./.env
-set +a
+vibe_load_env
 
 wp() {
-  docker compose run --rm wp "$@"
+  vibe_wp "$@"
 }
 
-docker compose up -d --build db redis wordpress nginx cron
+vibe_wp_list() {
+  printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d'
+}
+
+vibe_wp_install_activate_plugin() {
+  plugin="$1"
+
+  if wp plugin is-installed "${plugin}" >/dev/null 2>&1; then
+    if ! wp plugin is-active "${plugin}" >/dev/null 2>&1; then
+      wp plugin activate "${plugin}" >/dev/null
+    fi
+  else
+    wp plugin install "${plugin}" --activate
+  fi
+}
+
+vibe_wp_remove_plugin() {
+  plugin="$1"
+
+  if wp plugin is-installed "${plugin}" >/dev/null 2>&1; then
+    wp plugin deactivate "${plugin}" >/dev/null 2>&1 || true
+    wp plugin delete "${plugin}" >/dev/null 2>&1 || true
+  fi
+}
+
+vibe_wp_remove_theme() {
+  theme="$1"
+
+  if wp theme is-installed "${theme}" >/dev/null 2>&1; then
+    if wp theme is-active "${theme}" >/dev/null 2>&1; then
+      echo "Theme ${theme} is active; leaving it installed to avoid breaking the site." >&2
+    else
+      wp theme delete "${theme}" >/dev/null
+    fi
+  fi
+}
+
+services="wordpress nginx cron"
+if vibe_compose_service_exists db; then
+  services="db ${services}"
+fi
+if vibe_compose_service_exists redis; then
+  services="redis ${services}"
+fi
+# shellcheck disable=SC2086
+vibe_compose up -d --build ${services}
+vibe_compose restart nginx >/dev/null 2>&1 || true
 
 echo "Waiting for database connectivity through WP-CLI..."
 until wp db check >/dev/null 2>&1; do
@@ -40,7 +82,23 @@ fi
 
 wp option update permalink_structure '/%postname%/'
 wp rewrite flush --hard
-wp plugin install redis-cache --activate
+
+required_plugins="${VIBE_WP_REQUIRED_PLUGINS:-redis-cache,ai,ai-provider-for-anthropic,ai-provider-for-google,ai-provider-for-openai}"
+remove_plugins="${VIBE_WP_REMOVE_PLUGINS:-hello,hello-dolly}"
+remove_themes="${VIBE_WP_REMOVE_THEMES:-twentytwentythree,twentytwentyfour}"
+
+for plugin in $(vibe_wp_list "${remove_plugins}"); do
+  vibe_wp_remove_plugin "${plugin}"
+done
+
+for theme in $(vibe_wp_list "${remove_themes}"); do
+  vibe_wp_remove_theme "${theme}"
+done
+
+for plugin in $(vibe_wp_list "${required_plugins}"); do
+  vibe_wp_install_activate_plugin "${plugin}"
+done
+
 wp redis enable || true
 wp cache flush || true
 

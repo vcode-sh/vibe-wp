@@ -16,6 +16,8 @@ make wp ARGS="plugin list"
 make wp ARGS="theme list"
 ./bin/wp option get home
 ./bin/wp redis status
+./bin/vibe stage wp plugin list
+./bin/vibe prod wp redis status
 ```
 
 Direct form:
@@ -79,31 +81,50 @@ Create a backup:
 
 ```sh
 make backup
+./bin/vibe prod backup
+./bin/vibe stage backup
 ```
 
 This writes:
 
 ```text
-backups/<timestamp>/database.sql.gz
-backups/<timestamp>/wp-content.tar.gz
-backups/<timestamp>/manifest.txt
+backups/<environment>/<timestamp>/database.sql.gz
+backups/<environment>/<timestamp>/wp-content.tar.gz
+backups/<environment>/<timestamp>/manifest.txt
 ```
 
-The backup command uses `mariadb-dump --single-transaction --routines --triggers`.
+The backup command dumps the database and archives `wp-content` from the running WordPress container. This works for both local bind mounts and production/staging named volumes.
 
 ## Restore
 
 Restore requires an explicit `--yes` because it replaces the current database and `wp-content`.
 
 ```sh
-make restore BACKUP=backups/20260618T195728Z ARGS="--yes"
+make restore BACKUP=backups/local/20260618T195728Z ARGS="--yes"
+./bin/vibe stage restore backups/prod/20260618T195728Z --yes --old-url https://example.com --new-url https://stage.example.com --staging
 ```
 
 With URL migration:
 
 ```sh
-make restore BACKUP=backups/20260618T195728Z ARGS="--yes --old-url https://old.example.com --new-url https://new.example.com"
+make restore BACKUP=backups/local/20260618T195728Z ARGS="--yes --old-url https://old.example.com --new-url https://new.example.com"
 ```
+
+## Staging
+
+Refresh staging from production:
+
+```sh
+./bin/vibe stage refresh-from-prod --yes
+```
+
+Promote managed plugin/theme files from staging to production:
+
+```sh
+./bin/vibe stage promote-files-to-prod --yes
+```
+
+This promotes `plugins`, `themes`, and `mu-plugins` only. It does not promote uploads or the database.
 
 ## Runtime Checks
 
@@ -112,7 +133,7 @@ make doctor-runtime
 make smoke
 ```
 
-`doctor-runtime` checks service health, WordPress installation, Redis Object Cache, filesystem constants, and writable content surfaces.
+`doctor-runtime` checks service health, WordPress installation, baseline plugins, unwanted bundled plugin/theme cleanup, Redis Object Cache, REST self-requests, loopback requests, filesystem constants, and writable content surfaces.
 
 `smoke` additionally verifies HTTP 200, FastCGI cache HIT, future upload year/month folder creation, and upload file ownership.
 
@@ -134,7 +155,14 @@ make wp ARGS="plugin update --all"
 make wp ARGS="theme update --all"
 ```
 
-Review plugin compatibility before changing `WORDPRESS_IMAGE` to a newer PHP line.
+In managed WordPress mode, update plugins and themes through wp-admin or WP-CLI. Upgrade WordPress core by changing `WORDPRESS_IMAGE`, rebuilding, and running smoke tests. Review plugin compatibility before changing `WORDPRESS_IMAGE` to a newer PHP line.
+
+After changing the WordPress image, run the installer once so baseline plugins and default-content cleanup are reconciled:
+
+```sh
+make install
+make smoke
+```
 
 ## Clear Caches
 

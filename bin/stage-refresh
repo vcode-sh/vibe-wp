@@ -1,0 +1,81 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/stage-refresh --yes [--prod prod] [--stage stage]
+
+Creates a fresh production backup, restores it into staging, runs URL
+search-replace, disables indexing, and flushes caches.
+USAGE
+}
+
+prod_env="prod"
+stage_env="stage"
+confirm=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --yes)
+      confirm=1
+      shift
+      ;;
+    --prod)
+      prod_env="${2:-}"
+      shift 2
+      ;;
+    --stage)
+      stage_env="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ "${confirm}" != "1" ]; then
+  echo "Refusing to refresh staging without --yes." >&2
+  usage >&2
+  exit 1
+fi
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+prod_url="$(VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/vibe" "${prod_env}" env WP_HOME)"
+stage_url="$(VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/vibe" "${stage_env}" env WP_HOME)"
+
+if [ -z "${prod_url}" ] || [ -z "${stage_url}" ]; then
+  echo "Both production and staging WP_HOME values are required." >&2
+  exit 1
+fi
+
+if [ "${prod_url}" = "${stage_url}" ]; then
+  echo "Production and staging WP_HOME are identical; refusing destructive refresh." >&2
+  exit 1
+fi
+
+echo "Creating production backup from ${prod_env}..."
+backup_output="$(VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/backup" --label stage-refresh)"
+printf '%s\n' "${backup_output}"
+backup_dir="$(printf '%s\n' "${backup_output}" | sed -n 's/^Backup written to //p' | tail -n 1)"
+
+if [ -z "${backup_dir}" ] || [ ! -d "${backup_dir}" ]; then
+  echo "Could not determine production backup path." >&2
+  exit 1
+fi
+
+echo "Restoring production backup into ${stage_env}..."
+VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/restore" "${backup_dir}" --yes --old-url "${prod_url}" --new-url "${stage_url}" --staging
+
+echo "Running staging smoke test..."
+VIBE_ENV="${stage_env}" "${VIBE_BIN_DIR}/smoke"
+
+echo "Staging refresh complete: ${stage_url}"

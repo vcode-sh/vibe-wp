@@ -1,17 +1,20 @@
 #!/usr/bin/env sh
 set -eu
 
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
 usage() {
   cat <<'USAGE'
 Usage:
-  ./bin/restore backups/<timestamp> --yes [--old-url OLD] [--new-url NEW]
+  ./bin/restore backups/<env>/<timestamp> --yes [--old-url OLD] [--new-url NEW] [--staging]
 
 Restores:
   - database.sql.gz or database.sql
   - wp-content.tar.gz
 
 The --yes flag is required because this replaces the current database and
-wp-content files.
+wp-content files for the selected VIBE_ENV.
 USAGE
 }
 
@@ -19,6 +22,7 @@ backup_dir=""
 confirm=0
 old_url=""
 new_url=""
+staging=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -33,6 +37,10 @@ while [ "$#" -gt 0 ]; do
     --new-url)
       new_url="${2:-}"
       shift 2
+      ;;
+    --staging)
+      staging=1
+      shift
       ;;
     -h|--help)
       usage
@@ -82,27 +90,42 @@ if [ ! -f "${backup_dir}/wp-content.tar.gz" ]; then
 fi
 
 echo "Starting required services..."
-docker compose up -d db redis wordpress >/dev/null
+vibe_require_env_file
+services="wordpress"
+if vibe_compose_service_exists db; then
+  services="db ${services}"
+fi
+if vibe_compose_service_exists redis; then
+  services="redis ${services}"
+fi
+# shellcheck disable=SC2086
+vibe_compose up -d ${services} >/dev/null
 
 echo "Resetting WordPress database..."
-./bin/wp db reset --yes >/dev/null
+vibe_wp db reset --yes >/dev/null
 
 echo "Restoring database..."
 if [ -f "${backup_dir}/database.sql.gz" ]; then
-  gunzip -c "${backup_dir}/database.sql.gz" | docker compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"'
+  if vibe_compose_service_exists db; then
+    gunzip -c "${backup_dir}/database.sql.gz" | vibe_compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"'
+  else
+    gunzip -c "${backup_dir}/database.sql.gz" | vibe_wp_stdin db import -
+  fi
 else
-  docker compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < "${backup_dir}/database.sql"
+  if vibe_compose_service_exists db; then
+    vibe_compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < "${backup_dir}/database.sql"
+  else
+    vibe_wp_stdin db import - < "${backup_dir}/database.sql"
+  fi
 fi
 
 echo "Restoring wp-content..."
-find content -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-mkdir -p content/uploads content/plugins content/themes content/mu-plugins
-tar -xzf "${backup_dir}/wp-content.tar.gz" -C content
-mkdir -p content/uploads content/plugins content/themes content/mu-plugins
-touch content/uploads/.gitkeep content/plugins/.gitkeep content/themes/.gitkeep content/mu-plugins/.gitkeep
+vibe_compose exec -T wordpress sh -lc 'find /var/www/html/wp-content -mindepth 1 -maxdepth 1 -exec rm -rf {} +; mkdir -p /var/www/html/wp-content/uploads /var/www/html/wp-content/plugins /var/www/html/wp-content/themes /var/www/html/wp-content/mu-plugins'
+vibe_compose exec -T wordpress tar -xzf - -C /var/www/html/wp-content < "${backup_dir}/wp-content.tar.gz"
+vibe_compose exec -T wordpress sh -lc 'mkdir -p /var/www/html/wp-content/uploads /var/www/html/wp-content/plugins /var/www/html/wp-content/themes /var/www/html/wp-content/mu-plugins; touch /var/www/html/wp-content/uploads/.gitkeep /var/www/html/wp-content/plugins/.gitkeep /var/www/html/wp-content/themes/.gitkeep /var/www/html/wp-content/mu-plugins/.gitkeep'
 
 echo "Normalizing wp-content permissions through the WordPress container..."
-docker compose up -d --force-recreate wordpress cron >/dev/null
+vibe_restart_php_and_nginx
 
 if [ -n "${old_url}" ] || [ -n "${new_url}" ]; then
   if [ -z "${old_url}" ] || [ -z "${new_url}" ]; then
@@ -111,11 +134,18 @@ if [ -n "${old_url}" ] || [ -n "${new_url}" ]; then
   fi
 
   echo "Running URL search-replace..."
-  ./bin/wp search-replace "${old_url}" "${new_url}" --all-tables --precise --skip-columns=guid
+  vibe_wp search-replace "${old_url}" "${new_url}" --all-tables --precise --skip-columns=guid
+fi
+
+if [ "${staging}" = "1" ]; then
+  echo "Applying staging safeguards..."
+  vibe_wp option update blog_public 0 >/dev/null
+  vibe_wp option update default_ping_status closed >/dev/null || true
+  vibe_wp option update default_comment_status closed >/dev/null || true
 fi
 
 echo "Flushing caches..."
-./bin/wp cache flush >/dev/null || true
-docker compose exec -T nginx sh -c 'rm -rf /var/cache/nginx/wordpress/*' >/dev/null 2>&1 || true
+vibe_wp cache flush >/dev/null || true
+vibe_clear_nginx_cache
 
 echo "Restore complete from ${backup_dir}."
