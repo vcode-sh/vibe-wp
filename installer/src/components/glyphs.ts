@@ -30,7 +30,7 @@ const UNICODE: Record<GlyphName, string> = {
 };
 
 const ASCII: Record<GlyphName, string> = {
-  done: "x",
+  done: "+",
   active: ">",
   pending: "-",
   ok: "*",

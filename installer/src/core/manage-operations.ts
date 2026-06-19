@@ -121,7 +121,7 @@ export const MANAGE_OPERATIONS: ManageOperation[] = [
   },
   {
     id: "stage-refresh",
-    label: "Copy live → staging",
+    label: "Copy live to staging",
     description: "Replaces staging with a fresh copy of the live site.",
     safety: "caution",
     group: "staging",
@@ -131,7 +131,7 @@ export const MANAGE_OPERATIONS: ManageOperation[] = [
   },
   {
     id: "stage-promote",
-    label: "Publish staging → live",
+    label: "Publish staging to live",
     description: "Pushes staging files onto the live site. Back up first.",
     safety: "danger",
     group: "staging",
