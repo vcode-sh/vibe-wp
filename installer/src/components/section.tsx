@@ -1,7 +1,23 @@
 import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
-import { color } from "../app/theme";
+import { color, type ThemeColor } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
+
+type NoteTone = "border" | "info" | "success" | "danger";
+
+const NOTE_SURFACE: Record<NoteTone, ThemeColor> = {
+  border: "panel3",
+  info: "surfaceInfo",
+  success: "surfaceSuccess",
+  danger: "surfaceDanger"
+};
+
+const NOTE_BORDER: Record<NoteTone, ThemeColor> = {
+  border: "divider",
+  info: "accent",
+  success: "success",
+  danger: "danger"
+};
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -16,17 +32,11 @@ export function Section({ title, children }: { title: string; children: ReactNod
   );
 }
 
-export function NoteBox({
-  children,
-  tone = "border"
-}: {
-  children: ReactNode;
-  tone?: "border" | "success" | "danger";
-}) {
+export function NoteBox({ children, tone = "border" }: { children: ReactNode; tone?: NoteTone }) {
   return (
     <box
-      backgroundColor={color("panel3")}
-      borderColor={color(tone === "border" ? "divider" : tone)}
+      backgroundColor={color(NOTE_SURFACE[tone])}
+      borderColor={color(NOTE_BORDER[tone])}
       borderStyle={BORDER.frame}
       flexDirection="column"
       gap={space.xs}

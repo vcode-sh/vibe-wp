@@ -46,12 +46,11 @@ export function ChoiceList<T extends string>({
           focused={focused}
           index={index}
           key={option.value}
-          marker={option.value === value ? glyphs.active : " "}
           name={option.name}
         />
       ))}
       {activeOption && (
-        <box flexDirection="row" gap={space.sm} paddingX={1}>
+        <box flexDirection="row" gap={space.sm} paddingX={2}>
           <text fg={color("subtle")}>{glyphs.bullet}</text>
           <text fg={color("muted")} truncate>
             {activeOption.description}
@@ -66,46 +65,40 @@ function ChoiceRow({
   active,
   focused,
   index,
-  marker,
   name
 }: {
   active: boolean;
   focused: boolean;
   index: number;
-  marker: string;
   name: string;
 }) {
-  // opencode signature: the selected row is a full-width accent bar with
-  // contrasting bold text; only when the list itself is focused.
-  const barColor = rowBackground(active, focused);
-  const textColor = rowTextColor(active, focused);
+  // t1code pattern: a 1-char left accent bar (bright when focused) plus a
+  // muted-blue surface; normal bold text. No border prop (it mis-renders).
+  const barColor = activeBarColor(active, focused);
   return (
     <box
-      alignItems="center"
-      backgroundColor={barColor}
+      alignItems="stretch"
+      backgroundColor={active ? color("selectionBg") : undefined}
       flexDirection="row"
-      gap={space.sm}
       height={1}
-      paddingX={1}
     >
-      <text fg={textColor}>{marker}</text>
-      <text attributes={active ? TextAttributes.BOLD : TextAttributes.NONE} fg={textColor} truncate>
-        {index + 1}. {name}
-      </text>
+      <box backgroundColor={barColor} flexShrink={0} width={1} />
+      <box alignItems="center" flexDirection="row" flexGrow={1} paddingX={1}>
+        <text
+          attributes={active ? TextAttributes.BOLD : TextAttributes.NONE}
+          fg={active ? color("text") : color("muted")}
+          truncate
+        >
+          {index + 1}. {name}
+        </text>
+      </box>
     </box>
   );
 }
 
-function rowBackground(active: boolean, focused: boolean): string | undefined {
+function activeBarColor(active: boolean, focused: boolean): string | undefined {
   if (!active) {
     return;
   }
-  return focused ? color("accent") : color("selectionBg");
-}
-
-function rowTextColor(active: boolean, focused: boolean): string {
-  if (active && focused) {
-    return color("accentText");
-  }
-  return active ? color("text") : color("muted");
+  return focused ? color("accentBar") : color("selectionBg");
 }

@@ -19,9 +19,15 @@ export const theme = {
   border: "#2a2a2a",
   borderStrong: "#3c3c3c",
   black: "#0a0a0a",
-  focusRing: "#3858e9",
-  activeStep: "#3858e9",
-  selectionBg: "#242424",
+  focusRing: "#4d7cff",
+  activeStep: "#5c84ff",
+  // Selection: a muted blue surface with a bright accent bar (t1code pattern).
+  selectionBg: "#16264d",
+  // Tone-tinted card surfaces for depth (t1code surfaceInfo/Warn/Plan).
+  surfaceInfo: "#161d2e",
+  surfaceSuccess: "#15231b",
+  surfaceWarn: "#241f12",
+  surfaceDanger: "#271819",
   divider: "#222222"
 } as const;
 
