@@ -1,11 +1,11 @@
 import { TextAttributes } from "@opentui/core";
-import { steps } from "../app/steps";
+import type { Step } from "../app/steps";
 import { color } from "../app/theme";
 import { BORDER, RAIL_WIDTH, space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
 import type { GlyphName } from "./glyphs";
 
-export function StepRail({ activeIndex }: { activeIndex: number }) {
+export function StepRail({ activeIndex, steps }: { activeIndex: number; steps: Step[] }) {
   const glyphs = useGlyphs();
   return (
     <box
@@ -47,7 +47,7 @@ export function StepRail({ activeIndex }: { activeIndex: number }) {
   );
 }
 
-export function CompactStepper({ activeIndex }: { activeIndex: number }) {
+export function CompactStepper({ activeIndex, steps }: { activeIndex: number; steps: Step[] }) {
   const glyphs = useGlyphs();
   const dots = steps.map((step, index) => (
     <text fg={index <= activeIndex ? color("accent") : color("subtle")} key={step.id}>

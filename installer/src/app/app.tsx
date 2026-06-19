@@ -22,10 +22,11 @@ import { ReviewScreen, SuccessScreen } from "../screens/review-screens";
 import { AdminScreen, ModeScreen, SystemScreen, WelcomeScreen } from "../screens/setup-screens";
 import { SitesScreen } from "../screens/site-screens";
 import { initialStepIndex } from "./dev-step";
+import { visibleSteps } from "./flow";
 import { handleAppKey } from "./keyboard";
 import { stepKind } from "./nav-hints";
 import type { ScreenProps } from "./screen-props";
-import { steps } from "./steps";
+import type { Step } from "./steps";
 import { color } from "./theme";
 
 interface AppProps {
@@ -48,7 +49,9 @@ export function App({ initialState, options }: AppProps) {
 
   const compact = options.compact || dimensions.width < 92 || dimensions.height < 26;
   const ascii = useMemo(() => shouldUseAscii({ ascii: options.ascii }), [options.ascii]);
-  const current = getStep(stepIndex);
+  const flowSteps = useMemo(() => visibleSteps(state.mode), [state.mode]);
+  const activeIndex = Math.min(stepIndex, flowSteps.length - 1);
+  const current = getStep(flowSteps, activeIndex);
   const plan = useMemo(() => buildInstallPlan(state), [state]);
   const redactedPlan = useMemo(() => redactPlan(plan), [plan]);
   const validationErrors = useMemo(() => validateState(state), [state]);
@@ -57,13 +60,18 @@ export function App({ initialState, options }: AppProps) {
     setFocusIndex((value) => Math.min(value, current.focusCount - 1));
   }, [current.focusCount]);
 
+  // Keep the step index valid when the mode change shrinks the visible flow.
+  useEffect(() => {
+    setStepIndex((value) => Math.min(value, flowSteps.length - 1));
+  }, [flowSteps.length]);
+
   function update<K extends keyof InstallerState>(key: K, value: InstallerState[K]) {
     setState((previous) => ({ ...previous, [key]: value }));
   }
 
   function next() {
     setFocusIndex(0);
-    setStepIndex((value) => Math.min(value + 1, steps.length - 1));
+    setStepIndex((value) => Math.min(value + 1, flowSteps.length - 1));
   }
 
   function previous() {
@@ -77,7 +85,7 @@ export function App({ initialState, options }: AppProps) {
 
   useKeyboard((key) =>
     handleAppKey(key, {
-      canGoForward: stepIndex < steps.length - 1,
+      canGoForward: activeIndex < flowSteps.length - 1,
       currentId: current.id,
       destroy: () => renderer.destroy(),
       moveFocus,
@@ -116,9 +124,9 @@ export function App({ initialState, options }: AppProps) {
         width="100%"
       >
         <Header />
-        {compact && <CompactStepper activeIndex={stepIndex} />}
+        {compact && <CompactStepper activeIndex={activeIndex} steps={flowSteps} />}
         <box flexDirection={compact ? "column" : "row"} flexGrow={1} gap={1}>
-          {!compact && <StepRail activeIndex={stepIndex} />}
+          {!compact && <StepRail activeIndex={activeIndex} steps={flowSteps} />}
           <MainPanel {...screenProps} />
           {showHelp && !compact && (
             <HelpPanel current={current} state={state} warnings={plan.warnings} />
@@ -126,9 +134,9 @@ export function App({ initialState, options }: AppProps) {
         </box>
         {logOpen && <LogStrip lines={executionLines} />}
         <Footer
-          currentIndex={stepIndex}
+          currentIndex={activeIndex}
           kind={stepKind(current.id)}
-          total={steps.length}
+          total={flowSteps.length}
           validationCount={validationErrors.length}
         />
       </box>
@@ -192,8 +200,8 @@ function renderScreen(props: ScreenProps) {
   }
 }
 
-function getStep(index: number) {
-  const step = steps[index] ?? steps[0];
+function getStep(list: Step[], index: number) {
+  const step = list[index] ?? list[0];
   if (!step) {
     throw new Error("Installer has no steps.");
   }
