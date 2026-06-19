@@ -57,9 +57,12 @@ surface. This is what keeps three product surfaces affordable.
 Turn "Manage detected site" into a real per-site control panel over `bin/vibe`. See scope
 below.
 
-### Phase 3 — Harden `core/` as a headless API
-Factor planning + operations behind a stable, typed, frontend-agnostic interface (and a
-JSON/daemon mode) so web/desktop reuse it. Mostly already separated in `installer/src/core`.
+### Phase 3 — Harden `core/` as a headless API (DONE)
+Core is verified UI-free (`core/boundary.test.ts` fails on any React/OpenTUI import). A
+public facade (`core/index.ts`) is the one stable import surface; a typed
+`runHeadless(request)` dispatcher (`core/headless.ts`) is the frontend-agnostic brain
+(detect / validate / plan / operations / runPlan / runOperation). `--headless-json` pipes
+a JSON request → JSON response with no TUI, seeding the daemon/IPC mode web + desktop will use.
 
 ### Phase 4 — Web control panel
 A small control panel served from the VPS (or hosted), reusing the headless core: same
