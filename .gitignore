@@ -10,6 +10,7 @@ AGENTS.md
 CLAUDE.md
 agents.md
 claude.md
+.claude
 
 backups/*
 !backups/.gitkeep
