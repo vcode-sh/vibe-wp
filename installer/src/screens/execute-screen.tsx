@@ -2,10 +2,18 @@ import { TextAttributes } from "@opentui/core";
 import { useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
+import { space } from "../app/tokens";
 import { ActionRow, Field, Panel } from "../components/primitives";
+import { ProgressBar, Spinner } from "../components/spinner";
 import { runPlan, type TaskResult } from "../core/task-runner";
-
-type ExecuteStatus = "idle" | "running" | "done" | "failed";
+import {
+  type ExecuteStatus,
+  executionTitle,
+  primaryLabel,
+  secondaryLabel,
+  statusTone,
+  taskTone
+} from "./execute-labels";
 
 export function ExecuteScreen({
   plan,
@@ -81,9 +89,15 @@ export function ExecuteScreen({
 
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={statusTone(status, validationErrors.length)}>
-        {executionTitle(status, validationErrors.length)}
-      </text>
+      <box alignItems="center" flexDirection="row" gap={space.sm}>
+        {status === "running" && <Spinner />}
+        <text attributes={TextAttributes.BOLD} fg={statusTone(status, validationErrors.length)}>
+          {executionTitle(status, validationErrors.length)}
+        </text>
+      </box>
+      {(status === "running" || status === "done") && (
+        <ProgressBar total={plan.tasks.length} value={results.length} />
+      )}
       <TaskList results={results} tasks={redactedPlan.tasks} />
       {latestResults.length > 0 && <ResultPanel results={latestResults} />}
       {!options.yes && (
@@ -115,7 +129,12 @@ function TaskList({
 }) {
   const resultById = new Map(results.map((result) => [result.id, result]));
   return (
-    <scrollbox backgroundColor={color("panel")} border borderColor={color("border")} flexGrow={1}>
+    <scrollbox
+      backgroundColor={color("panel")}
+      borderColor={color("border")}
+      borderStyle="rounded"
+      flexGrow={1}
+    >
       <box flexDirection="column" gap={1} padding={1}>
         {tasks.map((task, index) => {
           const result = resultById.get(task.id);
@@ -149,69 +168,4 @@ function ResultPanel({ results }: { results: TaskResult[] }) {
 
 function appendLog(setExecutionLines: ScreenProps["setExecutionLines"], lines: string[]) {
   setExecutionLines((previous) => [...previous, ...lines]);
-}
-
-function executionTitle(status: ExecuteStatus, validationCount: number) {
-  if (validationCount > 0) {
-    return "Execution is blocked until the review errors are fixed.";
-  }
-  if (status === "running") {
-    return "Installing Vibe WP now. Keep this SSH session open.";
-  }
-  if (status === "done") {
-    return "Installation finished. Review the final URLs.";
-  }
-  if (status === "failed") {
-    return "Installation stopped. Latest log explains the failing task.";
-  }
-  return "Ready to run real host commands after typed confirmation.";
-}
-
-function primaryLabel(status: ExecuteStatus, failed?: TaskResult) {
-  if (status === "running") {
-    return "Running";
-  }
-  if (status === "done" && !failed) {
-    return "Open success screen";
-  }
-  if (status === "failed") {
-    return "Retry failed install";
-  }
-  return "Run installation";
-}
-
-function secondaryLabel(status: string, confirmationAccepted: boolean, validationCount: number) {
-  if (validationCount > 0) {
-    return "Go back and fix blocked fields";
-  }
-  if (status === "running") {
-    return "Do not close this terminal";
-  }
-  if (!confirmationAccepted) {
-    return "Typed confirmation prevents accidental host changes";
-  }
-  return "DNS preflight runs before package installs";
-}
-
-function statusTone(status: ExecuteStatus, validationCount: number) {
-  if (validationCount > 0 || status === "failed") {
-    return color("danger");
-  }
-  if (status === "done") {
-    return color("success");
-  }
-  if (status === "running") {
-    return color("warning");
-  }
-  return color("accent");
-}
-
-function taskTone(result: TaskResult | undefined, privileged: boolean | undefined) {
-  if (result?.status === "done") {
-    return color("success");
-  }
-  if (result?.status === "failed") {
-    return color("danger");
-  }
-  return privileged ? color("warning") : color("muted");
 }
