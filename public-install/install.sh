@@ -167,14 +167,33 @@ fi
 
 chmod 0755 "$binary_path"
 
-echo "Vibe WP installer $version"
-echo "Platform: $platform"
-echo "Verified: $actual_sha"
+echo "Vibe WP installer $version" >&2
+echo "Platform: $platform" >&2
+echo "Verified: $actual_sha" >&2
 
 if [ "${VIBE_WP_INSTALLER_NO_EXEC:-}" = "1" ]; then
-  echo "Downloaded and verified only: $binary_path"
+  echo "Downloaded and verified only: $binary_path" >&2
   exit 0
 fi
 
 eval "set -- $forward_args"
-exec "$binary_path" "$@"
+needs_tty=1
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run | --export-plan | --headless | --help | -h | --version)
+      needs_tty=0
+      ;;
+  esac
+done
+
+if [ "$needs_tty" = "1" ]; then
+  if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+    "$binary_path" "$@" < /dev/tty > /dev/tty 2>&1
+    exit $?
+  fi
+
+  echo "The interactive installer needs a terminal. Run this command from an SSH session, not from a non-interactive script." >&2
+  exit 1
+fi
+
+"$binary_path" "$@"
