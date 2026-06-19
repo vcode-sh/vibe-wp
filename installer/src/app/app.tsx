@@ -2,6 +2,8 @@ import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useMemo, useState } from "react";
 import { Footer, Header, HelpPanel, LogStrip, StepRail } from "../components/chrome";
+import { GlyphProvider } from "../components/glyph-context";
+import { shouldUseAscii } from "../components/glyphs";
 import { buildInstallPlan } from "../core/install-plan";
 import { redactPlan } from "../core/redaction";
 import type { InstallerOptions, InstallerState } from "../core/types";
@@ -41,6 +43,7 @@ export function App({ initialState, options }: AppProps) {
   ]);
 
   const compact = options.compact || dimensions.width < 92 || dimensions.height < 26;
+  const ascii = useMemo(() => shouldUseAscii({ ascii: options.ascii }), [options.ascii]);
   const current = getStep(stepIndex);
   const plan = useMemo(() => buildInstallPlan(state), [state]);
   const redactedPlan = useMemo(() => redactPlan(plan), [plan]);
@@ -99,29 +102,31 @@ export function App({ initialState, options }: AppProps) {
   };
 
   return (
-    <box
-      backgroundColor={color("bg")}
-      flexDirection="column"
-      gap={1}
-      height="100%"
-      padding={1}
-      width="100%"
-    >
-      <Header compact={compact} dimensions={dimensions} />
-      <box flexDirection={compact ? "column" : "row"} flexGrow={1} gap={1}>
-        {!compact && <StepRail activeIndex={stepIndex} />}
-        <MainPanel {...screenProps} />
-        {showHelp && !compact && (
-          <HelpPanel current={current} state={state} warnings={plan.warnings} />
-        )}
+    <GlyphProvider ascii={ascii}>
+      <box
+        backgroundColor={color("bg")}
+        flexDirection="column"
+        gap={1}
+        height="100%"
+        padding={1}
+        width="100%"
+      >
+        <Header compact={compact} dimensions={dimensions} />
+        <box flexDirection={compact ? "column" : "row"} flexGrow={1} gap={1}>
+          {!compact && <StepRail activeIndex={stepIndex} />}
+          <MainPanel {...screenProps} />
+          {showHelp && !compact && (
+            <HelpPanel current={current} state={state} warnings={plan.warnings} />
+          )}
+        </box>
+        {logOpen && <LogStrip lines={executionLines} />}
+        <Footer
+          currentIndex={stepIndex}
+          total={steps.length}
+          validationCount={validationErrors.length}
+        />
       </box>
-      {logOpen && <LogStrip lines={executionLines} />}
-      <Footer
-        currentIndex={stepIndex}
-        total={steps.length}
-        validationCount={validationErrors.length}
-      />
-    </box>
+    </GlyphProvider>
   );
 }
 
