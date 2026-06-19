@@ -81,14 +81,10 @@ function ReadyChip({
 
 function FeatureStrip() {
   const glyphs = useGlyphs();
+  // One wrapping line so it never overflows narrow / SSH terminals.
   return (
-    <box alignItems="center" flexDirection="row" gap={2}>
-      {FEATURES.map((feature) => (
-        <box flexDirection="row" gap={1} key={feature}>
-          <text fg={color("accent")}>{glyphs.bullet}</text>
-          <text fg={color("muted")}>{feature}</text>
-        </box>
-      ))}
-    </box>
+    <text fg={color("muted")} wrapMode="word">
+      {FEATURES.join(`   ${glyphs.bullet} `)}
+    </text>
   );
 }
