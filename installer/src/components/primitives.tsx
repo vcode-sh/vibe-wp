@@ -1,6 +1,11 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { color } from "../app/theme";
+import { BORDER, space } from "../app/tokens";
+import { useGlyphs } from "./glyph-context";
+import { KeyCap } from "./keycap";
+
+export { InfoGrid, Metric } from "./data-display";
 
 export function Field({
   label,
@@ -17,6 +22,7 @@ export function Field({
   onInput: (value: string) => void;
   secret?: boolean;
 }) {
+  const glyphs = useGlyphs();
   useKeyboard((key) => {
     if (!(secret && focused)) {
       return;
@@ -35,9 +41,9 @@ export function Field({
 
   return (
     <box
-      backgroundColor={focused ? color("panel3") : color("panel")}
-      border
-      borderColor={focused ? color("accent") : color("border")}
+      backgroundColor={focused ? color("panel2") : color("panel")}
+      borderColor={focused ? color("focusRing") : color("border")}
+      borderStyle={BORDER.frame}
       flexDirection="column"
       flexGrow={1}
       height={hint ? 5 : 4}
@@ -45,7 +51,7 @@ export function Field({
     >
       <box flexDirection="row" justifyContent="space-between">
         <text fg={focused ? color("accent") : color("muted")}>{label}</text>
-        {focused && <text fg={color("subtle")}>editing</text>}
+        {focused && <text fg={color("accent")}>{glyphs.active}</text>}
       </box>
       {secret ? (
         <text fg={value ? color("text") : color("subtle")} truncate>
@@ -53,10 +59,10 @@ export function Field({
         </text>
       ) : (
         <input
-          backgroundColor={focused ? color("panel3") : color("panel")}
+          backgroundColor={focused ? color("panel2") : color("panel")}
           cursorColor={color("accent")}
           focused={focused}
-          focusedBackgroundColor={color("panel3")}
+          focusedBackgroundColor={color("panel2")}
           onInput={onInput}
           placeholder={label}
           textColor={color("text")}
@@ -83,6 +89,7 @@ export function ToggleRow({
   focused: boolean;
   onToggle: () => void;
 }) {
+  const glyphs = useGlyphs();
   useKeyboard((key) => {
     if (focused && (key.name === "return" || key.name === "enter" || key.name === "space")) {
       onToggle();
@@ -92,69 +99,23 @@ export function ToggleRow({
   return (
     <box
       alignItems="center"
-      backgroundColor={focused ? color("panel3") : color("panel")}
-      border
-      borderColor={focused ? color("accent") : color("border")}
+      backgroundColor={focused ? color("selectionBg") : color("panel")}
+      borderColor={focused ? color("focusRing") : color("border")}
+      borderStyle={BORDER.frame}
       flexDirection="row"
       height={3}
       justifyContent="space-between"
       paddingX={1}
     >
       <text fg={color("text")}>{label}</text>
-      <text attributes={TextAttributes.BOLD} fg={value ? color("success") : color("muted")}>
-        {value ? "ON" : "OFF"}
-      </text>
-    </box>
-  );
-}
-
-export function Metric({
-  label,
-  value,
-  tone
-}: {
-  label: string;
-  value: string;
-  tone: "accent" | "success" | "warning";
-}) {
-  return (
-    <box
-      backgroundColor={color("panel")}
-      border
-      borderColor={color("border")}
-      flexDirection="column"
-      flexGrow={1}
-      height={4}
-      paddingX={1}
-    >
-      <text fg={color("muted")}>{label}</text>
-      <text fg={color(tone)} truncate>
-        {value}
-      </text>
-    </box>
-  );
-}
-
-export function InfoGrid({ rows }: { rows: [string, string][] }) {
-  return (
-    <box
-      backgroundColor={color("panel")}
-      border
-      borderColor={color("border")}
-      flexDirection="column"
-      gap={1}
-      padding={1}
-    >
-      {rows.map(([label, value]) => (
-        <box flexDirection="row" gap={2} justifyContent="space-between" key={label}>
-          <text fg={color("muted")} truncate>
-            {label}
-          </text>
-          <text fg={color("text")} truncate>
-            {value}
-          </text>
-        </box>
-      ))}
+      <box flexDirection="row" gap={space.sm}>
+        <text fg={value ? color("success") : color("subtle")}>
+          {value ? glyphs.ok : glyphs.pending}
+        </text>
+        <text attributes={TextAttributes.BOLD} fg={value ? color("success") : color("muted")}>
+          {value ? "on" : "off"}
+        </text>
+      </box>
     </box>
   );
 }
@@ -162,12 +123,11 @@ export function InfoGrid({ rows }: { rows: [string, string][] }) {
 export function Panel({ title, content }: { title: string; content: string }) {
   return (
     <box
-      backgroundColor={color("panel")}
-      border
       borderColor={color("border")}
+      borderStyle={BORDER.frame}
       flexDirection="column"
       flexGrow={1}
-      padding={1}
+      padding={space.sm}
     >
       <text attributes={TextAttributes.BOLD} fg={color("accent")}>
         {title}
@@ -188,6 +148,7 @@ export function ActionRow({
   secondary: string;
   onPrimary: () => void;
 }) {
+  const glyphs = useGlyphs();
   useKeyboard((key) => {
     if (key.name === "return" || key.name === "enter") {
       onPrimary();
@@ -197,17 +158,20 @@ export function ActionRow({
   return (
     <box
       alignItems="center"
-      backgroundColor={color("panel")}
-      border
       borderColor={color("accent")}
+      borderStyle={BORDER.frame}
       flexDirection="row"
+      gap={space.sm}
       height={4}
       justifyContent="space-between"
       paddingX={1}
     >
-      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-        Enter: {primary}
-      </text>
+      <box alignItems="center" flexDirection="row" gap={space.sm}>
+        <KeyCap>{glyphs.enter}</KeyCap>
+        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+          {primary}
+        </text>
+      </box>
       <text fg={color("muted")} truncate>
         {secondary}
       </text>
