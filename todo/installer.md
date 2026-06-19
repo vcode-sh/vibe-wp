@@ -10,17 +10,17 @@ The public bootstrap and release host are working, but the installer is not comp
 
 Verified on test VPS `198.51.100.10`:
 
-- `curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh` downloads and verifies installer `0.1.1`.
+- `curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh` downloads and verifies installer `0.1.2`.
 - `curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --dry-run` writes valid JSON when stdout is redirected.
 - The bootstrap now sends status messages to stderr and routes interactive execution through `/dev/tty`, so `curl | sh` can launch the TUI from an SSH session.
-- GitHub Actions `Installer CI` and `Installer Release` pass for `0.1.1`.
+- GitHub Actions `Installer CI` and `Installer Release` pass for `0.1.2`.
 - Dokploy serves the generated GitHub deploy branch, not a private GHCR image.
 
 Important fixes made during the VPS audit:
 
 - `0.1.0` should be treated as superseded because immutable `/releases/0.1.0/...gz` URLs were overwritten during testing and could be cached with mismatched checksums.
-- `0.1.1` is the current public installer version before the management/UI pass is released.
-- `0.1.2` is the next prepared version for the management/UI pass.
+- `0.1.1` was the first usable public installer version after bootstrap terminal handling fixes.
+- `0.1.2` is the current public installer version with the management/UI pass.
 - Bootstrap status output must stay on stderr so `--dry-run`, `--version`, and automation modes keep clean stdout.
 - Interactive `curl | sh` must keep using `/dev/tty`; otherwise OpenTUI receives pipe stdin and exits with terminal escape noise.
 
@@ -48,7 +48,6 @@ Remaining P0 implementation work:
 - Run and record a real production install on a disposable Ubuntu 26.04 VPS with a real domain.
 - Run and record a production-plus-staging install on a disposable Ubuntu 26.04 VPS with real domains.
 - Verify post-install WordPress Site Health REST and loopback, uploads year/month creation, Redis Object Cache, and FastCGI cache HIT.
-- Release the improved installer as a new immutable version after VPS visual acceptance.
 
 Remaining P1 quality work:
 
