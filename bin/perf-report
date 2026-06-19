@@ -11,8 +11,12 @@ trap 'rm -f "${first_headers}" "${second_headers}"' EXIT INT TERM
 env_file_status="missing"
 if [ -f "${VIBE_ENV_FILE}" ]; then
   set -a
+  case "${VIBE_ENV_FILE}" in
+    /*|*/*) env_path="${VIBE_ENV_FILE}" ;;
+    *) env_path="./${VIBE_ENV_FILE}" ;;
+  esac
   # shellcheck disable=SC1090
-  . "${VIBE_ENV_FILE}"
+  . "${env_path}"
   set +a
   env_file_status="loaded"
 fi

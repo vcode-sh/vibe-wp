@@ -59,8 +59,14 @@ vibe_require_env_file() {
 vibe_load_env() {
   vibe_require_env_file
   set -a
+  # POSIX `.` searches $PATH when the operand has no slash (dash on Ubuntu),
+  # so a bare ".env" fails. Force a path with a slash.
+  case "${VIBE_ENV_FILE}" in
+    /*|*/*) env_path="${VIBE_ENV_FILE}" ;;
+    *) env_path="./${VIBE_ENV_FILE}" ;;
+  esac
   # shellcheck disable=SC1090
-  . "${VIBE_ENV_FILE}"
+  . "${env_path}"
   set +a
 }
 
