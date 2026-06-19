@@ -32,7 +32,7 @@ jobs:
             artifact: vibe-wp-installer-linux-arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -52,7 +52,7 @@ jobs:
         run: bun run ${{ matrix.build-script }}
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: installer/dist/${{ matrix.artifact }}
@@ -63,16 +63,16 @@ jobs:
     needs: installer
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download Linux x64 artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vibe-wp-installer-linux-x64
           path: installer/dist
 
       - name: Download Linux arm64 artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: vibe-wp-installer-linux-arm64
           path: installer/dist
