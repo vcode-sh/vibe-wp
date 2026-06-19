@@ -1,6 +1,7 @@
 import type { StepId } from "./steps";
 
-const choiceStepIds = new Set(["sites", "mode", "performance", "backup"]);
+// Screens whose ↑/↓ adjusts a choice list instead of moving field focus.
+const choiceStepIds = new Set(["sites", "performance", "backup"]);
 
 export interface AppKeyContext {
   canGoForward: boolean;
