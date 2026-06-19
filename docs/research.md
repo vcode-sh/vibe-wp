@@ -72,10 +72,13 @@ Sources:
 
 The Redis Object Cache plugin supports PhpRedis, Predis, Relay, replication, Sentinel, clustering, and WP-CLI. Its documented constants include `WP_REDIS_HOST`, `WP_REDIS_PORT`, `WP_REDIS_DATABASE`, `WP_REDIS_PASSWORD`, `WP_REDIS_PREFIX`, and `WP_CACHE_KEY_SALT`.
 
-The template installs the PhpRedis extension in the WordPress image and wires Redis through environment variables.
+Redis 8 exposes memory eviction policies, active defragmentation, lazy freeing, and threaded I/O settings through `redis.conf`. The template therefore uses a custom Redis runtime image that renders a real config file from env, defaults cache eviction to `allkeys-lfu`, keeps persistence disabled for object-cache use, and wires Redis Object Cache through `WP_REDIS_*` constants.
 
 Sources:
 
+- https://redis.io/docs/latest/operate/oss_and_stack/management/config/
+- https://redis.io/docs/latest/develop/reference/eviction/
+- https://redis.io/blog/redis-8-ga/
 - https://wordpress.org/plugins/redis-cache/
 - https://github.com/rhubarbgroup/redis-cache
 

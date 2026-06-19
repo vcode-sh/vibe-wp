@@ -1,0 +1,56 @@
+bind ${REDIS_BIND}
+protected-mode ${REDIS_PROTECTED_MODE}
+port ${REDIS_PORT}
+tcp-backlog ${REDIS_TCP_BACKLOG}
+timeout ${REDIS_TIMEOUT}
+tcp-keepalive ${REDIS_TCP_KEEPALIVE}
+databases ${REDIS_DATABASES}
+maxclients ${REDIS_MAXCLIENTS}
+
+daemonize no
+supervised no
+dir /data
+loglevel ${REDIS_LOGLEVEL}
+
+${REDIS_REQUIREPASS_DIRECTIVE}
+
+# Redis is the WordPress cache layer, not the source of truth.
+${REDIS_SAVE_DIRECTIVE}
+appendonly ${REDIS_APPENDONLY}
+appendfsync ${REDIS_APPENDFSYNC}
+no-appendfsync-on-rewrite yes
+
+# WordPress object-cache workloads benefit from bounded memory and LFU eviction.
+maxmemory ${REDIS_MAXMEMORY}
+maxmemory-policy ${REDIS_MAXMEMORY_POLICY}
+maxmemory-samples ${REDIS_MAXMEMORY_SAMPLES}
+lfu-log-factor ${REDIS_LFU_LOG_FACTOR}
+lfu-decay-time ${REDIS_LFU_DECAY_TIME}
+
+# Redis 8 can use threaded network I/O when the deployment has spare cores.
+io-threads ${REDIS_IO_THREADS}
+io-threads-do-reads ${REDIS_IO_THREADS_DO_READS}
+
+# Free large values asynchronously so page requests do not pay eviction cost.
+lazyfree-lazy-eviction ${REDIS_LAZYFREE_LAZY_EVICTION}
+lazyfree-lazy-expire ${REDIS_LAZYFREE_LAZY_EXPIRE}
+lazyfree-lazy-server-del ${REDIS_LAZYFREE_LAZY_SERVER_DEL}
+lazyfree-lazy-user-del ${REDIS_LAZYFREE_LAZY_USER_DEL}
+lazyfree-lazy-user-flush ${REDIS_LAZYFREE_LAZY_USER_FLUSH}
+
+# Keep long-running cache containers from accumulating avoidable fragmentation.
+activedefrag ${REDIS_ACTIVE_DEFRAG}
+active-defrag-ignore-bytes ${REDIS_ACTIVE_DEFRAG_IGNORE_BYTES}
+active-defrag-threshold-lower ${REDIS_ACTIVE_DEFRAG_THRESHOLD_LOWER}
+active-defrag-threshold-upper ${REDIS_ACTIVE_DEFRAG_THRESHOLD_UPPER}
+active-defrag-cycle-min ${REDIS_ACTIVE_DEFRAG_CYCLE_MIN}
+active-defrag-cycle-max ${REDIS_ACTIVE_DEFRAG_CYCLE_MAX}
+
+hz ${REDIS_HZ}
+dynamic-hz ${REDIS_DYNAMIC_HZ}
+disable-thp ${REDIS_DISABLE_THP}
+jemalloc-bg-thread ${REDIS_JEMALLOC_BG_THREAD}
+
+slowlog-log-slower-than ${REDIS_SLOWLOG_LOG_SLOWER_THAN}
+slowlog-max-len ${REDIS_SLOWLOG_MAX_LEN}
+latency-monitor-threshold ${REDIS_LATENCY_MONITOR_THRESHOLD}

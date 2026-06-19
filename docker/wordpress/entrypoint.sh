@@ -105,6 +105,20 @@ if (!function_exists('vibe_wp_env_bool')) {
     }
 }
 
+if (!function_exists('vibe_wp_env_csv')) {
+    function vibe_wp_env_csv(string $name): array {
+        $value = vibe_wp_env($name);
+
+        if ($value === '') {
+            return array();
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $value)), static function ($item): bool {
+            return $item !== '';
+        }));
+    }
+}
+
 if (!function_exists('vibe_wp_define')) {
     function vibe_wp_define(string $name, $value): void {
         if (!defined($name)) {
@@ -200,6 +214,18 @@ if (($redis_port = vibe_wp_env('WP_REDIS_PORT')) !== '') {
     vibe_wp_define('WP_REDIS_PORT', (int) $redis_port);
 }
 
+if (($redis_scheme = vibe_wp_env('WP_REDIS_SCHEME')) !== '') {
+    vibe_wp_define('WP_REDIS_SCHEME', $redis_scheme);
+}
+
+if (($redis_path = vibe_wp_env('WP_REDIS_PATH')) !== '') {
+    vibe_wp_define('WP_REDIS_PATH', $redis_path);
+}
+
+if (($redis_username = vibe_wp_env('WP_REDIS_USERNAME')) !== '') {
+    vibe_wp_define('WP_REDIS_USERNAME', $redis_username);
+}
+
 if (($redis_password = vibe_wp_env('WP_REDIS_PASSWORD')) !== '') {
     vibe_wp_define('WP_REDIS_PASSWORD', $redis_password);
 }
@@ -224,11 +250,45 @@ if (($redis_read_timeout = vibe_wp_env('WP_REDIS_READ_TIMEOUT')) !== '') {
     vibe_wp_define('WP_REDIS_READ_TIMEOUT', (float) $redis_read_timeout);
 }
 
+if (($redis_retry_interval = vibe_wp_env('WP_REDIS_RETRY_INTERVAL')) !== '') {
+    vibe_wp_define('WP_REDIS_RETRY_INTERVAL', (int) $redis_retry_interval);
+}
+
 if (($redis_client = vibe_wp_env('WP_REDIS_CLIENT')) !== '') {
     vibe_wp_define('WP_REDIS_CLIENT', $redis_client);
 }
 
 vibe_wp_define('WP_REDIS_IGBINARY', vibe_wp_env_bool('WP_REDIS_IGBINARY', false));
+vibe_wp_define('WP_REDIS_DISABLED', vibe_wp_env_bool('WP_REDIS_DISABLED', false));
+
+if (($redis_maxttl = vibe_wp_env('WP_REDIS_MAXTTL')) !== '') {
+    vibe_wp_define('WP_REDIS_MAXTTL', (int) $redis_maxttl);
+}
+
+if (($redis_flush_timeout = vibe_wp_env('WP_REDIS_FLUSH_TIMEOUT')) !== '') {
+    vibe_wp_define('WP_REDIS_FLUSH_TIMEOUT', (int) $redis_flush_timeout);
+}
+
+vibe_wp_define('WP_REDIS_SELECTIVE_FLUSH', vibe_wp_env_bool('WP_REDIS_SELECTIVE_FLUSH', true));
+vibe_wp_define('WP_REDIS_GRACEFUL', vibe_wp_env_bool('WP_REDIS_GRACEFUL', true));
+vibe_wp_define('WP_REDIS_DISABLE_METRICS', vibe_wp_env_bool('WP_REDIS_DISABLE_METRICS', true));
+vibe_wp_define('WP_REDIS_DISABLE_ADMINBAR', vibe_wp_env_bool('WP_REDIS_DISABLE_ADMINBAR', true));
+vibe_wp_define('WP_REDIS_DISABLE_BANNERS', vibe_wp_env_bool('WP_REDIS_DISABLE_BANNERS', true));
+vibe_wp_define('WP_REDIS_DISABLE_DROPIN_BANNERS', vibe_wp_env_bool('WP_REDIS_DISABLE_DROPIN_BANNERS', true));
+vibe_wp_define('WP_REDIS_DISABLE_COMMENT', vibe_wp_env_bool('WP_REDIS_DISABLE_COMMENT', true));
+vibe_wp_define('WP_REDIS_DISABLE_GROUP_FLUSH', vibe_wp_env_bool('WP_REDIS_DISABLE_GROUP_FLUSH', false));
+
+if (($redis_global_groups = vibe_wp_env_csv('WP_REDIS_GLOBAL_GROUPS')) !== array()) {
+    vibe_wp_define('WP_REDIS_GLOBAL_GROUPS', $redis_global_groups);
+}
+
+if (($redis_ignored_groups = vibe_wp_env_csv('WP_REDIS_IGNORED_GROUPS')) !== array()) {
+    vibe_wp_define('WP_REDIS_IGNORED_GROUPS', $redis_ignored_groups);
+}
+
+if (($redis_unflushable_groups = vibe_wp_env_csv('WP_REDIS_UNFLUSHABLE_GROUPS')) !== array()) {
+    vibe_wp_define('WP_REDIS_UNFLUSHABLE_GROUPS', $redis_unflushable_groups);
+}
 PHP
 
 export WORDPRESS_CONFIG_EXTRA="$(cat "${extra_config_file}")"

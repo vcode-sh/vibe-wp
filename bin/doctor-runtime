@@ -51,6 +51,24 @@ else
   fail "Redis ping failed"
 fi
 
+if docker compose exec -T redis test -s /usr/local/etc/redis/redis.conf >/dev/null 2>&1; then
+  ok "Redis rendered config is present"
+else
+  fail "Redis rendered config is missing"
+fi
+
+redis_runtime_check='
+policy="$(redis-cli -a "$REDIS_PASSWORD" --raw CONFIG GET maxmemory-policy 2>/dev/null | sed -n "2p")"
+memory="$(redis-cli -a "$REDIS_PASSWORD" --raw CONFIG GET maxmemory 2>/dev/null | sed -n "2p")"
+appendonly="$(redis-cli -a "$REDIS_PASSWORD" --raw CONFIG GET appendonly 2>/dev/null | sed -n "2p")"
+test "$policy" = "$REDIS_MAXMEMORY_POLICY" && test "$memory" -gt 0 && test "$appendonly" = "$REDIS_APPENDONLY"
+'
+if docker compose exec -T redis sh -c "${redis_runtime_check}" >/dev/null 2>&1; then
+  ok "Redis cache runtime settings are active"
+else
+  fail "Redis cache runtime settings are not active"
+fi
+
 if ./bin/wp core is-installed >/dev/null 2>&1; then
   ok "WordPress is installed"
 else
@@ -61,6 +79,18 @@ if ./bin/wp redis status 2>/dev/null | grep -q '^Status: Connected'; then
   ok "Redis Object Cache is connected"
 else
   fail "Redis Object Cache is not connected"
+fi
+
+if ./bin/wp eval 'echo defined("WP_REDIS_SELECTIVE_FLUSH") && WP_REDIS_SELECTIVE_FLUSH && defined("WP_REDIS_GRACEFUL") && WP_REDIS_GRACEFUL && defined("WP_REDIS_MAXTTL") && WP_REDIS_MAXTTL >= 86400 ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
+  ok "Redis Object Cache performance constants are active"
+else
+  fail "Redis Object Cache performance constants are not active"
+fi
+
+if ./bin/wp eval 'echo function_exists("vibe_wp_redis_add_cache_groups") ? "ok" : "bad";' 2>/dev/null | grep -q '^ok$'; then
+  ok "Vibe WP Redis MU plugin is loaded"
+else
+  fail "Vibe WP Redis MU plugin is not loaded"
 fi
 
 if ./bin/wp eval 'printf("%o %o", FS_CHMOD_DIR, FS_CHMOD_FILE);' 2>/dev/null | grep -q '^755 644$'; then

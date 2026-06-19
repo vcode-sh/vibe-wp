@@ -74,13 +74,20 @@ Redis is configured as a cache:
 
 ```env
 REDIS_MAXMEMORY=256mb
-REDIS_MAXMEMORY_POLICY=allkeys-lru
+REDIS_MAXMEMORY_POLICY=allkeys-lfu
+WP_REDIS_MAXTTL=604800
+WP_REDIS_SELECTIVE_FLUSH=1
+WP_REDIS_GRACEFUL=1
 ```
+
+The Redis container renders its own config file from env, disables persistence by default, enables lazy freeing, and exposes Redis 8 threaded I/O for production sizing. The WordPress side uses PhpRedis and the Redis Object Cache drop-in with a seven-day max TTL for no-expiration object-cache keys.
 
 If multiple sites share one Redis server, every site must use unique:
 
 - `WP_REDIS_PREFIX`
 - `WP_CACHE_KEY_SALT`
+
+See [redis.md](redis.md).
 
 ## Nginx FastCGI Cache
 

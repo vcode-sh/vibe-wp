@@ -50,7 +50,7 @@ MariaDB stores all authoritative WordPress data. It uses a named Docker volume, 
 
 ### `redis`
 
-Redis is a cache layer only. It is configured with an eviction policy and no append-only persistence by default.
+Redis is a cache layer only. It uses a custom runtime image that renders `/usr/local/etc/redis/redis.conf` from env, sets bounded memory with LFU eviction, keeps persistence disabled by default, and exposes Redis 8 threaded I/O and fragmentation controls. See [redis.md](redis.md).
 
 ### `cron`
 

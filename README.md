@@ -5,7 +5,7 @@
 - WordPress 7.0 on PHP-FPM.
 - Nginx with FastCGI page cache for anonymous traffic.
 - MariaDB LTS with rendered WordPress-oriented performance config.
-- Redis object cache with the PhpRedis extension.
+- Redis 8 object cache with a rendered performance config and the PhpRedis extension.
 - Separate runtime surfaces for uploads, plugins, themes, and MU plugins.
 - Dedicated cron worker instead of request-triggered WP-Cron.
 - WP-CLI, Adminer, backup tooling, and configuration from `.env`.
@@ -35,7 +35,7 @@ content/themes/      persistent themes
 content/mu-plugins/  persistent MU plugins
 docker/nginx/        Nginx image, cache, compression, and server config
 docker/mariadb/      MariaDB image and env-rendered database config
-docker/redis/        Redis cache config
+docker/redis/        Redis image and env-rendered cache config
 docker/wordpress/    WordPress PHP-FPM image and runtime config
 docs/                architecture, configuration, operations, research
 ```
@@ -66,9 +66,10 @@ The stack is configured by `.env`, not by editing container files. The main swit
 - `MARIADB_IMAGE` for the database LTS line.
 - `MARIADB_RUNTIME_IMAGE` for the rendered database runtime image.
 - `REDIS_IMAGE` for the Redis major line.
+- `REDIS_RUNTIME_IMAGE` for the rendered Redis runtime image.
 - PHP, PHP-FPM, Nginx, MariaDB, Redis, and WordPress constants through explicit env values.
 
-See [docs/configuration.md](docs/configuration.md) for the complete contract, [docs/web-tier.md](docs/web-tier.md) for the Nginx performance model, and [docs/mariadb.md](docs/mariadb.md) for database tuning.
+See [docs/configuration.md](docs/configuration.md) for the complete contract, [docs/web-tier.md](docs/web-tier.md) for the Nginx performance model, [docs/mariadb.md](docs/mariadb.md) for database tuning, and [docs/redis.md](docs/redis.md) for Redis tuning.
 
 ## Deployment Modes
 
@@ -87,6 +88,6 @@ The defaults are based on current upstream guidance as of June 18, 2026:
 - WordPress 7.0 is compatible with PHP 8.5, 8.4, and 8.3 in the official compatibility matrix.
 - The official WordPress Docker image supports env-driven `wp-config.php` values and `WORDPRESS_CONFIG_EXTRA`.
 - MariaDB official images expose the `lts` line and `healthcheck.sh`.
-- Redis Object Cache documents `WP_REDIS_*` constants and supports PhpRedis.
+- Redis 8 exposes configurable memory policies and threaded I/O, while Redis Object Cache documents `WP_REDIS_*` constants and supports PhpRedis.
 
 Full notes and source links are in [docs/research.md](docs/research.md).

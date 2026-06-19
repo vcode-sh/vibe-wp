@@ -21,6 +21,7 @@ content/mu-plugins/*
 !content/plugins/.gitkeep
 !content/themes/.gitkeep
 !content/mu-plugins/.gitkeep
+!content/mu-plugins/vibe-wp-redis.php
 
 *.log
 tmp/

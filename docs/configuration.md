@@ -16,6 +16,7 @@ REDIS_IMAGE=redis:8-alpine
 WORDPRESS_RUNTIME_IMAGE=vibe-wp-wordpress
 NGINX_RUNTIME_IMAGE=vibe-wp-nginx
 MARIADB_RUNTIME_IMAGE=vibe-wp-mariadb
+REDIS_RUNTIME_IMAGE=vibe-wp-redis
 ```
 
 Use `wordpress:7.0-php8.4-fpm` if a plugin is not ready for PHP 8.5.
@@ -84,15 +85,26 @@ See [mariadb.md](mariadb.md) for the full database tuning contract.
 
 ```env
 REDIS_PASSWORD=...
+REDIS_MAXMEMORY=256mb
+REDIS_MAXMEMORY_POLICY=allkeys-lfu
+REDIS_ACTIVE_DEFRAG=yes
+REDIS_IO_THREADS=1
 WP_REDIS_HOST=redis
 WP_REDIS_PORT=6379
 WP_REDIS_PASSWORD=...
 WP_REDIS_PREFIX=vibe-wp-xxxx:
 WP_CACHE_KEY_SALT=vibe-wp-xxxx:
 WP_REDIS_CLIENT=phpredis
+WP_REDIS_MAXTTL=604800
+WP_REDIS_SELECTIVE_FLUSH=1
+WP_REDIS_GRACEFUL=1
 ```
 
 Use a unique `WP_REDIS_PREFIX` and `WP_CACHE_KEY_SALT` for every WordPress installation that shares a Redis server.
+
+The local and production stacks render Redis server config from env. External-service mode only configures the WordPress client constants because Redis is managed outside this Compose project.
+
+See [redis.md](redis.md) for the full Redis tuning contract.
 
 ## PHP and PHP-FPM
 
