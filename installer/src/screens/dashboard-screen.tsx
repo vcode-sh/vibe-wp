@@ -1,33 +1,29 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
-import { color, type ThemeColor } from "../app/theme";
+import { color } from "../app/theme";
 import { space } from "../app/tokens";
 import { useGlyphs } from "../components/glyph-context";
 import { Panel } from "../components/primitives";
-import { Section } from "../components/section";
 import { Spinner } from "../components/spinner";
 import {
-  availableOperations,
   buildOperationTask,
+  groupedOperations,
   type ManageOperation,
   type OpSafety
 } from "../core/manage-operations";
 import { runTask, type TaskStatus } from "../core/task-runner";
-
-const SAFETY_COLOR: Record<OpSafety, ThemeColor> = {
-  safe: "success",
-  caution: "warning",
-  danger: "danger"
-};
+import { GroupedOpList, type HealthState, StatusCards } from "./dashboard-cards";
 
 export function DashboardScreen({ state, plan }: ScreenProps) {
-  const ops = availableOperations(state.stagingEnabled);
+  const groups = useMemo(() => groupedOperations(state.stagingEnabled), [state.stagingEnabled]);
+  const ops = useMemo(() => groups.flatMap((group) => group.operations), [groups]);
   const [selected, setSelected] = useState(0);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [status, setStatus] = useState<TaskStatus | "idle">("idle");
   const [output, setOutput] = useState<string[]>([]);
+  const [health, setHealth] = useState<HealthState>("unknown");
   const current = ops[selected] ?? ops[0];
 
   async function run(op: ManageOperation) {
@@ -41,6 +37,9 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
     const result = await runTask(buildOperationTask(op, state), true, plan);
     setStatus(result.status);
     setOutput((result.output || "Done.").split("\n"));
+    if (op.id === "health") {
+      setHealth(result.status === "done" ? "healthy" : "problem");
+    }
   }
 
   useKeyboard((key) => {
@@ -63,41 +62,45 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
           {site}
         </text>
-        <text fg={color("subtle")}>{state.stagingEnabled ? "· staging on" : "· no staging"}</text>
       </box>
-      <Section title="What would you like to do?">
-        <box flexDirection="column">
-          {ops.map((op, index) => (
-            <OpRow active={index === selected} key={op.id} op={op} />
-          ))}
-        </box>
-      </Section>
+      <StatusCards health={health} state={state} />
+      <text fg={color("subtle")} height={1} truncate>
+        Pick an action below. Nothing happens until you press Enter.
+      </text>
+      <GroupedOpList groups={groups} selectedId={current?.id} />
       <OpDetail confirmPending={confirmId === current?.id} op={current} status={status} />
-      {output.length > 0 && <Panel content={output.join("\n")} maxLines={8} title="RESULT" />}
+      {output.length > 0 && <ResultPanel output={output} status={status} />}
     </box>
   );
 }
 
-function OpRow({ active, op }: { active: boolean; op: ManageOperation }) {
-  const glyphs = useGlyphs();
+function ResultPanel({ output, status }: { output: string[]; status: TaskStatus | "idle" }) {
   return (
-    <box
-      alignItems="stretch"
-      backgroundColor={active ? color("selectionBg") : undefined}
-      flexDirection="row"
-      height={1}
-    >
-      <box backgroundColor={active ? color("accentBar") : undefined} flexShrink={0} width={1} />
-      <box alignItems="center" flexDirection="row" gap={space.sm} paddingX={1}>
-        <text fg={color(SAFETY_COLOR[op.safety])}>
-          {op.safety === "safe" ? glyphs.ok : glyphs.warn}
-        </text>
-        <text
-          attributes={active ? TextAttributes.BOLD : TextAttributes.NONE}
-          fg={color(active ? "text" : "muted")}
-          truncate
-        >
-          {op.label}
+    <box flexDirection="column" gap={space.xs}>
+      <ResultBadge status={status} />
+      <Panel content={output.join("\n")} maxLines={8} title="RESULT" />
+    </box>
+  );
+}
+
+function ResultBadge({ status }: { status: TaskStatus | "idle" }) {
+  if (status === "running") {
+    return (
+      <box alignItems="center" flexDirection="row" gap={space.sm} height={1}>
+        <Spinner />
+        <text fg={color("muted")}>Working…</text>
+      </box>
+    );
+  }
+  if (status !== "done" && status !== "failed") {
+    return null;
+  }
+  const failed = status === "failed";
+  return (
+    <box flexDirection="row" height={1}>
+      <box backgroundColor={color(failed ? "danger" : "success")} paddingX={1}>
+        <text attributes={TextAttributes.BOLD} fg={color("black")}>
+          {failed ? "Failed" : "Done"}
         </text>
       </box>
     </box>
@@ -123,16 +126,13 @@ function OpDetail({
         {op.description}
       </text>
       {confirmPending ? (
-        <text attributes={TextAttributes.BOLD} fg={color("danger")}>
+        <text attributes={TextAttributes.BOLD} fg={color("danger")} height={1} truncate>
           {glyphs.warn} This changes your live site — press Enter again to confirm.
         </text>
       ) : (
-        <box alignItems="center" flexDirection="row" gap={space.sm}>
-          {status === "running" && <Spinner />}
-          <text fg={color(status === "failed" ? "danger" : "subtle")}>
-            {statusLine(status, op.safety)}
-          </text>
-        </box>
+        <text fg={color(status === "failed" ? "danger" : "subtle")} height={1} truncate>
+          {statusLine(status, op.safety)}
+        </text>
       )}
     </box>
   );
