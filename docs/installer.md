@@ -19,7 +19,7 @@ The bootstrap script:
 - forwards user arguments to the installer
 - supports `VIBE_WP_INSTALLER_NO_EXEC=1` for download and verify only
 
-The bootstrap script does not install Docker, edit Caddy, clone the repository, write env files, or run Compose. Those actions happen only inside the reviewed TUI flow or through headless `--yes`.
+The bootstrap script does not install Docker, edit host reverse-proxy configuration, clone the repository, write env files, or run Compose. Those actions happen only inside the reviewed TUI flow or through headless `--yes`.
 
 ## Useful Commands
 
@@ -64,10 +64,13 @@ The release workflow:
 4. builds `public-install/site`
 5. uploads release assets
 6. pushes `ghcr.io/vcode-sh/vibe-wp-installer-site`
+7. optionally triggers a Dokploy deploy through the Dokploy API
 
 ## Dokploy
 
 Use a Dokploy application, not Compose, for `wp.vcode.sh`.
+
+Dokploy owns the public layer: Traefik routers, HTTP to HTTPS redirect, Let's Encrypt certificate, and the domain mapping. The container must not run its own TLS proxy. It only needs to serve static files over plain HTTP on the internal port configured in the Dokploy domain.
 
 Recommended settings:
 
@@ -82,6 +85,13 @@ Recommended settings:
 - secrets: none
 
 If the GHCR package is private, add GitHub Container Registry credentials in Dokploy or make this single package public. The service only contains public installer assets.
+
+For automatic deployment after the GHCR image is pushed, add these GitHub Actions secrets:
+
+- `DOKPLOY_API_URL`: `https://srv.vcode.sh`
+- `DOKPLOY_API_KEY`: a Dokploy API token with permission to deploy the application
+
+If those secrets are not present, the workflow stops after publishing the image and the Dokploy deployment must be triggered manually.
 
 Current production Dokploy target:
 

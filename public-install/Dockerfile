@@ -1,7 +1,7 @@
-FROM caddy:2-alpine
+FROM nginxinc/nginx-unprivileged:alpine
 
-COPY Caddyfile /etc/caddy/Caddyfile
-COPY site/ /srv/
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY site/ /usr/share/nginx/html/
 
 EXPOSE 8080
 

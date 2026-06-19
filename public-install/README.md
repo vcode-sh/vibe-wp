@@ -20,4 +20,4 @@ public-install/build-site.sh 0.1.0
 docker build -t vibe-wp-installer-site:test public-install
 ```
 
-The Dokploy application should run the image on internal port `8080` and expose `wp.vcode.sh` through HTTPS.
+The Dokploy application should run the image on internal port `8080` and expose `wp.vcode.sh` through HTTPS. Dokploy/Traefik owns TLS, redirects, certificates, and public routing. The image only serves static files over plain HTTP inside the Dokploy network.
