@@ -1,0 +1,183 @@
+import { TextAttributes } from "@opentui/core";
+import { useKeyboard } from "@opentui/react";
+import { color } from "../app/theme";
+
+export function Field({
+  label,
+  value,
+  focused,
+  onInput,
+  secret = false
+}: {
+  label: string;
+  value: string;
+  focused: boolean;
+  onInput: (value: string) => void;
+  secret?: boolean;
+}) {
+  return (
+    <box
+      backgroundColor={focused ? color("panel3") : color("panel")}
+      border
+      borderColor={focused ? color("accent") : color("border")}
+      flexDirection="column"
+      height={4}
+      paddingX={1}
+    >
+      <text fg={focused ? color("accent") : color("muted")}>{label}</text>
+      <input
+        backgroundColor={focused ? color("panel3") : color("panel")}
+        cursorColor={color("accent")}
+        focused={focused}
+        focusedBackgroundColor={color("panel3")}
+        onInput={(inputValue) => onInput(secret && inputValue === "********" ? value : inputValue)}
+        placeholder={label}
+        textColor={color("text")}
+        value={secret && value ? "********" : value}
+      />
+    </box>
+  );
+}
+
+export function ToggleRow({
+  label,
+  value,
+  focused,
+  onToggle
+}: {
+  label: string;
+  value: boolean;
+  focused: boolean;
+  onToggle: () => void;
+}) {
+  useKeyboard((key) => {
+    if (focused && (key.name === "return" || key.name === "enter" || key.name === "space")) {
+      onToggle();
+    }
+  });
+
+  return (
+    <box
+      alignItems="center"
+      backgroundColor={focused ? color("panel3") : color("panel")}
+      border
+      borderColor={focused ? color("accent") : color("border")}
+      flexDirection="row"
+      height={3}
+      justifyContent="space-between"
+      paddingX={1}
+    >
+      <text fg={color("text")}>{label}</text>
+      <text attributes={TextAttributes.BOLD} fg={value ? color("success") : color("muted")}>
+        {value ? "ON" : "OFF"}
+      </text>
+    </box>
+  );
+}
+
+export function Metric({
+  label,
+  value,
+  tone
+}: {
+  label: string;
+  value: string;
+  tone: "accent" | "success" | "warning";
+}) {
+  return (
+    <box
+      backgroundColor={color("panel")}
+      border
+      borderColor={color("border")}
+      flexDirection="column"
+      flexGrow={1}
+      height={4}
+      paddingX={1}
+    >
+      <text fg={color("muted")}>{label}</text>
+      <text fg={color(tone)} truncate>
+        {value}
+      </text>
+    </box>
+  );
+}
+
+export function InfoGrid({ rows }: { rows: [string, string][] }) {
+  return (
+    <box
+      backgroundColor={color("panel")}
+      border
+      borderColor={color("border")}
+      flexDirection="column"
+      gap={1}
+      padding={1}
+    >
+      {rows.map(([label, value]) => (
+        <box flexDirection="row" gap={2} justifyContent="space-between" key={label}>
+          <text fg={color("muted")} truncate>
+            {label}
+          </text>
+          <text fg={color("text")} truncate>
+            {value}
+          </text>
+        </box>
+      ))}
+    </box>
+  );
+}
+
+export function Panel({ title, content }: { title: string; content: string }) {
+  return (
+    <box
+      backgroundColor={color("panel")}
+      border
+      borderColor={color("border")}
+      flexDirection="column"
+      flexGrow={1}
+      padding={1}
+    >
+      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+        {title}
+      </text>
+      <text fg={color("text")} wrapMode="word">
+        {content || "None"}
+      </text>
+    </box>
+  );
+}
+
+export function ActionRow({
+  primary,
+  secondary,
+  onPrimary
+}: {
+  primary: string;
+  secondary: string;
+  onPrimary: () => void;
+}) {
+  useKeyboard((key) => {
+    if (key.name === "return" || key.name === "enter") {
+      onPrimary();
+    }
+  });
+
+  return (
+    <box
+      alignItems="center"
+      backgroundColor={color("panel")}
+      border
+      borderColor={color("accent")}
+      flexDirection="row"
+      height={4}
+      justifyContent="space-between"
+      paddingX={1}
+    >
+      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+        Enter: {primary}
+      </text>
+      <text fg={color("muted")} truncate>
+        {secondary}
+      </text>
+    </box>
+  );
+}

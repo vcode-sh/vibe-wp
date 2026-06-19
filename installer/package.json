@@ -1,0 +1,39 @@
+{
+  "name": "@vibe-wp/installer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "vibe-wp-installer": "./src/main.tsx"
+  },
+  "scripts": {
+    "dev": "bun run src/main.tsx",
+    "start": "bun run src/main.tsx",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check:loc": "bun run scripts/check-loc.ts",
+    "quality": "bun run check:loc && bun run typecheck && bun run lint && bun test",
+    "test": "bun test",
+    "dry-run": "bun run src/main.tsx --dry-run",
+    "export-plan": "bun run src/main.tsx --export-plan .vibe-installer-plan.json",
+    "build:linux-x64": "bun build --compile --target=bun-linux-x64 ./src/main.tsx --outfile dist/vibe-wp-installer-linux-x64",
+    "build:linux-arm64": "bun build --compile --target=bun-linux-arm64 ./src/main.tsx --outfile dist/vibe-wp-installer-linux-arm64",
+    "deps:fresh": "bunx depfresh -r major"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.4.1",
+    "@opentui/react": "^0.4.1",
+    "react": "^19.2.7",
+    "react-devtools-core": "^7.0.1",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@types/bun": "^1.3.14",
+    "@types/react": "^19.2.17",
+    "typescript": "^6.0.3",
+    "ultracite": "^7.8.3"
+  }
+}

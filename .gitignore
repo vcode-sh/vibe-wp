@@ -33,3 +33,12 @@ secrets/*
 
 *.log
 tmp/
+
+node_modules/
+dist/
+coverage/
+
+installer/node_modules/
+installer/dist/
+installer/.vibe-installer-plan.json
+installer/*.tsbuildinfo
