@@ -73,6 +73,15 @@ case "${command}" in
   logs)
     vibe_compose logs -f --tail=200 "$@"
     ;;
+  logs-recent)
+    # One-shot tail (no -f) so non-interactive callers like the installer UI
+    # get the latest lines and the command returns instead of streaming forever.
+    vibe_compose logs --no-color --tail=200 "$@"
+    ;;
+  backups)
+    # List available backup directories for this env (newest last), one per line.
+    ls -1d "backups/${VIBE_ENV}"/*/ 2>/dev/null | sed 's#/*$##' || true
+    ;;
   install)
     "${VIBE_BIN_DIR}/install-wordpress" "$@"
     ;;

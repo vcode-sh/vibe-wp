@@ -81,7 +81,7 @@ export const MANAGE_OPERATIONS: ManageOperation[] = [
     safety: "safe",
     group: "check",
     env: "prod",
-    vibeCommand: "logs"
+    vibeCommand: "logs-recent"
   },
   {
     id: "settings",

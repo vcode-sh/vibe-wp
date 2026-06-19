@@ -4,6 +4,8 @@ import type { InstallPlan, InstallTask } from "./types";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "skipped";
 
+const TASK_TIMEOUT_MS = 30 * 60 * 1000;
+
 export interface TaskResult {
   code: number;
   id: string;
@@ -54,11 +56,29 @@ export async function runTask(
     stderr: "pipe"
   });
 
+  // Safety net: a stuck command (e.g. one that unexpectedly streams) must never
+  // hang the UI forever. 30 minutes is generous enough for real installs.
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, TASK_TIMEOUT_MS);
+
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited
   ]);
+  clearTimeout(timer);
+
+  if (timedOut) {
+    return {
+      id: task.id,
+      status: "failed",
+      output: redact(`Timed out after ${TASK_TIMEOUT_MS / 60_000} minutes. ${stdout}\n${stderr}`),
+      code: 124
+    };
+  }
 
   const postflight = await runSpecialWrite(task, apply && code === 0, plan, "after");
   if (postflight.status === "failed") {
