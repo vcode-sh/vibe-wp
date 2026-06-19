@@ -16,9 +16,7 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
       {validationErrors.length > 0 ? (
         <ValidationErrors errors={validationErrors} />
       ) : (
-        <text attributes={TextAttributes.BOLD} fg={color("success")}>
-          Plan is valid. Review before execution.
-        </text>
+        <PlanSummary plan={redactedPlan} />
       )}
       <box flexDirection="row" gap={2}>
         <Panel content={envPaths} maxLines={6} title="ENV FILES" />
@@ -38,12 +36,16 @@ export function SuccessScreen({ redactedPlan }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <text attributes={TextAttributes.BOLD} fg={color("success")}>
-        Vibe WP installer plan is ready.
+        All set — your WordPress site is ready.
+      </text>
+      <text fg={color("muted")} wrapMode="word">
+        Open your site and log in at /wp-admin using the links below. Come back here anytime and
+        choose "Manage detected site" to run health checks, backups, and updates.
       </text>
       <InfoGrid rows={Object.entries(redactedPlan.summary)} />
       <NoteBox>
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
-          Daily commands after install
+          Manage it anytime from your server
         </text>
         <text fg={color("muted")}>cd {redactedPlan.installDir}</text>
         <text fg={color("muted")}>./bin/vibe prod smoke</text>
@@ -54,6 +56,26 @@ export function SuccessScreen({ redactedPlan }: ScreenProps) {
         <Credits />
       </box>
     </box>
+  );
+}
+
+function PlanSummary({ plan }: { plan: ScreenProps["redactedPlan"] }) {
+  const staging = plan.domains.stagingEnabled ? `https://${plan.domains.staging}` : "not included";
+  return (
+    <NoteBox tone="info">
+      <text attributes={TextAttributes.BOLD} fg={color("text")} height={1} truncate>
+        Here's what we'll set up — nothing runs until you confirm next:
+      </text>
+      <text fg={color("muted")} height={1} truncate>
+        · Your site: https://{plan.domains.production}
+      </text>
+      <text fg={color("muted")} height={1} truncate>
+        · Staging copy: {staging}
+      </text>
+      <text fg={color("muted")} height={1} truncate>
+        · Performance: {plan.summary.performancePreset} · Backups: {plan.summary.backupPolicy}
+      </text>
+    </NoteBox>
   );
 }
 

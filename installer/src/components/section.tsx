@@ -39,6 +39,7 @@ export function NoteBox({ children, tone = "border" }: { children: ReactNode; to
       borderColor={color(NOTE_BORDER[tone])}
       borderStyle={BORDER.frame}
       flexDirection="column"
+      flexShrink={0}
       gap={space.xs}
       padding={space.sm}
     >

@@ -106,9 +106,17 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
     ["Compose", state.host.compose ?? "missing"],
     ["Caddy", state.host.caddy ?? "missing"]
   ];
+  const missing = [state.host.docker ? null : "Docker", state.host.caddy ? null : "Caddy"].filter(
+    Boolean
+  );
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <Section title="Host facts">
+      <text fg={missing.length ? color("warning") : color("success")} wrapMode="word">
+        {missing.length
+          ? `Your server is missing ${missing.join(" and ")} — the building blocks Vibe WP runs on. Leave the switches below ON and we'll install them for you.`
+          : "Your server already has everything Vibe WP needs."}
+      </text>
+      <Section title="Your server">
         <InfoGrid rows={rows} />
       </Section>
       <ToggleRow

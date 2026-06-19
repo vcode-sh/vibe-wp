@@ -13,6 +13,10 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
   const values = performanceValues(state.performancePreset, state.host.totalMemoryMb);
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
+      <text fg={color("muted")} wrapMode="word">
+        We match PHP, Redis, and cache settings to your server's memory. Not sure? Keep Balanced —
+        it fits most business sites.
+      </text>
       <ChoiceList
         focused={focusIndex === 0}
         onChange={(value) => update("performancePreset", value as PerformancePreset)}
@@ -20,8 +24,8 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
         value={state.performancePreset}
       />
       <InfoGrid rows={Object.entries(values).slice(0, 8)} />
-      <text fg={color("muted")}>
-        These values are written to env files, so advanced users can audit every tuning choice.
+      <text fg={color("subtle")} truncate>
+        These exact values are written to your env files, so nothing is hidden.
       </text>
       <ActionRow
         onPrimary={next}
@@ -35,9 +39,12 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
 export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text fg={color("text")}>
-        WordPress AI plugin plus Anthropic, Google, and OpenAI connectors stay in the baseline
-        install.
+      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+        Optional — press Enter to skip.
+      </text>
+      <text fg={color("muted")} wrapMode="word">
+        The WordPress AI plugin installs either way. Only paste a provider key if you already have
+        one; you can always add them later.
       </text>
       <Field
         focused={focusIndex === 0}
@@ -75,14 +82,19 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
 export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
+      <text fg={color("muted")} wrapMode="word">
+        How should we protect your site? "Local first" makes a backup right after install — a good
+        safe default.
+      </text>
       <ChoiceList
         focused={focusIndex === 0}
         onChange={(value) => update("backupPolicy", value as BackupPolicy)}
         options={backupOptions}
         value={state.backupPolicy}
       />
-      <text fg={color("warning")}>
-        Local VPS backups are not enough for disaster recovery. The UI keeps that warning visible.
+      <text fg={color("warning")} wrapMode="word">
+        Backups on the same server aren't enough if the server itself fails — add off-server backups
+        (R2/S3) later for real safety.
       </text>
       <ActionRow
         onPrimary={next}
@@ -96,9 +108,13 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
 export function StagingScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
+      <text fg={color("muted")} wrapMode="word">
+        Staging is a private copy of your site where you can test plugins and changes safely before
+        they go live. Recommended.
+      </text>
       <ToggleRow
         focused={focusIndex === 0}
-        label="Create staging"
+        label="Create a staging copy"
         onToggle={() => update("stagingEnabled", !state.stagingEnabled)}
         value={state.stagingEnabled}
       />
@@ -110,11 +126,13 @@ export function StagingScreen({ state, update, focusIndex, next }: ScreenProps) 
       />
       <NoteBox tone="success">
         <text attributes={TextAttributes.BOLD} fg={color("success")}>
-          Staging safeguards
+          Staging is kept safe automatically
         </text>
-        <text fg={color("muted")}>VIBE_WP_FORCE_NOINDEX=1</text>
-        <text fg={color("muted")}>VIBE_WP_DISABLE_OUTBOUND_MAIL=1</text>
-        <text fg={color("muted")}>Separate Compose project, DB, Redis, and wp-content volume.</text>
+        <text fg={color("muted")}>
+          · Hidden from Google so it never competes with your live site
+        </text>
+        <text fg={color("muted")}>· Can't send emails to real customers</text>
+        <text fg={color("muted")}>· Fully separate from live — testing here never touches it</text>
       </NoteBox>
       <ActionRow
         onPrimary={next}
