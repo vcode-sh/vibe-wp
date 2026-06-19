@@ -1,10 +1,11 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
-import { parseArgs, usage } from "./cli/args";
+import { DEFAULT_INSTALL_DIR, parseArgs, usage } from "./cli/args";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
 import { buildInstallPlan } from "./core/install-plan";
+import { applyLocalSandboxDefaults, createLocalSandboxHostFacts } from "./core/local-sandbox";
 import { redactPlan } from "./core/redaction";
 import { runPlan } from "./core/task-runner";
 
@@ -28,9 +29,11 @@ async function main() {
     return;
   }
 
-  const host = await detectHostFacts();
-  const state = defaultState(host);
-  state.installDir = options.installDir;
+  const host = options.local ? createLocalSandboxHostFacts() : await detectHostFacts();
+  const state = options.local ? applyLocalSandboxDefaults(defaultState(host)) : defaultState(host);
+  if (!options.local || options.installDir !== DEFAULT_INSTALL_DIR) {
+    state.installDir = options.installDir;
+  }
   state.repo = options.repo;
   state.ref = options.ref;
   if (options.noHostInstall) {

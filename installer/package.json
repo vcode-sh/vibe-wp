@@ -17,7 +17,10 @@
     "quality": "bun run check:loc && bun run typecheck && bun run lint && bun test",
     "test": "bun test",
     "dry-run": "bun run src/main.tsx --dry-run",
+    "dry-run:local": "bun run src/main.tsx --local --dry-run",
     "export-plan": "bun run src/main.tsx --export-plan .vibe-installer-plan.json",
+    "export-plan:local": "bun run src/main.tsx --local --export-plan .vibe-installer-plan.local.json",
+    "dev:local": "bun run src/main.tsx --local",
     "build:linux-x64": "bun build --compile --target=bun-linux-x64 ./src/main.tsx --outfile dist/vibe-wp-installer-linux-x64",
     "build:linux-arm64": "bun build --compile --target=bun-linux-arm64 ./src/main.tsx --outfile dist/vibe-wp-installer-linux-arm64",
     "deps:fresh": "bunx depfresh -r major"

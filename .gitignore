@@ -40,7 +40,9 @@ coverage/
 
 installer/node_modules/
 installer/dist/
+installer/.vibe-local/
 installer/.vibe-installer-plan.json
+installer/.vibe-installer-plan.local.json
 installer/*.tsbuildinfo
 
 public-install/site/*

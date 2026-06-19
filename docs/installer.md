@@ -76,6 +76,36 @@ Do not mark the installer complete or recommend unattended `--headless --yes` pr
 - secrets are redacted from UI, logs, plans, summaries, and support bundles
 - the TUI has been visually checked on real SSH terminals, not only local terminal sessions
 
+## Local macOS Testing
+
+The installer can be run locally on macOS for UI/UX and core-flow testing:
+
+```sh
+cd installer
+bun run dev:local
+```
+
+Useful local commands:
+
+```sh
+cd installer
+bun run dry-run:local
+bun run export-plan:local
+bun run src/main.tsx --local --compact
+```
+
+Local mode:
+
+- uses deterministic fake host facts instead of probing a real VPS
+- shows sample existing Vibe WP sites under `installer/.vibe-local/`
+- defaults new installs to `installer/.vibe-local/sites/demo-vibe-local`
+- disables Docker and Caddy package installation tasks
+- marks the generated plan with `localSandbox: true`
+- simulates task execution even when the UI reaches the Execute step
+- does not write `/opt`, `/srv`, `/etc/caddy`, env files, or Docker volumes
+
+Local mode is for UI and planner development only. It does not replace disposable VPS proof for real production installs, staging installs, DNS, uploads, Redis Object Cache, FastCGI cache, or WordPress Site Health checks.
+
 ## Useful Commands
 
 Run the guided installer:

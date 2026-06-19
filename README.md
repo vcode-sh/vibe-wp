@@ -99,6 +99,13 @@ The public installer host is served from `wp.vcode.sh`. It downloads a versioned
 
 Current installer version: `0.1.2`. It is usable for bootstrap verification, dry-run planning, and TUI review, but it is not yet the completed production installer. See [docs/installer.md](docs/installer.md) for current capabilities, production readiness gates, release workflow, and Dokploy deployment model.
 
+For local macOS UI/core testing without touching a VPS:
+
+```sh
+cd installer
+bun run dev:local
+```
+
 ## Research Baseline
 
 The defaults are based on current upstream guidance as of June 18, 2026:

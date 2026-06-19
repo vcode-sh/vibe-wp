@@ -11,6 +11,7 @@ describe("parseArgs", () => {
       "https://example.com/vibe-wp.git",
       "--ref",
       "release",
+      "--local",
       "--no-caddy"
     ]);
 
@@ -18,6 +19,7 @@ describe("parseArgs", () => {
     expect(options.installDir).toBe("/srv/vibe-wp");
     expect(options.repo).toBe("https://example.com/vibe-wp.git");
     expect(options.ref).toBe("release");
+    expect(options.local).toBe(true);
     expect(options.noCaddy).toBe(true);
   });
 

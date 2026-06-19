@@ -16,6 +16,7 @@ export interface InstallerOptions {
   headlessPlan?: string;
   help: boolean;
   installDir: string;
+  local: boolean;
   noCaddy: boolean;
   noHostInstall: boolean;
   ref: string;
@@ -64,6 +65,7 @@ export interface InstallerState {
   installDir: string;
   installDocker: boolean;
   locale: string;
+  localSandbox: boolean;
   mode: InstallMode;
   performancePreset: PerformancePreset;
   productionDomain: string;
@@ -105,6 +107,7 @@ export interface InstallPlan {
   envFiles: EnvFilePlan[];
   generatedAt: string;
   installDir: string;
+  localSandbox: boolean;
   ref: string;
   repo: string;
   siteSlug: string;

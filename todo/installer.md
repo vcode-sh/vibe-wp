@@ -50,6 +50,7 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - The TUI opens over SSH and no longer exits immediately after `curl | sh`.
 - New-site planning supports site slugs, per-site Compose project names, per-site loopback HTTP ports, production domain, optional staging, AI keys, backup policy, and performance preset.
 - Existing Vibe WP installs are detected under `/opt` and `/srv` when they expose `bin/vibe` plus env files.
+- Local macOS testing is available through `--local`, with deterministic host facts, sample existing sites, sandbox paths under `installer/.vibe-local/`, and simulated task execution.
 - Manage mode can plan status, production smoke, performance report, and optional staging smoke tasks.
 - Safe-remove mode can plan backup, stop production/staging containers, and disable the site's Caddy snippet.
 - Caddy integration is site-scoped through `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy`.
@@ -65,6 +66,7 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - DNS validation exists, but the full DNS-not-ready guidance needs better copy, retry UX, and advanced override dialog treatment.
 - Management mode exists, but it is not yet a full site operations console with backups, restore, update, staging refresh, logs, and removal grouped as first-class actions.
 - Headless/export modes exist, but they need the same validation and resume story as interactive installs before being recommended for production.
+- Local mode proves UI navigation and plan generation, but it does not prove real Docker, Caddy, DNS, WordPress, uploads, Redis, or FastCGI behavior.
 
 ### Not Implemented
 

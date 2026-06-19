@@ -37,9 +37,7 @@ export function App({ initialState, options }: AppProps) {
   const [logOpen, setLogOpen] = useState(false);
   const [executionLines, setExecutionLines] = useState<string[]>([
     "Execution is armed only after the review step.",
-    options.yes
-      ? "--yes detected: real commands can run."
-      : "No --yes flag: execute step previews tasks without changing the host."
+    executionModeLine(options)
   ]);
 
   const compact = options.compact || dimensions.width < 92 || dimensions.height < 26;
@@ -188,4 +186,14 @@ function getStep(index: number) {
     throw new Error("Installer has no steps.");
   }
   return step;
+}
+
+function executionModeLine(options: InstallerOptions): string {
+  if (options.local) {
+    return "Local sandbox: execute simulates tasks without changing this Mac.";
+  }
+  if (options.yes) {
+    return "--yes detected: real commands can run.";
+  }
+  return "No --yes flag: execute step previews tasks without changing the host.";
 }

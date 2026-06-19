@@ -3,22 +3,12 @@ import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { productionEnvValues, stagingEnvValues } from "./env-writer";
 import { buildManageTasks, buildRemoveTasks } from "./operations-plan";
+import { buildPlanWarnings } from "./plan-warnings";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallPlan, InstallTask } from "./types";
-import { validateState } from "./validation";
 
 export function buildInstallPlan(state: InstallerState): InstallPlan {
-  const warnings = validateState(state);
-  if (!(state.host.docker || state.installDocker)) {
-    warnings.push("Docker is missing and host install is disabled.");
-  }
-  if (!(state.host.caddy || state.installCaddy)) {
-    warnings.push("Caddy is missing and host install is disabled.");
-  }
-  if (state.host.osName !== "unknown" && !state.host.osName.toLowerCase().includes("ubuntu")) {
-    warnings.push(`Detected OS is ${state.host.osName}; Ubuntu 26.04 LTS is the primary target.`);
-  }
-
+  const warnings = buildPlanWarnings(state);
   const tasks = buildTasks(state);
   const envFiles =
     state.mode === "manage-existing" || state.mode === "remove-existing"
@@ -41,6 +31,7 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
     version: INSTALLER_VERSION,
     generatedAt: new Date().toISOString(),
     installDir: state.installDir,
+    localSandbox: state.localSandbox,
     repo: state.repo,
     ref: state.ref,
     siteSlug: state.siteSlug,

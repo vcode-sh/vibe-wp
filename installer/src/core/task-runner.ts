@@ -30,6 +30,10 @@ export async function runTask(
     return { id: task.id, status: "skipped", output: "Skipped by plan.", code: 0 };
   }
 
+  if (apply && plan?.localSandbox) {
+    return simulateLocalTask(task);
+  }
+
   if (!(apply && task.command)) {
     return {
       id: task.id,
@@ -169,4 +173,14 @@ async function runSpecialWrite(
       code: 1
     };
   }
+}
+
+function simulateLocalTask(task: InstallTask): TaskResult {
+  const command = task.command ? `$ ${task.command.join(" ")}` : "No command required.";
+  return {
+    id: task.id,
+    status: "done",
+    output: redact(`Local sandbox: simulated task only.\n${command}`),
+    code: 0
+  };
 }

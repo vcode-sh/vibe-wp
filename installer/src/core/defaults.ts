@@ -64,6 +64,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     backupPolicy: "local-first",
     installDocker: !host.docker,
     installCaddy: !host.caddy,
+    localSandbox: false,
     host
   };
 }

@@ -1,10 +1,13 @@
 import type { InstallerOptions } from "../core/types";
 
+export const DEFAULT_INSTALL_DIR = "/opt/vibe-wp";
+
 type BooleanOption =
   | "ascii"
   | "compact"
   | "dryRun"
   | "help"
+  | "local"
   | "noCaddy"
   | "noHostInstall"
   | "version"
@@ -17,6 +20,7 @@ const booleanFlags = new Map<string, BooleanOption>([
   ["--dry-run", "dryRun"],
   ["--help", "help"],
   ["-h", "help"],
+  ["--local", "local"],
   ["--no-caddy", "noCaddy"],
   ["--no-host-install", "noHostInstall"],
   ["--version", "version"],
@@ -37,9 +41,10 @@ export function parseArgs(argv: string[]): InstallerOptions {
     ascii: false,
     dryRun: false,
     yes: false,
-    installDir: "/opt/vibe-wp",
+    installDir: DEFAULT_INSTALL_DIR,
     repo: "https://github.com/vcode-sh/vibe-wp.git",
     ref: "main",
+    local: false,
     noCaddy: false,
     noHostInstall: false,
     version: false,
@@ -87,6 +92,7 @@ export function usage(): string {
 Usage:
   vibe-wp-installer
   vibe-wp-installer --dry-run
+  vibe-wp-installer --local
   vibe-wp-installer --export-plan install-plan.json
   vibe-wp-installer --headless install-plan.json [--yes]
 
@@ -94,6 +100,7 @@ Options:
   --install-dir <path>   Install directory, default /opt/vibe-wp
   --repo <url>           Vibe WP git repository
   --ref <ref>            Git branch or tag, default main
+  --local                Use a safe local sandbox for macOS/UI testing
   --no-caddy             Do not manage Caddy
   --no-host-install      Do not install missing host packages
   --compact              Force compact UI
