@@ -89,6 +89,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     installDocker: !host.docker,
     installCaddy: !host.caddy,
     installRclone: true,
+    hardenServer: true,
     localSandbox: false,
     host
   };

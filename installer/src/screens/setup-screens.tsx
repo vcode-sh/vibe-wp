@@ -43,6 +43,12 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
         onToggle={() => update("installCaddy", !state.installCaddy)}
         value={state.installCaddy}
       />
+      <ToggleRow
+        focused={focusIndex === 2}
+        label="Secure the server (firewall, fail2ban, auto-updates)"
+        onToggle={() => update("hardenServer", !state.hardenServer)}
+        value={state.hardenServer}
+      />
       <ActionRow
         onPrimary={next}
         primary="Continue"

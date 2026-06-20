@@ -6,6 +6,7 @@ import {
 } from "./backup";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { quoteEnv, saltKeys } from "./env-writer";
+import { buildHardenTask } from "./harden";
 import { effectivePerformanceValues } from "./performance";
 import { randomHex, slugFromDomain } from "./secrets";
 import { shellQuote } from "./shell";
@@ -156,6 +157,10 @@ export function buildExternalTasks(state: InstallerState): InstallTask[] {
   const backupTimerTask = buildBackupTimerTask(state, "external");
   if (backupTimerTask) {
     tasks.push(backupTimerTask);
+  }
+  const hardenTask = buildHardenTask(state);
+  if (hardenTask) {
+    tasks.push(hardenTask);
   }
   return tasks;
 }

@@ -15,6 +15,7 @@ function options(overrides: Partial<InstallerOptions>): InstallerOptions {
     noCaddy: false,
     noWww: false,
     noHostInstall: false,
+    noHarden: false,
     ref: "main",
     repo: "https://example.com/vibe-wp.git",
     version: false,

@@ -32,6 +32,7 @@ export interface InstallerOptions {
   local: boolean;
   mode?: InstallMode;
   noCaddy: boolean;
+  noHarden: boolean;
   noHostInstall: boolean;
   noWww: boolean;
   perfOverrides?: string[];
@@ -96,6 +97,7 @@ export interface InstallerState {
   extRedisPassword: string;
   extRedisPort: string;
   extRedisScheme: string;
+  hardenServer: boolean;
   host: HostFacts;
   installCaddy: boolean;
   installDir: string;

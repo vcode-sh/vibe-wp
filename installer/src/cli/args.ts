@@ -21,6 +21,7 @@ type BooleanOption =
   | "noCaddy"
   | "noWww"
   | "noHostInstall"
+  | "noHarden"
   | "version"
   | "yes";
 type StringOption =
@@ -56,6 +57,7 @@ const booleanFlags = new Map<string, BooleanOption>([
   ["--no-caddy", "noCaddy"],
   ["--no-www", "noWww"],
   ["--no-host-install", "noHostInstall"],
+  ["--no-harden", "noHarden"],
   ["--version", "version"],
   ["--yes", "yes"]
 ]);
@@ -96,6 +98,7 @@ export function parseArgs(argv: string[]): InstallerOptions {
     noCaddy: false,
     noWww: false,
     noHostInstall: false,
+    noHarden: false,
     version: false,
     help: false,
     headlessJson: false
@@ -196,6 +199,7 @@ Options:
   --no-caddy             Do not manage Caddy
   --no-www               Do not add a www. alias or require its DNS
   --no-host-install      Do not install missing host packages
+  --no-harden            Do not apply server hardening (firewall, fail2ban, auto-updates)
   --ext-db-host <h:port> External MariaDB host (external-services mode)
   --ext-db-name <name>   External database name
   --ext-db-user <user>   External database user

@@ -63,7 +63,7 @@ export const steps: Step[] = [
   },
   {
     id: "system",
-    focusCount: 2,
+    focusCount: 3,
     title: "System",
     help: "Checks host readiness before touching Docker, Caddy, or env files."
   },

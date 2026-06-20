@@ -3,6 +3,7 @@ import { renderCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { buildExternalTasks } from "./external-plan";
+import { buildHardenTask } from "./harden";
 import { buildHostInstallTasks } from "./host-install";
 import {
   buildEnvFiles,
@@ -190,6 +191,10 @@ function buildTasks(state: InstallerState): InstallTask[] {
   const backupTimerTask = buildBackupTimerTask(state, "prod");
   if (backupTimerTask) {
     tasks.push(backupTimerTask);
+  }
+  const hardenTask = buildHardenTask(state);
+  if (hardenTask) {
+    tasks.push(hardenTask);
   }
   return tasks;
 }

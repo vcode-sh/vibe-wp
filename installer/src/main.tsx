@@ -55,6 +55,10 @@ async function main() {
     state.installDocker = false;
     state.installCaddy = false;
     state.installRclone = false;
+    state.hardenServer = false;
+  }
+  if (options.noHarden) {
+    state.hardenServer = false;
   }
   if (options.noCaddy) {
     state.installCaddy = false;

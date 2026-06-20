@@ -82,7 +82,8 @@ describe("buildExternalTasks", () => {
       "ext-perf",
       "backup-dir",
       "first-backup",
-      "backup-timer"
+      "backup-timer",
+      "harden"
     ]);
   });
 
