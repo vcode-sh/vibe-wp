@@ -39,13 +39,31 @@ export function buildEnvFiles(state: InstallerState): EnvFilePlan[] {
 
 export function buildStagingOnlyTasks(state: InstallerState): InstallTask[] {
   const installDir = shellQuote(state.selectedSiteDir || state.installDir);
+  const sudo = state.host.sudo ? "sudo " : "";
   return [
     buildDnsPreflightTask(state),
+    {
+      id: "env-stage",
+      title: "Generate staging environment",
+      description: "Create the isolated staging env file with noindex and mail safeguards.",
+      command: ["sh", "-lc", `cd ${installDir} && { [ -f env/stage.env ] || make init-stage; }`]
+    },
     {
       id: "stage-config",
       title: "Validate staging Compose",
       description: "Check staging Compose config before starting containers.",
       command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe stage config`]
+    },
+    {
+      id: "stage-caddyfile",
+      title: "Add staging HTTPS route",
+      description: "Write the staging Caddy snippet so the staging domain gets HTTPS.",
+      privileged: true,
+      command: [
+        "sh",
+        "-lc",
+        `${sudo}caddy validate --config /etc/caddy/Caddyfile && ${sudo}systemctl reload caddy`
+      ]
     },
     {
       id: "stage-up",

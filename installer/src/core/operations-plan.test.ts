@@ -47,9 +47,15 @@ describe("buildUpdateTasks", () => {
 });
 
 describe("buildStagingOnlyTasks", () => {
-  test("checks DNS then brings staging up", () => {
+  test("checks DNS, writes the staging route, then brings staging up", () => {
     const ids = buildStagingOnlyTasks(siteState()).map((t) => t.id);
-    expect(ids).toEqual(["dns-preflight", "stage-config", "stage-up"]);
+    expect(ids).toEqual([
+      "dns-preflight",
+      "env-stage",
+      "stage-config",
+      "stage-caddyfile",
+      "stage-up"
+    ]);
   });
 });
 

@@ -25,7 +25,17 @@ export function renderCaddyfile(state: InstallerState): string {
 
   return `${production}
 
-${state.stagingDomain.trim().toLowerCase()} {
+${renderStagingBlock(state)}`;
+}
+
+// Just the staging site block, for staging-only mode where it is written to its
+// own snippet (vibe-wp-<slug>-stage.caddy) without touching the prod snippet.
+export function renderStagingCaddyfile(state: InstallerState): string {
+  return renderStagingBlock(state);
+}
+
+function renderStagingBlock(state: InstallerState): string {
+  return `${state.stagingDomain.trim().toLowerCase()} {
     encode zstd gzip
     reverse_proxy 127.0.0.1:${state.stagingHttpPort} {
         health_uri /healthz

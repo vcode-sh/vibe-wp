@@ -1,5 +1,5 @@
 import { buildBackupDirTask, buildBackupTimerTask } from "./backup";
-import { renderCaddyfile } from "./caddyfile";
+import { renderCaddyfile, renderStagingCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { buildExternalTasks } from "./external-plan";
@@ -22,7 +22,7 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
   const warnings = buildPlanWarnings(state);
   const tasks = buildTasks(state);
   const envFiles = buildEnvFiles(state);
-  const skipCaddy = skipCaddyForMode(state.mode);
+  const caddyfile = planCaddyfile(state);
 
   return {
     version: INSTALLER_VERSION,
@@ -39,7 +39,7 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
       staging: state.stagingDomain.trim().toLowerCase()
     },
     envFiles,
-    caddyfile: skipCaddy ? "" : renderCaddyfile(state),
+    caddyfile,
     tasks,
     warnings,
     summary: {
@@ -54,6 +54,15 @@ export function buildInstallPlan(state: InstallerState): InstallPlan {
       backupPolicy: state.backupPolicy
     }
   };
+}
+
+// staging-only writes only the staging block to its own snippet; other modes
+// render the full prod (+ staging) Caddyfile unless Caddy is skipped entirely.
+function planCaddyfile(state: InstallerState): string {
+  if (state.mode === "staging-only") {
+    return renderStagingCaddyfile(state);
+  }
+  return skipCaddyForMode(state.mode) ? "" : renderCaddyfile(state);
 }
 
 function buildTasks(state: InstallerState): InstallTask[] {

@@ -40,6 +40,12 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
       state.selectedSiteDir = options.installDir;
       adoptDetectedSite(state, options.installDir);
     }
+    // staging-only attaches a fresh staging env: enable it and give it the
+    // site's designated staging port (deterministic from the slug).
+    if (options.mode === "staging-only") {
+      state.stagingEnabled = true;
+      state.stagingHttpPort = portPairFromSlug(state.siteSlug).staging;
+    }
   }
 
   if (options.domain) {

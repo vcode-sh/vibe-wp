@@ -110,10 +110,14 @@ async function runEnvWrite(taskId: string, plan: InstallPlan): Promise<TaskResul
 
 // Writes the site's Caddy snippet, ensures the global import, and reports the
 // privileged install's exit status as the task result.
-async function deployCaddyfile(taskId: string, plan: InstallPlan): Promise<TaskResult> {
+async function deployCaddyfile(
+  taskId: string,
+  plan: InstallPlan,
+  suffix: string
+): Promise<TaskResult> {
   const tempPath = `/tmp/vibe-wp-caddyfile-${Date.now()}`;
   await Bun.write(tempPath, plan.caddyfile);
-  const sitePath = `/etc/caddy/sites-enabled/vibe-wp-${plan.siteSlug}.caddy`;
+  const sitePath = `/etc/caddy/sites-enabled/vibe-wp-${plan.siteSlug}${suffix}.caddy`;
   const script = [
     'if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi',
     "$SUDO install -d -m 0755 /etc/caddy/sites-enabled",
@@ -163,7 +167,11 @@ async function runSpecialWrite(
     }
 
     if (phase === "before" && task.id === "caddyfile") {
-      return await deployCaddyfile(task.id, plan);
+      return await deployCaddyfile(task.id, plan, "");
+    }
+
+    if (phase === "before" && task.id === "stage-caddyfile") {
+      return await deployCaddyfile(task.id, plan, "-stage");
     }
 
     return { id: task.id, status: "done", output: "", code: 0 };
