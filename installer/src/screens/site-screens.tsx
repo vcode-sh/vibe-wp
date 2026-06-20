@@ -7,6 +7,7 @@ import { Section } from "../components/section";
 import {
   defaultInstallDir,
   portPairFromSlug,
+  shortPath,
   siteSlugFromDomain,
   stripProtocol
 } from "../core/site-profile";
@@ -57,7 +58,7 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
   const primaryOptions = [
     ...sites.map((site) => ({
       name: site.productionUrl ? stripProtocol(site.productionUrl) : site.installDir,
-      description: `${site.running ? `${glyphs.ok} running` : `${glyphs.pending} stopped`}${site.hasStaging ? " · staging" : ""} · ${site.installDir}`,
+      description: `${site.running ? `${glyphs.ok} running` : `${glyphs.pending} stopped`}${site.hasStaging ? " · staging" : ""} · ${shortPath(site.installDir)}`,
       value: site.installDir
     })),
     ...CREATE_OPTIONS

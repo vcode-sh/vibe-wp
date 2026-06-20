@@ -1,0 +1,24 @@
+{
+  "name": "@control-panel/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@control-panel/db": "workspace:*",
+    "@control-panel/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@control-panel/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

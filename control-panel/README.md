@@ -1,0 +1,134 @@
+# control-panel
+
+Vibe WP Control Panel is the web operations surface for Vibe WP. It is intentionally
+thin: the panel calls a typed Hono/oRPC server, and the server delegates real work to
+the Vibe WP headless core and `bin/vibe` workflows instead of duplicating runtime logic.
+
+## Features
+
+- **TypeScript** - For type safety and improved developer experience
+- **TanStack Router** - File-based routing with full type safety
+- **TailwindCSS** - Utility-first CSS for rapid UI development
+- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
+- **Hono** - Lightweight, performant server framework
+- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
+- **Bun** - Runtime environment
+- **Drizzle** - TypeScript-first ORM
+- **SQLite** - Local control-plane metadata
+- **Authentication** - Better Auth
+- **Biome** - Linting and formatting
+- **Tauri** - Future desktop shell
+- **Turborepo** - Optimized monorepo build system
+
+## Getting Started
+
+First, install the dependencies:
+
+```bash
+bun install
+```
+
+## Database Setup
+
+This project uses SQLite with Drizzle ORM.
+
+1. Start the local SQLite database (optional):
+
+```bash
+bun run db:local
+```
+
+2. Copy `server/.env.example` to `server/.env` and update secrets if needed.
+   Local SQLite URLs are resolved from the `server` directory, so `file:../local.db`
+   points at `control-panel/local.db`.
+
+3. Apply the schema to your database:
+
+```bash
+bun run db:push
+```
+
+Then, run the development server:
+
+```bash
+bun run dev
+```
+
+Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
+The API is running at [http://localhost:3000](http://localhost:3000).
+
+## UI Customization
+
+React web apps in this stack share shadcn/ui primitives through `packages/ui`.
+
+- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
+- Update shared primitives in `packages/ui/src/components/*`
+- Adjust shadcn aliases or style config in `packages/ui/components.json` and `web/components.json`
+
+### Add more shared components
+
+Run this from the project root to add more primitives to the shared UI package:
+
+```bash
+npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+```
+
+Import shared components like this:
+
+```tsx
+import { Button } from "@control-panel/ui/components/button";
+```
+
+### Add app-specific blocks
+
+If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `web`.
+
+## Deployment
+
+### Docker Compose
+
+- Target: web + server
+- Config: `docker-compose.yml` (app Dockerfiles live in `web/Dockerfile` and `server/Dockerfile`)
+- Build images: bun run docker:build
+- Start: bun run docker:up
+- Logs: bun run docker:logs
+- Stop: bun run docker:down
+
+Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
+
+## Git Hooks and Formatting
+
+- Run checks: `bun run check`
+
+## Project Structure
+
+```
+control-panel/
+├── web/             # Frontend application (React + TanStack Router)
+├── server/          # Backend API (Hono, ORPC)
+├── packages/
+│   ├── ui/          # Shared shadcn/ui components and styles
+│   ├── api/         # Typed API procedures over the control core
+│   ├── auth/        # Authentication configuration & logic
+│   └── db/          # Database schema & queries
+```
+
+## Available Scripts
+
+- `bun run dev`: Start all applications in development mode
+- `bun run build`: Build all applications
+- `bun run dev:web`: Start only the web application
+- `bun run dev:server`: Start only the server
+- `bun run check-types`: Check TypeScript types across all apps
+- `bun run db:push`: Push schema changes to database
+- `bun run db:generate`: Generate database client/types
+- `bun run db:migrate`: Run database migrations
+- `bun run db:studio`: Open database studio UI
+- `bun run db:local`: Start the local SQLite database
+- `bun run check`: Run Biome formatting and linting
+- `cd web && bun run desktop:dev`: Start Tauri desktop app in development
+- `cd web && bun run desktop:build`: Build Tauri desktop app
+- `bun run docker:build`: Build the Docker Compose images
+- `bun run docker:up`: Build and start the Docker Compose stack
+- `bun run docker:logs`: Tail logs from the Docker Compose stack
+- `bun run docker:down`: Stop the Docker Compose stack

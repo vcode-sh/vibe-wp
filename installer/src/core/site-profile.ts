@@ -14,6 +14,17 @@ export function stripProtocol(url: string): string {
   return url.replace(protocolPattern, "");
 }
 
+// Compact a long filesystem path for display, keeping the meaningful tail (the
+// last two segments) so it stays readable and doesn't truncate on narrow
+// terminals. Short paths (≤3 segments) are returned unchanged.
+export function shortPath(path: string, keep = 2): string {
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length <= keep + 1) {
+    return path;
+  }
+  return `…/${segments.slice(-keep).join("/")}`;
+}
+
 export function defaultInstallDir(siteSlug: string, existingCount: number): string {
   return existingCount > 0 ? `/opt/vibe-wp-sites/${siteSlug}` : "/opt/vibe-wp";
 }

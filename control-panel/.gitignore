@@ -1,0 +1,75 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+.yarn
+
+# Build outputs
+dist
+build
+out
+.next
+.nuxt
+.output
+.react-router
+.tanstack
+.nitro
+.vinxi
+.open-next
+dev-dist
+*.tsbuildinfo
+target
+gen/schemas
+
+# Generated files
+web/src/routeTree.gen.ts
+
+# Environment variables
+.env
+.env*.local
+.dev.vars
+.dev.vars*
+local.db
+*.db
+*.db-shm
+*.db-wal
+
+# IDEs and editors
+.vscode
+.cursor
+.claude
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Turbo
+.turbo
+.nx
+
+# Deployment and local platform state
+.vercel
+.netlify
+.wrangler
+.alchemy
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.tgz
+*.pem
+.cache
+tmp
+temp
