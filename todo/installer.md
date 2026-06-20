@@ -32,12 +32,17 @@ Done **and validated on real hardware**:
 - [x] New `bin/vibe` commands the older sections below predate: `logs-recent` (one-shot,
   non-following tail) and `backups` (list backup directories).
 
-Wired in the planner but **NOT yet tested on hardware**:
+Wired in the planner and **now validated on real hardware (2026-06-20)**:
 
-- [ ] **`remove-existing`** — `buildRemoveTasks`: pre-remove-backup, optional stage-down,
-  prod-down, disable-caddy-route. Needs a real disposable-VPS run.
-- [ ] **`update-existing`** — `buildUpdateTasks`: checkout, prod-config, prod-up,
-  prod-smoke. Needs a real run against an existing checkout.
+- [x] **`remove-existing`** — `buildRemoveTasks`: pre-remove-backup, optional stage-down,
+  prod-down, disable-caddy-route. Validated on a real disposable VPS. Found + fixed during
+  this run: `remove-existing` was not adopting the site slug, so it wrote the wrong Caddy
+  snippet path.
+- [x] **`update-existing`** — `buildUpdateTasks`: checkout, prod-config, prod-up,
+  prod-smoke. Validated on a real VPS against an existing checkout. Found + fixed during
+  this run: a stack-start race where `up` did not wait for healthchecks (smoke saw a
+  transient 503) — `bin/vibe up` now uses `compose up --wait` and `bin/smoke` retries the
+  first request.
 
 **Blocked on DNS:**
 
@@ -123,7 +128,10 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 
 - The visual system has a first neutral dark-mode pass, but the SSH result has not been accepted as 2026-quality UI.
 - Choice cards are clearer than native selects, but the dashboard still needs stronger hierarchy, better grouping, and better non-technical labels.
-- The task runner is real, but execution state is still in-process only and cannot be resumed after interruption.
+- The task runner is real, and `--headless` runs now persist a journal under
+  `.vibe-installer/` so a failed/interrupted install can be re-run with `--resume`
+  (done + VPS-validated 2026-06-20). The interactive Execute screen does not yet surface
+  resume as first-class UI.
 - Safe-remove is intentionally conservative and stop-only; there is no separate full-delete flow for removing files and Docker volumes.
 - DNS validation exists, but the full DNS-not-ready guidance needs better copy, retry UX, and advanced override dialog treatment.
 - Management mode exists, but it is not yet a full site operations console with backups, restore, update, staging refresh, logs, and removal grouped as first-class actions.
@@ -132,14 +140,19 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 
 ### Not Implemented
 
-- Persistent `.vibe-installer/state.json`, `install.log`, `summary.txt`, and support bundle export.
-- Resume after failed or interrupted install.
-- Dialog/layer system for destructive actions, advanced overrides, failure recovery, and support bundle export.
+- ~~Persistent `.vibe-installer/state.json` + `install.log` and support bundle export.~~
+  **Done + VPS-validated (2026-06-20).** A persistent install journal (`core/journal.ts`)
+  writes `.vibe-installer/state.json` + `install.log`; `--resume` skips already-completed
+  steps (`core/plan-runner.ts` `runPlan` journal param, wired in `main.tsx`);
+  `--support-bundle <dir>` writes a redacted bundle (host.json, install.log, state.json,
+  plan.redacted.json) via `core/support-bundle.ts`. Validated: a run failing at step 2 left
+  a journal, and re-running with `--resume` skipped step 1 and continued.
+- A `summary.txt` install summary alongside the journal.
+- Dialog/layer system for destructive actions, advanced overrides, and failure recovery.
 - Full-delete mode with files, Caddy snippets, Docker volumes, and backup confirmation.
 - Terminal screenshot/snapshot acceptance for wide, medium, compact, and emergency layouts.
 - Real end-to-end production-plus-staging proof with isolated domains (blocked on staging
   DNS; the `staging-only` plan is wired but `stage-smoke` needs a public staging record).
-- Hardware test of `remove-existing` and `update-existing` (planner wired, not yet run).
 - ~~A decision + implementation/removal for `external-services`.~~ Done + VPS-validated
   (2026-06-20) — see the `external-services` section above.
 
@@ -153,8 +166,15 @@ cache. What remains unproven is the production-plus-staging path and the other m
 
 ### P0 - Required Before Production Readiness
 
-- Add persistent installer state, resumable execution, install log, and final summary under `.vibe-installer/`.
-- Add a support bundle export that redacts secrets and includes host facts, selected options, command list, recent logs, Docker status, and Caddy validation output.
+- ~~Add persistent installer state, resumable execution, and an install log under
+  `.vibe-installer/`.~~ **Done + VPS-validated (2026-06-20)** — `core/journal.ts` writes
+  `state.json` + `install.log`; `--resume` skips completed steps. Still open: a final
+  `summary.txt`.
+- ~~Add a support bundle export that redacts secrets and includes host facts, selected
+  options, and the plan.~~ **Done + VPS-validated (2026-06-20)** — `--support-bundle <dir>`
+  writes a redacted bundle (host.json, install.log, state.json, plan.redacted.json) via
+  `core/support-bundle.ts`. Still open: including recent Docker status and Caddy validation
+  output in the bundle.
 - Add a real dialog/layer system for destructive actions, failure recovery, support bundle export, DNS override, and quit-during-execution confirmation.
 - Rework the first screen into a true site dashboard with clear actions: create site, manage detected site, safe remove, full delete when implemented, and open docs.
 - Add a visual progress timeline with current task, completed tasks, skipped tasks, failed task, retry action, and log drawer.
@@ -184,7 +204,9 @@ cache. What remains unproven is the production-plus-staging path and the other m
 
 Remaining P0 implementation work:
 
-- Add persistent installer state, resumable execution, and an install log under `.vibe-installer/`.
+- ~~Add persistent installer state, resumable execution, and an install log under
+  `.vibe-installer/`.~~ **Done + VPS-validated (2026-06-20)** (`core/journal.ts`,
+  `--resume`; support bundle via `--support-bundle`). Still open: a final `summary.txt`.
 - Add first-class modal/dialog flows for destructive actions, support bundle export, and failure recovery.
 - Decide whether safe-remove should remain stop-only or add a separate full-delete mode that removes files and Docker volumes after a stronger confirmation.
 - Run and record a real production install on a disposable Ubuntu 26.04 VPS with a real domain.
@@ -207,9 +229,10 @@ curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --version
 
 As of 2026-06-20 the `new-site` install was completed on a real server and is no longer
 unproven. Still: only run `--headless plan.json --yes` or a full TUI install on a server
-whose DNS is correctly configured and after the generated plan has been reviewed. The
-other modes (`remove-existing`, `update-existing`, `staging-only`) have not been run on
-real hardware yet — treat them as untested.
+whose DNS is correctly configured and after the generated plan has been reviewed.
+`remove-existing` and `update-existing` are now validated on real hardware (2026-06-20);
+`staging-only` remains unproven end-to-end because its `stage-smoke` needs a public staging
+DNS record.
 
 ## Goal
 

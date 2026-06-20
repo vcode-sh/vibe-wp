@@ -26,10 +26,11 @@ sync to production.
 - **Multi-environment**: local / stage / prod / external, with staging
   `refresh-from-prod` and `promote-files-to-prod` already implemented.
 - **A guided TUI installer** (Bun + React + OpenTUI): `new-site` install (validated on a
-  real VPS), a 13-operation manage dashboard, plus wired-but-not-yet-hardware-tested
-  `remove-existing`, `update-existing`, and `staging-only` modes. Mode-aware planner, real
-  host detection (scans `/opt` + `/srv`), dynamic wizard flow, and a headless core with
-  `--export-plan` / `--headless` / `--headless-json` / `--dry-run`.
+  real VPS), a 13-operation manage dashboard, plus `remove-existing` and `update-existing`
+  (both validated on a real VPS 2026-06-20) and wired-but-DNS-blocked `staging-only`.
+  Mode-aware planner, real host detection (scans `/opt` + `/srv`), dynamic wizard flow, and
+  a headless core with `--export-plan` / `--headless` / `--headless-json` / `--dry-run` /
+  `--resume` / `--support-bundle`.
 
 **Key insight:** the lifecycle is already built in `bin/vibe`. Most "manager" surface is
 UI over existing commands, not new backend.
@@ -98,6 +99,19 @@ agent docs, never in tracked files). Outcome:
   exposes a **Health check & alerts** dashboard action. Validated on real hardware:
   all-green monitor run (HTTP 200, TLS 89 days, fresh backup) plus the hourly timer
   enabled + active with a successful service run logged to journald.
+- **Resumable installs + support bundle implemented and VPS-validated.** `--headless` runs
+  now keep a persistent journal under `.vibe-installer/` (`state.json` + `install.log`,
+  `core/journal.ts`); `--resume` skips already-completed steps (`core/plan-runner.ts`
+  `runPlan` journal param). `--support-bundle <dir>` writes a redacted diagnostics bundle
+  (host.json, install.log, state.json, plan.redacted.json) via `core/support-bundle.ts`.
+  Validated on real hardware: a run failing at step 2 left a journal, and re-running with
+  `--resume` skipped step 1 and continued.
+- **`remove-existing` + `update-existing` validated on real hardware.** Both modes ran on a
+  disposable VPS. Two bugs found + fixed: `remove-existing` was not adopting the site slug
+  (wrong Caddy snippet path), and a stack-start race where `up` did not wait for
+  healthchecks caused a transient smoke 503 — `bin/vibe up` now uses `compose up --wait`,
+  `bin/smoke` retries the first request, and `bin/restore` verifies the backup archive
+  before resetting the database.
 - **Host hardening implemented and VPS-validated.** `./bin/vibe <env> harden` (idempotent
   `./bin/harden`) sets up the `ufw` firewall (allowing SSH + 80/443 before enabling),
   fail2ban (`sshd` jail), automatic security updates, and safe `sysctl` defaults; an
@@ -113,8 +127,9 @@ agent docs, never in tracked files). Outcome:
 - opencode/t1code-grade UI; intuitive navigation; dynamic mode-branching flow. (done)
 - "Quick vs Custom" fork + smart defaults so the happy path is Enter-Enter-Enter. (done)
 - The `new-site` happy path is now validated end-to-end on a real VPS (see milestone
-  above). Remaining polish items (resume, persistent state, support bundle, terminal-size
-  snapshots) are tracked in `todo/installer.md`.
+  above). Resumable installs + redacted support bundle are now done + VPS-validated
+  (`--resume`, `--support-bundle`). Remaining polish items (a final `summary.txt`,
+  terminal-size snapshots) are tracked in `todo/installer.md`.
 
 ### Phase 2 — Manage dashboard (DONE + validated)
 "Manage detected site" is a real per-site control panel over `bin/vibe`: 13 operations
@@ -186,12 +201,13 @@ Wedge: "managed-WordPress quality on a VPS you own," reachable over plain SSH to
 
 ## Remaining / untested installer work
 
-The other installer modes are **wired in the planner but not all proven on hardware**:
+`remove-existing` and `update-existing` are now proven on hardware; `staging-only` remains
+the one mode unproven end-to-end (blocked on staging DNS):
 
 - **`remove-existing`** — wired (pre-remove-backup, optional stage-down, prod-down,
-  disable-caddy-route in `buildRemoveTasks`) but **validated on a real VPS (2026-06-20)**.
+  disable-caddy-route in `buildRemoveTasks`) and **validated on a real VPS (2026-06-20)**.
 - **`update-existing`** — wired (checkout, prod-config, prod-up, prod-smoke in
-  `buildUpdateTasks`) but **validated on a real VPS (2026-06-20)**.
+  `buildUpdateTasks`) and **validated on a real VPS (2026-06-20)**.
 - **`staging-only`** — wired (dns-preflight, stage-config, stage-up = up+install+smoke).
   The full fresh-staging path is **not validated end-to-end** because the staging
   subdomain needs a public DNS record (stage-smoke fails without it). Note the staging

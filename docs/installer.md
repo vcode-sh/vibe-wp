@@ -60,8 +60,8 @@ The first screen offers these intents (the menu only shows manage/remove/update/
 
 - **Create a new WordPress** (`new-site`) — full guided install: production, optional staging, isolated ports, and tuned env files. Fully working and validated on a disposable VPS.
 - **Manage detected site** (`manage-existing`) — a dashboard that runs status, health/smoke, performance, logs, backup, cache, restart, staging, restore, and stop actions against a detected site. See the dashboard mapping in [operations.md](operations.md).
-- **Remove detected site** (`remove-existing`) — creates a safety backup, stops containers, and disables the site's Caddy snippet without deleting files or Docker volumes.
-- **Update existing checkout** (`update-existing`) — fast-forwards the existing repository and rebuilds/restarts production in place, without touching data.
+- **Remove detected site** (`remove-existing`) — creates a safety backup, stops containers, and disables the site's Caddy snippet without deleting files or Docker volumes. Validated on a real VPS (2026-06-20).
+- **Update existing checkout** (`update-existing`) — fast-forwards the existing repository and rebuilds/restarts production in place, without touching data. Validated on a real VPS (2026-06-20).
 - **Create staging only** (`staging-only`) — attaches an isolated staging environment to an existing production site.
 - **Use external database and Redis** (`external-services`) — bring-your-own MariaDB and Redis: only WordPress and Nginx (plus cron) run in Docker. After the Domain screen the flow collects external Database details (host:port, name, user, password, charset, table prefix) and external Redis details (host, port, password, database, scheme) on dedicated screens, then writes `env/external.env` and runs the install via `./bin/vibe external ...`. There is no bundled staging step in this mode. Validated end-to-end on a real VPS (2026-06-20): HTTPS site, only `wordpress`/`nginx`/`cron` containers running, WordPress data in the external MariaDB, and the object cache connected to the external Redis.
 
@@ -99,10 +99,12 @@ Value flags:
 - `--perf KEY=VALUE` — override a single performance setting (repeatable), e.g. `--perf REDIS_MAXMEMORY=512mb --perf PHP_FPM_PM_MAX_CHILDREN=24`. Recognised keys match the Performance screen; the PHP-FPM pool is always clamped to a valid shape (`min_spare ≤ max_spare ≤ max_children`) so an override cannot crash the container
 - `--export-plan <file>` — write the computed install plan to a JSON file and exit
 - `--headless <file>` — run from a prepared plan JSON file (pair with `--yes` to execute host changes)
+- `--support-bundle <dir>` — write a redacted diagnostics bundle (host facts, install journal, redacted plan) to `<dir>` and exit
 
 Boolean flags:
 
 - `--headless-json` — read the plan JSON from stdin instead of a file
+- `--resume` — on a `--headless` run, skip steps already completed in a previous run (reads `.vibe-installer/state.json`)
 - `--dry-run` — plan without making host changes
 - `--yes` — confirm and execute host changes non-interactively
 - `--local` — use the safe macOS local sandbox (UI/UX and planner work only)
@@ -120,10 +122,16 @@ All host-changing actions stay behind the reviewed TUI flow or an explicit `--ye
 
 ## What The Installer Does Not Have Yet
 
+Done since the last revision (done + VPS-validated 2026-06-20):
+
+- persistent state (`.vibe-installer/state.json`) and an install log (`install.log`) for
+  `--headless` runs, with `--resume` to skip already-completed steps
+- support bundle export (`--support-bundle <dir>`) with a redacted plan, host facts, and
+  the install journal
+
 The installer is not complete until these gaps are closed:
 
-- persistent state, resumable execution, and install logs under `.vibe-installer/`
-- support bundle export with redacted logs and detected host facts
+- a final `summary.txt` written alongside the install journal
 - first-class modal/dialog layers for destructive actions, failure recovery, and advanced overrides
 - full-delete mode for intentionally removing files and Docker volumes
 - terminal snapshot checks for wide, medium, compact, and emergency layouts
@@ -141,7 +149,8 @@ Do not mark the installer complete or recommend unattended `--headless --yes` pr
 - the user can install a production WordPress site from a clean Ubuntu 26.04 VPS without reading Docker documentation
 - the same flow can add staging with isolated domains, ports, project names, volumes, and secrets
 - every privileged host change appears in review before execution
-- interruption can be resumed from `.vibe-installer/state.json`
+- interruption can be resumed from `.vibe-installer/state.json` (met — `--resume`, validated 2026-06-20)
+- a redacted support bundle can be exported for diagnostics (met — `--support-bundle <dir>`, validated 2026-06-20)
 - failures show plain-English next steps and allow retry or support bundle export
 - secrets are redacted from UI, logs, plans, summaries, and support bundles
 - the TUI has been visually checked on real SSH terminals, not only local terminal sessions
