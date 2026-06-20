@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { color, type ThemeColor } from "../app/theme";
-import { BORDER, space } from "../app/tokens";
+import { FOCUS_ID, space } from "../app/tokens";
 import type { FieldFeedback } from "../core/field-checks";
 import { useGlyphs } from "./glyph-context";
 import { clickProps } from "./mouse";
@@ -32,21 +32,7 @@ export function Field({
   secret?: boolean;
 }) {
   const glyphs = useGlyphs();
-  useKeyboard((key) => {
-    if (!(secret && focused)) {
-      return;
-    }
-    if (key.name === "backspace") {
-      onInput(value.slice(0, -1));
-      return;
-    }
-    if (key.ctrl || key.meta || key.name.length > 1) {
-      return;
-    }
-    if (key.raw.length === 1) {
-      onInput(`${value}${key.raw}`);
-    }
-  });
+  useSecretInput(secret && focused, value, onInput);
 
   return (
     <box
@@ -58,6 +44,7 @@ export function Field({
       flexGrow={grow ? 1 : 0}
       flexShrink={grow ? 1 : 0}
       height={hint || feedback ? 3 : 2}
+      id={focused ? FOCUS_ID : undefined}
       paddingX={1}
     >
       <box flexDirection="row" gap={space.sm} justifyContent="space-between">
@@ -82,19 +69,48 @@ export function Field({
           value={value}
         />
       )}
-      {feedback ? (
-        <text fg={color(FEEDBACK_COLOR[feedback.tone])} truncate>
-          {feedback.tone === "ok" ? glyphs.done : glyphs.warn} {feedback.text}
-        </text>
-      ) : (
-        hint && (
-          <text fg={color("subtle")} truncate>
-            {hint}
-          </text>
-        )
-      )}
+      <FieldFooter feedback={feedback} hint={hint} />
     </box>
   );
+}
+
+function FieldFooter({ feedback, hint }: { feedback?: FieldFeedback; hint?: string }) {
+  const glyphs = useGlyphs();
+  if (feedback) {
+    return (
+      <text fg={color(FEEDBACK_COLOR[feedback.tone])} truncate>
+        {feedback.tone === "ok" ? glyphs.done : glyphs.warn} {feedback.text}
+      </text>
+    );
+  }
+  if (hint) {
+    return (
+      <text fg={color("subtle")} truncate>
+        {hint}
+      </text>
+    );
+  }
+  return null;
+}
+
+// Secret fields use a plain <text> mask (not <input>), so we drive editing from
+// raw key events while the field is focused.
+function useSecretInput(active: boolean, value: string, onInput: (value: string) => void) {
+  useKeyboard((key) => {
+    if (!active) {
+      return;
+    }
+    if (key.name === "backspace") {
+      onInput(value.slice(0, -1));
+      return;
+    }
+    if (key.ctrl || key.meta || key.name.length > 1) {
+      return;
+    }
+    if (key.raw.length === 1) {
+      onInput(`${value}${key.raw}`);
+    }
+  });
 }
 
 export function ToggleRow({
@@ -123,6 +139,7 @@ export function ToggleRow({
       borderColor={focused ? color("focusRing") : color("divider")}
       flexDirection="row"
       height={1}
+      id={focused ? FOCUS_ID : undefined}
       justifyContent="space-between"
       paddingX={1}
       {...clickProps(onToggle)}
@@ -138,46 +155,6 @@ export function ToggleRow({
           </text>
         </box>
       </box>
-    </box>
-  );
-}
-
-export function Panel({
-  title,
-  content,
-  maxLines = 10
-}: {
-  title: string;
-  content: string;
-  maxLines?: number;
-}) {
-  const allLines = (content || "None").split("\n");
-  const lines = allLines.slice(0, maxLines);
-  const overflow = allLines.length - lines.length;
-  return (
-    <box
-      borderColor={color("border")}
-      borderStyle={BORDER.frame}
-      flexDirection="column"
-      flexGrow={1}
-      padding={space.sm}
-    >
-      <box border={["bottom"]} borderColor={color("divider")} flexDirection="row" height={2}>
-        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-          {title}
-        </text>
-      </box>
-      {lines.map((line, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: preview lines are positional
-        <text fg={color("text")} height={1} key={`${title}-${index}`} truncate>
-          {line}
-        </text>
-      ))}
-      {overflow > 0 && (
-        <text fg={color("subtle")} height={1}>
-          … +{overflow} more
-        </text>
-      )}
     </box>
   );
 }

@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import { CONTENT_MAX_WIDTH } from "../app/tokens";
+import type { ScrollBoxRenderable } from "@opentui/core";
+import { type ReactNode, useEffect, useRef } from "react";
+import { CONTENT_MAX_WIDTH, FOCUS_ID } from "../app/tokens";
 
 export function Column({
   children,
@@ -19,5 +20,27 @@ export function Column({
         {children}
       </box>
     </box>
+  );
+}
+
+// Scrolls so the focused control stays visible on terminals too short to show
+// the whole screen. The focused control tags itself with FOCUS_ID; we bring it
+// into view whenever focus moves. Mouse-wheel scrolling still works too.
+export function ScrollViewport({
+  children,
+  focusIndex
+}: {
+  children: ReactNode;
+  focusIndex: number;
+}) {
+  const ref = useRef<ScrollBoxRenderable | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focusIndex is the intended re-scroll trigger, not read in the body.
+  useEffect(() => {
+    ref.current?.scrollChildIntoView(FOCUS_ID);
+  }, [focusIndex]);
+  return (
+    <scrollbox flexGrow={1} ref={ref} scrollX={false} scrollY={true}>
+      {children}
+    </scrollbox>
   );
 }

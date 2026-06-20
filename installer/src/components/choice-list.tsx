@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
 import { color } from "../app/theme";
-import { space } from "../app/tokens";
+import { FOCUS_ID, space } from "../app/tokens";
 import { useGlyphs } from "./glyph-context";
 import { clickProps } from "./mouse";
 
@@ -41,7 +41,7 @@ export function ChoiceList<T extends string>({
   const activeOption = options.find((option) => option.value === value) ?? options[0];
 
   return (
-    <box flexDirection="column" gap={space.xs}>
+    <box flexDirection="column" gap={space.xs} id={focused ? FOCUS_ID : undefined}>
       {options.map((option, index) => (
         <ChoiceRow
           active={option.value === value}

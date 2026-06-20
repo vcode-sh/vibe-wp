@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Footer, Header, HelpPanel, LogStrip } from "../components/chrome";
 import { GlyphProvider } from "../components/glyph-context";
 import { shouldUseAscii } from "../components/glyphs";
-import { Column } from "../components/layout";
+import { Column, ScrollViewport } from "../components/layout";
 import { CompactStepper, StepRail } from "../components/step-rail";
 import { buildInstallPlan } from "../core/install-plan";
 import { redactPlan } from "../core/redaction";
@@ -173,7 +173,9 @@ function MainPanel(props: ScreenProps) {
         </text>
         <text fg={color("subtle")}>? context · Ctrl+L logs</text>
       </box>
-      <Column>{renderScreen(props)}</Column>
+      <ScrollViewport focusIndex={props.focusIndex}>
+        <Column>{renderScreen(props)}</Column>
+      </ScrollViewport>
     </box>
   );
 }

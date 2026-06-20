@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
 import { useGlyphs } from "../components/glyph-context";
-import { Panel } from "../components/primitives";
+import { Panel } from "../components/panel";
 import { Spinner } from "../components/spinner";
 import type { ManageOperation } from "../core/manage-operations";
 import type { TaskStatus } from "../core/task-runner";

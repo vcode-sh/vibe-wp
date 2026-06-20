@@ -3,7 +3,8 @@ import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { Credits } from "../components/credits";
 import { useGlyphs } from "../components/glyph-context";
-import { ActionRow, Panel } from "../components/primitives";
+import { Panel } from "../components/panel";
+import { ActionRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
 
 export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenProps) {
