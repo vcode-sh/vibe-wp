@@ -1,4 +1,7 @@
-const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^*-_=+";
+// Excludes shell/compose interpolation + comment triggers ($, #, backtick,
+// quotes) so secrets are safe in env files consumed by BOTH `. source` and
+// docker compose --env-file. Still 60+ chars of entropy.
+const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@%^*-_=+";
 const domainProtocolPattern = /^https?:\/\//;
 const domainSlugSeparatorPattern = /[^a-z0-9]+/g;
 const domainSlugTrimPattern = /^-+|-+$/g;
