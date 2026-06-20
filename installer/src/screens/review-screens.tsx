@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { Credits } from "../components/credits";
-import { InfoGrid } from "../components/data-display";
+import { useGlyphs } from "../components/glyph-context";
 import { ActionRow, Panel } from "../components/primitives";
 import { NoteBox } from "../components/section";
 
@@ -32,29 +32,65 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
   );
 }
 
-export function SuccessScreen({ redactedPlan }: ScreenProps) {
+export function SuccessScreen({ redactedPlan, state }: ScreenProps) {
+  const glyphs = useGlyphs();
+  const summary = redactedPlan.summary;
+  const stagingLive = state.stagingEnabled && summary.stagingUrl !== "disabled";
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={color("success")}>
-        All set — your WordPress site is ready.
-      </text>
-      <text fg={color("muted")} wrapMode="word">
-        Open your site and log in at /wp-admin using the links below. Come back here anytime and
-        choose "Manage detected site" to run health checks, backups, and updates.
-      </text>
-      <InfoGrid rows={Object.entries(redactedPlan.summary)} />
-      <NoteBox>
-        <text attributes={TextAttributes.BOLD} fg={color("text")}>
-          Manage it anytime from your server
+      <NoteBox tone="success">
+        <text attributes={TextAttributes.BOLD} fg={color("success")}>
+          {glyphs.done} Your WordPress site is live.
         </text>
-        <text fg={color("muted")}>cd {redactedPlan.installDir}</text>
-        <text fg={color("muted")}>./bin/vibe prod smoke</text>
-        <text fg={color("muted")}>./bin/vibe prod perf-report</text>
-        <text fg={color("muted")}>./bin/vibe prod backup</text>
+        <text fg={color("muted")} wrapMode="word">
+          HTTPS, Redis object cache, Nginx page cache, and backups are all set up. Open the links
+          below to finish in wp-admin.
+        </text>
       </NoteBox>
-      <box paddingTop={1}>
-        <Credits />
+      <box flexDirection="row" gap={1}>
+        <LinkCard label="Your site" tone="accent" url={summary.productionUrl ?? ""} />
+        <LinkCard label="Admin login" tone="accent" url={summary.adminUrl ?? ""} />
+        {stagingLive && <LinkCard label="Staging" tone="muted" url={summary.stagingUrl ?? ""} />}
       </box>
+      <NoteBox tone="info">
+        <text attributes={TextAttributes.BOLD} fg={color("text")}>
+          Next steps
+        </text>
+        <text fg={color("muted")} wrapMode="word">
+          {glyphs.bullet} Log in as "{state.adminUser}" — the password is in{" "}
+          {redactedPlan.installDir}/env/prod.env
+        </text>
+        <text fg={color("muted")} wrapMode="word">
+          {glyphs.bullet} Come back here and pick your site to run health checks, backups, updates
+        </text>
+        <text fg={color("muted")} wrapMode="word">
+          {glyphs.bullet} Off-server backups (R2) and alerts can be turned on anytime
+        </text>
+      </NoteBox>
+      <Credits />
+    </box>
+  );
+}
+
+function LinkCard({ label, url, tone }: { label: string; url: string; tone: "accent" | "muted" }) {
+  return (
+    <box
+      backgroundColor={color("panel3")}
+      borderColor={color(tone === "accent" ? "accent" : "divider")}
+      borderStyle="rounded"
+      flexBasis={0}
+      flexDirection="column"
+      flexGrow={1}
+      paddingX={1}
+    >
+      <text fg={color("muted")}>{label}</text>
+      <text
+        attributes={TextAttributes.BOLD}
+        fg={color(tone === "accent" ? "accent" : "text")}
+        truncate
+      >
+        {url}
+      </text>
     </box>
   );
 }

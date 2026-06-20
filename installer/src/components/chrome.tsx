@@ -79,11 +79,29 @@ export function HelpPanel({
         </text>
       ))}
       <box border={["top"]} borderColor={color("divider")} flexDirection="column" paddingTop={1}>
+        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
+          KEYS
+        </text>
+        {KEY_HELP.map(([k, v]) => (
+          <text fg={color("muted")} key={k} truncate>
+            <text fg={color("text")}>{k}</text> {v}
+          </text>
+        ))}
+      </box>
+      <box border={["top"]} borderColor={color("divider")} flexDirection="column" paddingTop={1}>
         <Credits layout="column" />
       </box>
     </box>
   );
 }
+
+const KEY_HELP: [string, string][] = [
+  ["arrows / 1-9", "choose an option"],
+  ["Tab", "switch field"],
+  ["Enter", "continue"],
+  ["Esc", "go back"],
+  ["?", "toggle this · Ctrl+L logs"]
+];
 
 export function LogStrip({ lines }: { lines: string[] }) {
   return (

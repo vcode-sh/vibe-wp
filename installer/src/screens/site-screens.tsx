@@ -89,6 +89,11 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <ServerLine host={state.host} />
+      {setupHint(state.host) && (
+        <text fg={color("warning")} wrapMode="word">
+          {setupHint(state.host)}
+        </text>
+      )}
       <Section title={sites.length ? `Your sites (${sites.length})` : "No sites here yet"}>
         <ChoiceList
           focused={focusIndex === 0}
@@ -172,6 +177,14 @@ function setSetup(update: ScreenProps["update"], quick: boolean): void {
   if (quick) {
     update("stagingEnabled", false);
   }
+}
+
+function setupHint(host: HostFacts): string {
+  const missing = [host.docker ? null : "Docker", host.caddy ? null : "Caddy"].filter(Boolean);
+  if (missing.length) {
+    return `${missing.join(" and ")} not found yet — we'll install ${missing.length > 1 ? "them" : "it"} when you create a site.`;
+  }
+  return "";
 }
 
 function ServerLine({ host }: { host: HostFacts }) {
