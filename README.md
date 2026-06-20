@@ -20,7 +20,8 @@
 - WordPress 7.0 AI plugin and default Anthropic, Google, and OpenAI connector plugins.
 - Separate runtime surfaces for uploads, plugins, themes, and MU plugins.
 - Dedicated cron worker instead of request-triggered WP-Cron.
-- Environment-aware WP-CLI, Adminer, backup/restore, staging refresh, and managed WordPress workflows.
+- Environment-aware WP-CLI, Adminer, staging refresh, and managed WordPress workflows.
+- Backup and restore with retention, plus optional off-server backups to Cloudflare R2 (via rclone) on a daily or weekly schedule; restore auto-fetches a missing backup from R2.
 
 ## Quick Start
 
@@ -144,7 +145,7 @@ The installer opens with a menu of intents:
 "Manage detected site" is a control panel that runs read-and-maintain operations against a detected site, each backed by a `bin/vibe` command and grouped from safest to most dangerous:
 
 - **Check on it** — check it's healthy (`smoke`), speed report (`perf-report`), what's running (`ps`), check the server (`doctor-runtime`), recent logs (`logs-recent`), double-check settings (`config`).
-- **Maintain** — back up now (`backup`), clear the cache (`cache-flush`), restart the site (`restart`).
+- **Maintain** — back up now (`backup` — kept in a local folder with retention, and copied off-server to Cloudflare R2 when enabled), clear the cache (`cache-flush`), restart the site (`restart`).
 - **Staging** (shown when staging exists) — copy live to staging (`refresh-from-prod`), publish staging to live (`promote-files-to-prod`).
 - **Danger zone** — restore a backup (`restore`), stop the site (`down`).
 

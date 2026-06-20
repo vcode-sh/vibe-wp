@@ -177,7 +177,7 @@ cache. What remains unproven is the production-plus-staging path and the other m
 
 - Mouse support for selecting actions in terminals that support it.
 - QR code or short URL handoff for opening the WordPress admin URL after install.
-- External backup target wizard for S3/R2-compatible storage.
+- ~~External backup target wizard for S3/R2-compatible storage.~~ **Done + VPS-validated (2026-06-20)** — the Backup screen now offers Manual / Local backups / Local + Cloudflare R2; the rclone-based R2 engine (`bin/lib/backup.sh`) uploads and verifies (`rclone check`) every backup, prunes local + remote beyond `VIBE_BACKUP_RETENTION`, and a systemd service+timer (`vibe-wp-backup-<slug>-<env>`) runs daily/weekly backups. One remaining gap: a live R2 upload through the installer still needs a real R2 API token (the upload + verify mechanics were proven against an S3-compatible store).
 - Optional DNS automation for Cloudflare or another provider.
 - Secret-manager mode for AI provider keys instead of storing all optional keys in env files.
 - Plugin/theme bundle selection after the baseline WordPress AI plugin set is installed.
@@ -765,18 +765,31 @@ Rules:
 
 ### 8. Backups
 
-Choices:
+**Done + VPS-validated (2026-06-20):** off-server backups are fully implemented, not a placeholder.
 
-- local-only backups under `backups/prod`
-- local backups plus reminder to copy off-server
-- advanced external backup hook, placeholder for future S3/R2 target
+Choices (Backup screen, `screens/backup-screen.tsx`):
 
-Required first implementation:
+- Manual — no automatic backups
+- Local backups — written to a configurable folder (`VIBE_BACKUP_DIR`), created on install
+- Local + Cloudflare R2 — every backup is also uploaded off-server to R2 (S3-compatible) via rclone and verified with `rclone check`
 
-- schedule guidance only, unless a systemd timer is implemented in the same phase
-- expose `./bin/vibe prod backup`
-- expose `./bin/vibe prod backup-verify`
-- create first backup after install only if the user chooses it
+Implemented behavior:
+
+- The backup engine (`bin/lib/backup.sh`, `bin/backup`) writes to `VIBE_BACKUP_DIR`, prunes both local
+  and remote backups beyond `VIBE_BACKUP_RETENTION` (keeps the newest N), and uploads to R2 when
+  `VIBE_BACKUP_R2_ENABLED=1`. rclone is configured purely from `RCLONE_CONFIG_R2_*` env vars (no secret
+  config file). `restore` auto-fetches a backup from R2 when it is missing locally.
+- The installer collects R2 account ID, access key ID, secret access key, and bucket; creates the backup
+  folder; installs rclone when R2 is enabled and host installs are allowed; runs a first backup; and
+  installs a systemd service+timer (`vibe-wp-backup-<slug>-<env>`) for a daily or weekly schedule.
+- Headless flags: `--backup-dir`, `--backup-schedule <off|daily|weekly>`, `--r2-account`,
+  `--r2-access-key`, `--r2-secret`, `--r2-bucket` (any `--r2-*` flag opts into off-server backups).
+- Exposes `./bin/vibe <env> backup` and `./bin/vibe <env> backup-verify`.
+- Validated on a real VPS: configurable folder, upload + verify, local + remote retention,
+  restore-from-remote, installer-created folder, first backup in the configured folder, and the systemd
+  timer enabled + active with a successful manual service run. Remaining gap: a live Cloudflare R2 upload
+  through the installer still needs a real R2 API token (the mechanics were proven against an
+  S3-compatible store).
 
 ### 9. Staging
 
@@ -1154,7 +1167,7 @@ Required:
 Optional later:
 
 - cosign signatures for release assets
-- external backup target
+- ~~external backup target~~ Done + VPS-validated (2026-06-20) — off-server Cloudflare R2 backups via rclone with retention and a systemd schedule; see the Backups section above.
 - unattended security update setup
 - fail2ban profile
 - Cloudflare API DNS automation

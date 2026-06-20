@@ -20,7 +20,9 @@ sync to production.
 - **A full lifecycle CLI** (`bin/vibe <env> <command>`), the substrate for everything:
   `compose · config · up · down · restart · ps · logs · install · wp · backup ·
   backup-verify · restore · doctor-runtime · perf-report · smoke · cache-flush ·
-  refresh-from-prod · promote-files-to-prod · env`.
+  refresh-from-prod · promote-files-to-prod · env`. `backup` now writes to a configurable
+  folder, prunes local + remote copies by retention, and optionally uploads off-server to
+  Cloudflare R2; `restore` auto-fetches a missing backup from R2.
 - **Multi-environment**: local / stage / prod / external, with staging
   `refresh-from-prod` and `promote-files-to-prod` already implemented.
 - **A guided TUI installer** (Bun + React + OpenTUI): `new-site` install (validated on a
@@ -76,6 +78,18 @@ agent docs, never in tracked files). Outcome:
   external task chain (`dns-preflight`, `checkout`, `env-external`, `caddyfile`,
   `ext-config`, `ext-up`, `ext-install`, `ext-smoke`, `ext-perf`, `first-backup` via
   `./bin/vibe external ...`) reported ALL DONE.
+- **Internal + external backups fully implemented and VPS-validated.** Backups are no
+  longer local-only: `backup` writes to a configurable folder (`VIBE_BACKUP_DIR`), prunes
+  local + remote copies beyond `VIBE_BACKUP_RETENTION` (keeps newest N), and — when R2 is
+  enabled — uploads to Cloudflare R2 (S3-compatible) via rclone with `rclone check`
+  verification; `restore` auto-fetches a backup from R2 when it is missing locally. The
+  installer Backup screen offers Manual / Local backups / Local + Cloudflare R2, creates
+  the folder, installs rclone, runs a first backup, and installs a systemd service+timer
+  (`vibe-wp-backup-<slug>-<env>`) for a daily or weekly schedule. Validated on real
+  hardware: configurable folder, upload + verify, local + remote retention,
+  restore-from-remote, and the systemd timer enabled + active with a successful manual
+  run. Remaining gap: a live Cloudflare R2 upload through the installer still needs a real
+  R2 API token (mechanics proven against an S3-compatible store).
 
 ## Phases
 
@@ -127,7 +141,8 @@ existing `bin/vibe` command (prod and stage where relevant).
 
 **Operate (actions, each behind confirmation / `--yes`):**
 - Lifecycle: `up` · `down` · `restart`.
-- Backups: `backup` · `backup-verify` · `restore`.
+- Backups: `backup` (configurable folder + retention + optional off-server Cloudflare R2) ·
+  `backup-verify` · `restore` (auto-fetches from R2 when missing locally).
 - Cache: `cache-flush`.
 - Logs: `logs` (tail).
 - Updates: WordPress core/plugins via `wp`.

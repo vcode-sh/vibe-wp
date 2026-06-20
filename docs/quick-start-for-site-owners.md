@@ -233,14 +233,23 @@ Create a staging backup:
 ./bin/vibe stage backup
 ```
 
-Backups are stored here:
+Each backup is saved in its own dated folder. By default they live here:
 
 ```text
 backups/prod/
 backups/stage/
 ```
 
-Keep important backups outside the VPS too. A VPS failure can destroy local backups stored on the same machine.
+You can keep backups in two places at once:
+
+- **Locally on the VPS** — every backup goes into a folder you choose (the installer suggests one and creates it for you). Only the newest few are kept; older ones are deleted automatically so the disk does not fill up. How many to keep is up to you.
+- **Off-server on Cloudflare R2** — the safest option. If you turn this on, every backup is also copied to your own Cloudflare R2 storage and checked to confirm the copy is complete. This protects you even if the whole server is lost, which a local-only backup cannot do. Old copies on R2 are pruned the same way as local ones.
+
+The installer can also run backups for you automatically on a **daily or weekly schedule**, so you do not have to remember to run them. You set the backup folder, how many to keep, the schedule, and your R2 details during install — or with the `--backup-dir`, `--backup-schedule`, and `--r2-*` options.
+
+When you restore (see below), if a backup is only on R2 and not on the server any more, it is fetched back from R2 for you automatically.
+
+Even with R2 enabled, keeping a copy of truly important backups somewhere else as well is good practice. A single storage location can always fail.
 
 Check a backup before depending on it:
 
