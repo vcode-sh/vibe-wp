@@ -46,12 +46,35 @@ function activeOverrides(state: InstallerState): Record<string, string> {
   return result;
 }
 
+function posInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : fallback;
+}
+
+// PHP-FPM refuses to start if start/spare servers exceed max_children, so a
+// single edited value (e.g. lowering max_children below the preset's spares)
+// would crash the container. Clamp the pool to a valid shape no matter what the
+// user enters: 1 <= min_spare <= max_spare <= max_children, start in range.
+function clampFpmPool(values: Record<string, string>): Record<string, string> {
+  const maxChildren = posInt(values.PHP_FPM_PM_MAX_CHILDREN, 1);
+  const maxSpare = Math.min(posInt(values.PHP_FPM_PM_MAX_SPARE_SERVERS, 1), maxChildren);
+  const minSpare = Math.min(posInt(values.PHP_FPM_PM_MIN_SPARE_SERVERS, 1), maxSpare);
+  const start = Math.min(
+    Math.max(posInt(values.PHP_FPM_PM_START_SERVERS, minSpare), minSpare),
+    maxSpare
+  );
+  values.PHP_FPM_PM_MAX_CHILDREN = String(maxChildren);
+  values.PHP_FPM_PM_MAX_SPARE_SERVERS = String(maxSpare);
+  values.PHP_FPM_PM_MIN_SPARE_SERVERS = String(minSpare);
+  values.PHP_FPM_PM_START_SERVERS = String(start);
+  return values;
+}
+
 // What actually gets written to env files: preset baseline, then user overrides
-// win. Overrides only apply when the user enabled customisation.
+// win. Overrides only apply when the user enabled customisation. The pool is
+// always clamped to a php-fpm-valid shape so no edit can crash the container.
 export function effectivePerformanceValues(state: InstallerState): Record<string, string> {
   const base = performanceBaseValues(state);
-  if (!state.performanceCustom) {
-    return base;
-  }
-  return { ...base, ...activeOverrides(state) };
+  const merged = state.performanceCustom ? { ...base, ...activeOverrides(state) } : base;
+  return clampFpmPool(merged);
 }

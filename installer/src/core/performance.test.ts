@@ -53,6 +53,26 @@ describe("effectivePerformanceValues", () => {
     expect(effectivePerformanceValues(state).PHP_FPM_PM_MAX_CHILDREN).toBe("6");
   });
 
+  test("lowering max_children clamps the spare/start servers so php-fpm stays valid", () => {
+    const state = balancedState();
+    state.host = { ...state.host, totalMemoryMb: 8192 }; // high-memory preset
+    state.performancePreset = "high-memory";
+    state.performanceCustom = true;
+    state.performanceOverrides = { PHP_FPM_PM_MAX_CHILDREN: "11" };
+    const v = effectivePerformanceValues(state);
+    const maxChildren = Number(v.PHP_FPM_PM_MAX_CHILDREN);
+    expect(maxChildren).toBe(11);
+    // The invariant php-fpm enforces: spares and start cannot exceed max_children.
+    expect(Number(v.PHP_FPM_PM_MAX_SPARE_SERVERS)).toBeLessThanOrEqual(maxChildren);
+    expect(Number(v.PHP_FPM_PM_MIN_SPARE_SERVERS)).toBeLessThanOrEqual(
+      Number(v.PHP_FPM_PM_MAX_SPARE_SERVERS)
+    );
+    expect(Number(v.PHP_FPM_PM_START_SERVERS)).toBeLessThanOrEqual(maxChildren);
+    expect(Number(v.PHP_FPM_PM_START_SERVERS)).toBeGreaterThanOrEqual(
+      Number(v.PHP_FPM_PM_MIN_SPARE_SERVERS)
+    );
+  });
+
   test("overrides flow through into the production env file", () => {
     const state = balancedState();
     state.performanceCustom = true;
