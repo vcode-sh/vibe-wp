@@ -233,11 +233,12 @@ proven on hardware:
   **validated end-to-end on a real VPS (2026-06-20)**: attaching staging to a live
   prod-only site served staging over HTTPS with a valid cert + noindex, prod untouched.
 
-The one installer path still unproven on hardware is a real production-plus-staging install
-with two fresh isolated domains. The "first screen becomes a full site dashboard" rework is
-a separate, subjective cosmetic item still open (the underlying create/manage/remove/full-delete
-actions all exist; the Execute screen already shows a progress bar + per-task status + live
-log).
+The first screen was reworked into a site-first control panel (2026-06-20): detected sites
+lead as the primary list (server-status line on top), selecting one reveals its actions
+(Manage / Update / Add staging / Remove), and "+ Create a new WordPress site" / "+ external
+DB & Redis" are peer actions. The Execute screen already shows a progress bar + per-task
+status + live log. The one installer path still unproven on hardware is a real
+production-plus-staging install with two fresh isolated domains.
 
 ## Risks / open questions
 

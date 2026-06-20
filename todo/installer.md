@@ -203,7 +203,7 @@ cache. What remains unproven is the production-plus-staging path and the other m
   and quit-during-execution confirmation. (Partly done: destructive dashboard ops now show
   an explicit plain-language consequence + an "Enter to confirm, Esc to cancel" prompt —
   done + VPS-validated 2026-06-20.)
-- Rework the first screen into a true site dashboard with clear actions: create site, manage detected site, safe remove, full delete, and open docs. (Still open — cosmetic/subjective rework; the underlying actions all exist.)
+- Reworked the first screen into a site-first control panel (DONE 2026-06-20): detected sites lead as the primary list with a server-status line on top; selecting a site reveals its actions (Manage / Update / Add staging / Remove), with "+ Create a new WordPress site" and "+ Use external database & Redis" as peer actions. Welcome now reads as a control panel ("Open control panel" when sites exist).
 - ~~Add a visual progress timeline with current task, completed tasks, skipped tasks, failed
   task, retry action, and log drawer.~~ Already present: the Execute screen shows a progress
   bar, a per-task status list, and a live log.
