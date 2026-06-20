@@ -178,6 +178,8 @@ make restore BACKUP=backups/local/20260618T195728Z ARGS="--yes --old-url https:/
 
 If the named backup directory is not present locally and off-server backups are enabled (`VIBE_BACKUP_R2_ENABLED=1`), restore first fetches it from R2 by name, then restores the database and `wp-content` as usual.
 
+`./bin/vibe <env> backups-remote` lists the off-server (R2) backups as restorable paths. The installer's Manage dashboard "Restore a backup" picker merges these with the local backups, so you can restore an off-server backup even after local copies have been pruned — restore fetches it from R2 automatically.
+
 ## Staging
 
 Refresh staging from production:
