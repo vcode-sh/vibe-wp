@@ -34,7 +34,20 @@ first_headers="$(mktemp)"
 second_headers="$(mktemp)"
 trap 'rm -f "${first_headers}" "${second_headers}"' EXIT INT TERM
 
-if curl -fsS -o /dev/null -D "${first_headers}" "${site_url}/"; then
+# Retry the first request briefly: a freshly (re)started stack can still be
+# warming up (TLS provisioning, healthchecks), and we don't want a transient
+# 5xx to fail the smoke test.
+first_ok=0
+i=0
+while [ "${i}" -lt 10 ]; do
+  if curl -fsS -o /dev/null -D "${first_headers}" "${site_url}/"; then
+    first_ok=1
+    break
+  fi
+  i=$((i + 1))
+  sleep 3
+done
+if [ "${first_ok}" = 1 ]; then
   ok "HTTP request succeeds"
 else
   fail "HTTP request failed for ${site_url}/"

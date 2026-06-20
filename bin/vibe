@@ -66,6 +66,9 @@ case "${command}" in
     if [ "$#" -eq 0 ] || printf '%s\n' "$@" | grep -qx wordpress; then
       vibe_compose restart nginx >/dev/null 2>&1 || true
     fi
+    # Block until healthchecks pass (after the nginx restart), so callers like
+    # smoke don't race a still-starting stack. Ignored if --wait is unsupported.
+    vibe_compose up -d --wait --wait-timeout 180 "$@" >/dev/null 2>&1 || true
     ;;
   down)
     vibe_compose down "$@"
