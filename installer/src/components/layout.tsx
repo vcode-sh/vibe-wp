@@ -8,9 +8,14 @@ export function Column({
   children: ReactNode;
   maxWidth?: number;
 }) {
+  // alignItems flex-start keeps the content column at its natural height instead
+  // of stretching it to fill the panel — without that, Yoga compresses the
+  // children to fit and they overdraw each other. The MainPanel clips any genuine
+  // overflow at the panel edge, so no overflow prop is needed here (and adding one
+  // mis-clips the first column of wrapped text).
   return (
-    <box flexDirection="row" flexGrow={1} justifyContent="center">
-      <box flexDirection="column" flexGrow={1} maxWidth={maxWidth}>
+    <box alignItems="flex-start" flexDirection="row" flexGrow={1} justifyContent="center">
+      <box flexDirection="column" flexGrow={1} flexShrink={0} maxWidth={maxWidth}>
         {children}
       </box>
     </box>
