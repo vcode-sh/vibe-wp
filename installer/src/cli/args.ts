@@ -35,6 +35,7 @@ type StringOption =
   | "monitorWebhook"
   | "monitorTelegramToken"
   | "monitorTelegramChat"
+  | "supportBundle"
   | "r2AccountId"
   | "r2AccessKeyId"
   | "r2Bucket"
@@ -77,6 +78,7 @@ const stringFlags = new Map<string, StringOption>([
   ["--monitor-webhook", "monitorWebhook"],
   ["--monitor-telegram-token", "monitorTelegramToken"],
   ["--monitor-telegram-chat", "monitorTelegramChat"],
+  ["--support-bundle", "supportBundle"],
   ["--r2-account", "r2AccountId"],
   ["--r2-access-key", "r2AccessKeyId"],
   ["--r2-bucket", "r2Bucket"],

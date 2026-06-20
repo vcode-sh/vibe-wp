@@ -7,9 +7,14 @@ Usage:
   vibe-wp-installer --local
   vibe-wp-installer --export-plan install-plan.json
   vibe-wp-installer --headless install-plan.json [--yes]
+  vibe-wp-installer --headless install-plan.json --yes --resume
+  vibe-wp-installer --headless install-plan.json --support-bundle /tmp
   echo '<json>' | vibe-wp-installer --headless-json
 
 Options:
+  --resume               Skip steps already completed in a previous --headless run
+  --support-bundle <dir> Write a redacted diagnostics bundle (host, journal, plan)
+  --no-harden            Skip server hardening; --no-monitor skips the health timer
   --domain <host>        Production domain (derives slug, ports, staging, title)
   --admin-email <email>  WordPress admin email
   --staging-domain <h>   Staging domain (enables staging)

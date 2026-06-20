@@ -14,32 +14,51 @@ import { openJournal } from "./core/journal";
 import { applyLocalSandboxDefaults, createLocalSandboxHostFacts } from "./core/local-sandbox";
 import { runPlan } from "./core/plan-runner";
 import { redactPlan } from "./core/redaction";
+import { writeSupportBundle } from "./core/support-bundle";
+import type { InstallerOptions } from "./core/types";
+
+// Non-interactive (no-TUI) modes. Returns true when it handled the run.
+async function runNonInteractive(options: InstallerOptions): Promise<boolean> {
+  if (options.help) {
+    console.log(usage());
+    return true;
+  }
+  if (options.version) {
+    console.log(INSTALLER_VERSION);
+    return true;
+  }
+  if (options.headlessJson) {
+    await runHeadlessJson();
+    return true;
+  }
+  if (options.supportBundle) {
+    const host = options.local ? createLocalSandboxHostFacts() : await detectHostFacts();
+    const plan = options.headlessPlan ? await Bun.file(options.headlessPlan).json() : undefined;
+    const journalDir = options.headlessPlan
+      ? `${dirname(options.headlessPlan)}/.vibe-installer`
+      : undefined;
+    const out = await writeSupportBundle({ outDir: options.supportBundle, host, plan, journalDir });
+    console.log(`Support bundle written to ${out} (redacted — safe to share).`);
+    return true;
+  }
+  if (options.headlessPlan) {
+    const plan = await Bun.file(options.headlessPlan).json();
+    // Persist progress next to the plan so a failed/interrupted run can --resume.
+    const journal = await openJournal(
+      `${dirname(options.headlessPlan)}/.vibe-installer`,
+      options.resume
+    );
+    const results = await runPlan(plan, options.yes, {}, journal);
+    console.log(JSON.stringify(results, null, 2));
+    return true;
+  }
+  return false;
+}
 
 async function main() {
   const options = parseArgs(Bun.argv.slice(2));
 
-  if (options.help) {
-    console.log(usage());
-    return;
-  }
-
-  if (options.version) {
-    console.log(INSTALLER_VERSION);
-    return;
-  }
-
-  if (options.headlessJson) {
-    await runHeadlessJson();
-    return;
-  }
-
-  if (options.headlessPlan) {
-    const plan = await Bun.file(options.headlessPlan).json();
-    // Persist progress next to the plan so a failed/interrupted run can --resume.
-    const journalDir = `${dirname(options.headlessPlan)}/.vibe-installer`;
-    const journal = await openJournal(journalDir, options.resume);
-    const results = await runPlan(plan, options.yes, {}, journal);
-    console.log(JSON.stringify(results, null, 2));
+  if (await runNonInteractive(options)) {
     return;
   }
 
