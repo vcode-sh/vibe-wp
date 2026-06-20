@@ -13,6 +13,7 @@ function options(overrides: Partial<InstallerOptions>): InstallerOptions {
     installDir: "/opt/vibe-wp",
     local: false,
     noCaddy: false,
+    noWww: false,
     noHostInstall: false,
     ref: "main",
     repo: "https://example.com/vibe-wp.git",

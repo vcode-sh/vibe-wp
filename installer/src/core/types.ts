@@ -23,6 +23,7 @@ export interface InstallerOptions {
   mode?: InstallMode;
   noCaddy: boolean;
   noHostInstall: boolean;
+  noWww: boolean;
   ref: string;
   repo: string;
   stagingDomain?: string;

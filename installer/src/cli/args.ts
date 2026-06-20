@@ -19,6 +19,7 @@ type BooleanOption =
   | "help"
   | "local"
   | "noCaddy"
+  | "noWww"
   | "noHostInstall"
   | "version"
   | "yes";
@@ -41,6 +42,7 @@ const booleanFlags = new Map<string, BooleanOption>([
   ["-h", "help"],
   ["--local", "local"],
   ["--no-caddy", "noCaddy"],
+  ["--no-www", "noWww"],
   ["--no-host-install", "noHostInstall"],
   ["--version", "version"],
   ["--yes", "yes"]
@@ -68,6 +70,7 @@ export function parseArgs(argv: string[]): InstallerOptions {
     ref: "main",
     local: false,
     noCaddy: false,
+    noWww: false,
     noHostInstall: false,
     version: false,
     help: false,
@@ -146,6 +149,7 @@ Options:
   --ref <ref>            Git branch or tag, default main
   --local                Use a safe local sandbox for macOS/UI testing
   --no-caddy             Do not manage Caddy
+  --no-www               Do not add a www. alias or require its DNS
   --no-host-install      Do not install missing host packages
   --compact              Force compact UI
   --ascii                Avoid Unicode UI characters

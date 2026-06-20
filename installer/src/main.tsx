@@ -58,6 +58,9 @@ async function main() {
   if (options.noCaddy) {
     state.installCaddy = false;
   }
+  if (options.noWww) {
+    state.wwwAlias = false;
+  }
   applyCliState(state, options);
 
   const plan = buildInstallPlan(state);
