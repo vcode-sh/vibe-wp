@@ -3,6 +3,7 @@ set -eu
 
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/backup.sh"
 
 label=""
 
@@ -17,8 +18,10 @@ while [ "$#" -gt 0 ]; do
 Usage:
   ./bin/backup [--label LABEL]
 
-Creates a backup for the selected VIBE_ENV. The archive is written under:
-  backups/<env>/<timestamp>[-label]/
+Creates a backup for the selected VIBE_ENV. The archive is written under
+VIBE_BACKUP_DIR (default backups/<env>/) in a <timestamp>[-label]/ directory,
+then, when VIBE_BACKUP_R2_ENABLED=1, uploaded to Cloudflare R2 via rclone.
+Old local and remote backups beyond VIBE_BACKUP_RETENTION are pruned.
 USAGE
       exit 0
       ;;
@@ -33,10 +36,11 @@ timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
 safe_env="$(printf '%s' "${VIBE_ENV}" | tr -c 'A-Za-z0-9_.-' '-')"
 safe_label="$(printf '%s' "${label}" | tr -c 'A-Za-z0-9_.-' '-')"
 
+backup_dir_root="$(backup_root)"
 if [ -n "${safe_label}" ]; then
-  target="backups/${safe_env}/${timestamp}-${safe_label}"
+  target="${backup_dir_root}/${timestamp}-${safe_label}"
 else
-  target="backups/${safe_env}/${timestamp}"
+  target="${backup_dir_root}/${timestamp}"
 fi
 
 mkdir -p "${target}"
@@ -77,3 +81,13 @@ wp_content=wp-content.tar.gz
 EOF
 
 echo "Backup written to ${target}"
+
+retention="$(vibe_env_value VIBE_BACKUP_RETENTION 2>/dev/null || true)"
+
+if backup_remote_enabled; then
+  backup_upload "${target}"
+  echo "Backup uploaded to off-server storage."
+fi
+
+backup_prune_local "${backup_dir_root}" "${retention}"
+backup_prune_remote "${retention}"

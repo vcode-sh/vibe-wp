@@ -3,6 +3,7 @@ set -eu
 
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/backup.sh"
 
 usage() {
   cat <<'USAGE'
@@ -72,6 +73,14 @@ if [ "${confirm}" != "1" ]; then
   echo "Refusing to restore without --yes." >&2
   usage >&2
   exit 1
+fi
+
+if [ ! -d "${backup_dir}" ]; then
+  # Not on disk: try pulling it down from off-server storage by its name.
+  if backup_remote_enabled; then
+    echo "Backup not found locally; attempting to fetch from off-server storage..."
+    backup_fetch_remote "$(basename "${backup_dir}")" "${backup_dir}" || true
+  fi
 fi
 
 if [ ! -d "${backup_dir}" ]; then

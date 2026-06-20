@@ -44,6 +44,7 @@ shift
 
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/backup.sh"
 
 case "${command}" in
   compose)
@@ -82,7 +83,7 @@ case "${command}" in
     ;;
   backups)
     # List available backup directories for this env (newest last), one per line.
-    ls -1d "backups/${VIBE_ENV}"/*/ 2>/dev/null | sed 's#/*$##' || true
+    ls -1d "$(backup_root)"/*/ 2>/dev/null | sed 's#/*$##' || true
     ;;
   install)
     "${VIBE_BIN_DIR}/install-wordpress" "$@"
