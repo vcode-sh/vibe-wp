@@ -67,6 +67,25 @@ export function validateState(state: InstallerState): string[] {
     return validateExistingMode(state);
   }
 
+  // update-existing acts on an already-installed site, so it needs a selected site.
+  if (state.mode === "update-existing") {
+    return validateExistingMode(state);
+  }
+
+  // staging-only attaches staging to an existing site: needs the site AND a
+  // valid, distinct staging domain (its DNS is checked by dns-preflight).
+  if (state.mode === "staging-only") {
+    const errors = validateExistingMode(state);
+    const stagingError = validateDomain(state.stagingDomain);
+    if (stagingError) {
+      errors.push(`Staging domain: ${stagingError}`);
+    }
+    if (state.stagingDomain.trim().toLowerCase() === state.productionDomain.trim().toLowerCase()) {
+      errors.push("Staging domain must be different from production.");
+    }
+    return errors;
+  }
+
   if (state.mode === "external-services") {
     return [
       ...validateSiteIdentity(state),

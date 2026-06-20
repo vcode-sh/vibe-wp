@@ -98,6 +98,24 @@ if [ ! -f "${backup_dir}/wp-content.tar.gz" ]; then
   exit 1
 fi
 
+# Verify archive integrity BEFORE resetting the database, so a corrupt backup
+# never wipes the live data and then silently "restores" nothing. set -e aborts
+# here on any failure, leaving the current site untouched.
+echo "Verifying backup integrity..."
+if [ -f "${backup_dir}/database.sql.gz" ]; then
+  if ! gunzip -t "${backup_dir}/database.sql.gz" 2>/dev/null; then
+    echo "Database archive ${backup_dir}/database.sql.gz is corrupt; refusing to restore." >&2
+    exit 1
+  fi
+elif [ ! -s "${backup_dir}/database.sql" ]; then
+  echo "Database dump ${backup_dir}/database.sql is empty; refusing to restore." >&2
+  exit 1
+fi
+if ! tar -tzf "${backup_dir}/wp-content.tar.gz" >/dev/null 2>&1; then
+  echo "wp-content archive ${backup_dir}/wp-content.tar.gz is corrupt; refusing to restore." >&2
+  exit 1
+fi
+
 echo "Starting required services..."
 vibe_require_env_file
 services="wordpress"

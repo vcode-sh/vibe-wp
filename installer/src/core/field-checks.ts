@@ -7,7 +7,8 @@ export interface FieldFeedback {
 
 const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const EXAMPLE_HOSTS = /(^|\.)example\.(com|org|net)$/i;
+// Matches example.com/org/net at the end of a domain or after the email "@".
+const EXAMPLE_HOSTS = /(^|[.@])example\.(com|org|net)$/i;
 
 export function checkDomain(value: string): FieldFeedback | undefined {
   const v = value.trim().toLowerCase();
