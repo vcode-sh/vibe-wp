@@ -10,6 +10,8 @@ export type GlyphName =
   | "arrows"
   | "arrowLeft"
   | "arrowRight"
+  | "arrowUp"
+  | "arrowDown"
   | "bullet"
   | "wordmark";
 
@@ -25,6 +27,8 @@ const UNICODE: Record<GlyphName, string> = {
   arrows: "↑↓",
   arrowLeft: "←",
   arrowRight: "→",
+  arrowUp: "↑",
+  arrowDown: "↓",
   bullet: "•",
   wordmark: "◇"
 };
@@ -41,6 +45,8 @@ const ASCII: Record<GlyphName, string> = {
   arrows: "Up/Dn",
   arrowLeft: "<",
   arrowRight: ">",
+  arrowUp: "^",
+  arrowDown: "v",
   bullet: "-",
   wordmark: "#"
 };

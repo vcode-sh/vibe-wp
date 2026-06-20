@@ -161,6 +161,9 @@ function MainPanel(props: ScreenProps) {
       flexDirection="column"
       flexGrow={1}
       gap={1}
+      // Clip content to the panel: a screen taller than the viewport must never
+      // overdraw into the border or footer (OpenTUI does not clip by default).
+      overflow="hidden"
       paddingX={2}
       paddingY={1}
     >
