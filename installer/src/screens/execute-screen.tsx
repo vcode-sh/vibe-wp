@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
@@ -29,6 +29,21 @@ export function ExecuteScreen({
   const [confirmation, setConfirmation] = useState("");
   const [status, setStatus] = useState<ExecuteStatus>("idle");
   const [results, setResults] = useState<TaskResult[]>([]);
+  const [elapsed, setElapsed] = useState(0);
+  const startedAt = useRef<number | null>(null);
+
+  // Live elapsed timer while installing, so a long install never feels stuck.
+  useEffect(() => {
+    if (status !== "running") {
+      return;
+    }
+    const id = setInterval(() => {
+      if (startedAt.current) {
+        setElapsed(Math.floor((Date.now() - startedAt.current) / 1000));
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status]);
   const lines = executionLines.length > 12 ? executionLines.slice(-12) : executionLines;
   const confirmationPhrase = `INSTALL ${state.productionDomain.trim().toLowerCase()}`;
   const confirmationAccepted =
@@ -60,6 +75,8 @@ export function ExecuteScreen({
 
     setStatus("running");
     setResults([]);
+    startedAt.current = Date.now();
+    setElapsed(0);
     appendLog(setExecutionLines, [
       `Starting real installation for ${state.productionDomain.trim().toLowerCase()}.`
     ]);
@@ -95,6 +112,11 @@ export function ExecuteScreen({
         <text attributes={TextAttributes.BOLD} fg={statusTone(status, validationErrors.length)}>
           {executionTitle(status, validationErrors.length)}
         </text>
+        {(status === "running" || status === "done") && (
+          <text fg={color("muted")}>
+            · {results.length}/{plan.tasks.length} steps · {formatElapsed(elapsed)}
+          </text>
+        )}
       </box>
       {(status === "running" || status === "done") && (
         <ProgressBar total={plan.tasks.length} value={results.length} />
@@ -124,6 +146,13 @@ export function ExecuteScreen({
       />
     </box>
   );
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function TaskList({
