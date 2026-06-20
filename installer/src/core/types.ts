@@ -41,6 +41,7 @@ export interface InstallerOptions {
   noMonitor: boolean;
   noWww: boolean;
   perfOverrides?: string[];
+  purge: boolean;
   r2AccessKeyId?: string;
   r2AccountId?: string;
   r2Bucket?: string;
@@ -104,6 +105,7 @@ export interface InstallerState {
   extRedisPassword: string;
   extRedisPort: string;
   extRedisScheme: string;
+  fullDelete: boolean;
   hardenServer: boolean;
   host: HostFacts;
   installCaddy: boolean;

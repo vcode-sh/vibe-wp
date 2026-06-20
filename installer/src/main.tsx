@@ -94,6 +94,9 @@ async function main() {
   if (options.noWww) {
     state.wwwAlias = false;
   }
+  if (options.purge) {
+    state.fullDelete = true;
+  }
   applyCliState(state, options);
 
   const plan = buildInstallPlan(state);

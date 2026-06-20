@@ -2,11 +2,16 @@ import { shellQuote } from "./shell";
 import type { InstallerState, InstallTask } from "./types";
 
 export function buildDnsPreflightTask(state: InstallerState): InstallTask {
-  const domains = [
-    state.productionDomain.trim().toLowerCase(),
-    state.wwwAlias ? `www.${state.productionDomain.trim().toLowerCase()}` : "",
-    state.stagingEnabled ? state.stagingDomain.trim().toLowerCase() : ""
-  ].filter(Boolean);
+  // staging-only attaches to an already-live prod site, so only the new staging
+  // domain needs checking — re-checking prod (and its www) would fail needlessly.
+  const domains =
+    state.mode === "staging-only"
+      ? [state.stagingDomain.trim().toLowerCase()]
+      : [
+          state.productionDomain.trim().toLowerCase(),
+          state.wwwAlias ? `www.${state.productionDomain.trim().toLowerCase()}` : "",
+          state.stagingEnabled ? state.stagingDomain.trim().toLowerCase() : ""
+        ].filter(Boolean);
 
   return {
     id: "dns-preflight",

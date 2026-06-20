@@ -151,7 +151,11 @@ export function buildManageTasks(state: InstallerState): InstallTask[] {
 }
 
 export function buildRemoveTasks(state: InstallerState): InstallTask[] {
-  const installDir = shellQuote(state.selectedSiteDir || state.installDir);
+  const purge = state.fullDelete;
+  const dir = state.selectedSiteDir || state.installDir;
+  const installDir = shellQuote(dir);
+  // Purge also drops Docker volumes (data) and deletes files; default keeps both.
+  const downFlags = purge ? " -v --remove-orphans" : "";
   const tasks: InstallTask[] = [
     {
       id: "pre-remove-backup",
@@ -165,34 +169,50 @@ export function buildRemoveTasks(state: InstallerState): InstallTask[] {
     tasks.push({
       id: "stage-down",
       title: "Stop staging",
-      description: "Stop staging containers without deleting volumes.",
-      command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe stage down`]
+      description: purge ? "Stop staging and delete its volumes." : "Stop staging containers.",
+      command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe stage down${downFlags}`]
     });
   }
 
   tasks.push({
     id: "prod-down",
     title: "Stop production",
-    description: "Stop production containers without deleting files or volumes.",
-    command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod down`]
+    description: purge ? "Stop production and delete its Docker volumes." : "Stop production.",
+    command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod down${downFlags}`]
   });
   tasks.push({
     id: "disable-caddy-route",
-    title: "Disable HTTPS route",
-    description: "Move this site's Caddy snippet aside and reload Caddy.",
+    title: purge ? "Remove HTTPS route" : "Disable HTTPS route",
+    description: purge
+      ? "Delete this site's Caddy snippet and reload Caddy."
+      : "Move this site's Caddy snippet aside and reload Caddy.",
     privileged: true,
-    command: ["sh", "-lc", disableCaddyCommand(state.siteSlug)]
+    command: ["sh", "-lc", disableCaddyCommand(state.siteSlug, purge)]
   });
+
+  if (purge) {
+    tasks.push({
+      id: "purge-files",
+      title: "Delete site files",
+      description: "Permanently delete the site's install directory. Off-server backups remain.",
+      privileged: true,
+      command: ["sh", "-lc", `${state.host.sudo ? "sudo " : ""}rm -rf ${installDir}`]
+    });
+  }
 
   return tasks;
 }
 
-function disableCaddyCommand(siteSlug: string): string {
+function disableCaddyCommand(siteSlug: string, remove = false): string {
+  const base = `/etc/caddy/sites-enabled/vibe-wp-${siteSlug}`;
+  // Purge deletes the prod + staging snippets; default moves prod aside.
+  const action = remove
+    ? `$SUDO rm -f "${base}.caddy" "${base}-stage.caddy"`
+    : `if [ -f "${base}.caddy" ]; then $SUDO mv "${base}.caddy" "${base}.caddy.disabled.$(date -u +%Y%m%dT%H%M%SZ)"; fi`;
   return [
     "command -v caddy >/dev/null 2>&1 || exit 0",
     'if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi',
-    `path=/etc/caddy/sites-enabled/vibe-wp-${siteSlug}.caddy`,
-    'if [ -f "$path" ]; then $SUDO mv "$path" "$path.disabled.$(date -u +%Y%m%dT%H%M%SZ)"; fi',
+    action,
     "$SUDO caddy validate --config /etc/caddy/Caddyfile",
     "$SUDO systemctl reload caddy"
   ].join("; ");

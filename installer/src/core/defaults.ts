@@ -90,6 +90,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     installCaddy: !host.caddy,
     installRclone: true,
     hardenServer: true,
+    fullDelete: false,
     monitorEnabled: true,
     monitorEmail: "",
     monitorWebhookUrl: "",

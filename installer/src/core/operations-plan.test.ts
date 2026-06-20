@@ -37,6 +37,23 @@ describe("buildRemoveTasks", () => {
     withStaging.stagingEnabled = true;
     expect(buildRemoveTasks(withStaging).map((t) => t.id)).toContain("stage-down");
   });
+
+  test("purge (full delete) drops volumes and deletes files", () => {
+    const state = siteState();
+    state.fullDelete = true;
+    const tasks = buildRemoveTasks(state);
+    const ids = tasks.map((t) => t.id);
+    expect(ids).toContain("purge-files");
+    const down = tasks.find((t) => t.id === "prod-down");
+    expect((down?.command ?? []).join(" ")).toContain("down -v --remove-orphans");
+    const purgeFiles = tasks.find((t) => t.id === "purge-files");
+    expect((purgeFiles?.command ?? []).join(" ")).toContain("rm -rf");
+  });
+
+  test("default remove keeps volumes and files (no purge tasks)", () => {
+    const ids = buildRemoveTasks(siteState()).map((t) => t.id);
+    expect(ids).not.toContain("purge-files");
+  });
 });
 
 describe("buildUpdateTasks", () => {

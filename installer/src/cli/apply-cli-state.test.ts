@@ -17,6 +17,7 @@ function options(overrides: Partial<InstallerOptions>): InstallerOptions {
     noHostInstall: false,
     noHarden: false,
     noMonitor: false,
+    purge: false,
     ref: "main",
     repo: "https://example.com/vibe-wp.git",
     resume: false,
