@@ -7,6 +7,8 @@ export type OpSafety = "safe" | "caution" | "danger";
 export type OpGroup = "check" | "maintain" | "staging" | "danger";
 
 export interface ManageOperation {
+  // Plain-language consequence shown before a danger action is confirmed.
+  consequence?: string;
   description: string;
   env: "prod" | "stage";
   group: OpGroup;
@@ -152,6 +154,8 @@ export const MANAGE_OPERATIONS: ManageOperation[] = [
     id: "stage-promote",
     label: "Publish staging to live",
     description: "Pushes staging files onto the live site. Back up first.",
+    consequence:
+      "Overwrites your LIVE plugins and themes with staging's. A safety backup runs first.",
     safety: "danger",
     group: "staging",
     env: "stage",
@@ -162,6 +166,8 @@ export const MANAGE_OPERATIONS: ManageOperation[] = [
     id: "restore",
     label: "Restore a backup",
     description: "Replaces the live site with a previous backup.",
+    consequence:
+      "REPLACES the live database and files with the chosen backup. Current data is lost.",
     safety: "danger",
     group: "danger",
     env: "prod",
@@ -172,6 +178,8 @@ export const MANAGE_OPERATIONS: ManageOperation[] = [
     id: "stop",
     label: "Stop the site",
     description: "Takes the live site offline. Your files are kept.",
+    consequence:
+      "Takes the live site OFFLINE for visitors. Files and data are kept; start it anytime.",
     safety: "danger",
     group: "danger",
     env: "prod",

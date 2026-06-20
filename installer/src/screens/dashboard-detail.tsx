@@ -59,9 +59,14 @@ export function OpDetail({
         {op.description}
       </text>
       {confirmPending ? (
-        <text attributes={TextAttributes.BOLD} fg={color("danger")} height={1} truncate>
-          {glyphs.warn} This changes your live site — press Enter again to confirm.
-        </text>
+        <box flexDirection="column">
+          <text fg={color("danger")} wrapMode="word">
+            {glyphs.warn} {op.consequence ?? "This changes your live site."}
+          </text>
+          <text attributes={TextAttributes.BOLD} fg={color("danger")}>
+            Press Enter again to confirm, or Esc to cancel.
+          </text>
+        </box>
       ) : (
         <text fg={color(status === "failed" ? "danger" : "subtle")} height={1} truncate>
           {statusLine(status, op)}
