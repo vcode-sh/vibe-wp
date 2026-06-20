@@ -68,6 +68,14 @@ agent docs, never in tracked files). Outcome:
   file already exists, so retried installs no longer fail; (b) `writeEnvFile` now
   preserves write-once secrets (DB/Redis passwords) on retry so they stay in sync with the
   already-persisted Docker volumes.
+- **`external-services` (bring-your-own MariaDB + Redis) validated end-to-end on real
+  hardware.** A site installed in external mode against a standalone external MariaDB and
+  external Redis: it served over HTTPS, only the `wordpress`/`nginx`/`cron` containers ran
+  (no bundled `db`/`redis`), WordPress data lived in the external MariaDB, and the object
+  cache connected to the external Redis (Status: Connected, Drop-in: Valid). The full
+  external task chain (`dns-preflight`, `checkout`, `env-external`, `caddyfile`,
+  `ext-config`, `ext-up`, `ext-install`, `ext-smoke`, `ext-perf`, `first-backup` via
+  `./bin/vibe external ...`) reported ALL DONE.
 
 ## Phases
 
@@ -161,12 +169,13 @@ The other installer modes are **wired in the planner but not all proven on hardw
 
 ## Risks / open questions
 
-- **`external-services` mode is half-removed — decision pending.** It is gone from the TUI
-  menu but still lives in the `InstallMode` type union, the `--mode` CLI argument, and the
-  `--help` text; in `install-plan.ts` it falls through to a normal bundled-DB install (see
-  the comment there). The root stack already ships `compose.external.yaml` +
-  `env/external.env`. Decide: either **fully implement** bring-your-own MariaDB/Redis or
-  **fully remove** it from the type union and CLI. Do not leave it in this half state.
+- ~~**`external-services` mode is half-removed — decision pending.**~~ **Resolved
+  (2026-06-20): fully implemented and VPS-validated.** It is now a menu-selectable install
+  mode ("Use external database and Redis"). Its flow adds dedicated Database and Redis
+  screens after Domain, the planner builds the external task chain via `core/external-plan.ts`
+  (`buildExternalTasks` + `externalEnvValues`, writing `env/external.env`), headless
+  `--ext-*` flags exist, and the root stack's `compose.external.yaml` + `env/external.env`
+  are now driven by the installer. See the validation milestone above.
 - Desktop app is a **separate product** with real cost (auto-update, signing, cross-OS
   Docker). Sequence it last.
 - Headless-core refactor must not regress the TUI; do it behind tests.

@@ -137,8 +137,7 @@ The installer opens with a menu of intents:
 - **Remove detected site** — makes a safety backup, then stops containers without deleting data.
 - **Update existing checkout** — keeps the current directory and refreshes config.
 - **Create staging only** — attaches a staging site to an existing production site.
-
-Bring-your-own managed MariaDB/Redis is not offered in the installer menu. Advanced operators can run the root stack directly with `./bin/vibe external up`.
+- **Use external database and Redis** — bring your own MariaDB and Redis; only WordPress and Nginx run in Docker. The installer collects your external database and Redis connection details, writes `env/external.env`, and drives the install via `./bin/vibe external`. VPS-validated end-to-end.
 
 ### Management dashboard
 
@@ -157,7 +156,14 @@ The installer accepts flags for scripted runs. The main ones:
 --domain <host>          Production domain (derives slug, ports, staging, title)
 --admin-email <email>    WordPress admin email
 --mode <mode>            new-site | manage-existing | remove-existing |
-                         update-existing | staging-only
+                         update-existing | staging-only | external-services
+--ext-db-host <host>     External MariaDB/MySQL host:port (external-services)
+--ext-db-name <name>     External database name
+--ext-db-user <user>     External database user
+--ext-db-password <pw>   External database password
+--ext-redis-host <host>  External Redis host
+--ext-redis-port <port>  External Redis port
+--ext-redis-password <pw> External Redis password
 --staging-domain <host>  Staging domain (enables staging)
 --no-www                 Do not add a www. alias or require its DNS
 --no-caddy               Do not manage Caddy

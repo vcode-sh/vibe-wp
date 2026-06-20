@@ -59,8 +59,7 @@ The first screen offers these intents (the menu only shows manage/remove/update/
 - **Remove detected site** (`remove-existing`) — creates a safety backup, stops containers, and disables the site's Caddy snippet without deleting files or Docker volumes.
 - **Update existing checkout** (`update-existing`) — fast-forwards the existing repository and rebuilds/restarts production in place, without touching data.
 - **Create staging only** (`staging-only`) — attaches an isolated staging environment to an existing production site.
-
-`external-services` (bring-your-own MariaDB/Redis) is intentionally not offered in the menu: choosing it would silently run the bundled-database install and mislead non-technical users. It still exists as a `--mode` value and `InstallMode`; advanced operators should instead run `bin/vibe external` against the root stack.
+- **Use external database and Redis** (`external-services`) — bring-your-own MariaDB and Redis: only WordPress and Nginx (plus cron) run in Docker. After the Domain screen the flow collects external Database details (host:port, name, user, password, charset, table prefix) and external Redis details (host, port, password, database, scheme) on dedicated screens, then writes `env/external.env` and runs the install via `./bin/vibe external ...`. There is no bundled staging step in this mode. Validated end-to-end on a real VPS (2026-06-20): HTTPS site, only `wordpress`/`nginx`/`cron` containers running, WordPress data in the external MariaDB, and the object cache connected to the external Redis.
 
 ## Headless And CLI Flags
 
@@ -72,6 +71,13 @@ Value flags:
 - `--admin-email <email>` — WordPress admin email
 - `--staging-domain <host>` — staging domain (enables staging)
 - `--mode <mode>` — `new-site`, `manage-existing`, `remove-existing`, `update-existing`, `staging-only`, or `external-services`
+- `--ext-db-host <host:port>` — external MariaDB/MySQL host (external-services mode)
+- `--ext-db-name <name>` — external database name
+- `--ext-db-user <user>` — external database user
+- `--ext-db-password <password>` — external database password
+- `--ext-redis-host <host>` — external Redis host
+- `--ext-redis-port <port>` — external Redis port
+- `--ext-redis-password <password>` — external Redis password
 - `--install-dir <path>` — install directory, default `/opt/vibe-wp`
 - `--repo <url>` / `--ref <ref>` — Vibe WP git repository and branch/tag (default `main`)
 - `--export-plan <file>` — write the computed install plan to a JSON file and exit

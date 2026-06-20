@@ -47,14 +47,20 @@ Wired in the planner but **NOT yet tested on hardware**:
   *data* workflows (refresh-from-prod, promote-files-to-prod) were validated separately via
   the manage dashboard.
 
-**Decision pending — `external-services` is half-removed:**
+**Done + VPS-validated — `external-services` is fully implemented (2026-06-20):**
 
-- [ ] Removed from the TUI menu, but still present in the `InstallMode` type union
-  (`core/types.ts`), the `--mode` CLI arg, and the `--help` text (`cli/args.ts`). In
-  `install-plan.ts` it falls through to a normal bundled-DB install (see the comment in
-  `buildTasks`). The root stack already has `compose.external.yaml` + `env/external.env`.
-  Decide: **fully implement** bring-your-own MariaDB/Redis, or **fully remove** it from the
-  type union + CLI. Do not leave it half-wired.
+- [x] Shipped as a menu-selectable install mode ("Use external database and Redis").
+  Its flow adds dedicated Database (`external-db`) and Redis (`external-redis`) screens
+  after Domain (`app/flow.ts` `EXTERNAL`, `screens/external-screens.tsx`); the planner
+  builds the external task chain via `core/external-plan.ts` (`buildExternalTasks` +
+  `externalEnvValues`, writing `env/external.env`, all via `./bin/vibe external ...`).
+  Headless `--ext-db-host`, `--ext-db-name`, `--ext-db-user`, `--ext-db-password`,
+  `--ext-redis-host`, `--ext-redis-port`, `--ext-redis-password` flags exist
+  (`cli/args.ts`). Validated end-to-end on a real VPS against a standalone external
+  MariaDB + Redis: HTTPS site, only `wordpress`/`nginx`/`cron` containers running,
+  WordPress data in the external MariaDB, object cache connected to the external Redis,
+  full task chain ALL DONE. The root stack's `compose.external.yaml` + `env/external.env`
+  are now driven by the installer.
 
 ## Current Audit - 2026-06-19
 
@@ -134,7 +140,8 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - Real end-to-end production-plus-staging proof with isolated domains (blocked on staging
   DNS; the `staging-only` plan is wired but `stage-smoke` needs a public staging record).
 - Hardware test of `remove-existing` and `update-existing` (planner wired, not yet run).
-- A decision + implementation/removal for `external-services` (see reconciliation above).
+- ~~A decision + implementation/removal for `external-services`.~~ Done + VPS-validated
+  (2026-06-20) — see the `external-services` section above.
 
 Note (updated 2026-06-20): the earlier "no real install proof" items are now partly
 satisfied — a `new-site` production install was validated end-to-end on a real VPS, with
