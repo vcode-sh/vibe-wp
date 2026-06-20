@@ -135,12 +135,10 @@ export const modeOptions: Array<{ name: string; description: string; value: Inst
     name: "Create staging only",
     description: "Attach staging to an existing production site.",
     value: "staging-only"
-  },
-  {
-    name: "External MariaDB/Redis",
-    description: "Advanced mode for managed services.",
-    value: "external-services"
   }
+  // External MariaDB/Redis (bring-your-own services) is not offered here: it
+  // would silently run the bundled-DB install, which misleads non-technical
+  // users. Advanced operators can use `bin/vibe external` against the root stack.
 ];
 
 export const performanceOptions: Array<{
