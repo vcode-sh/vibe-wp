@@ -1168,8 +1168,9 @@ Optional later:
 
 - cosign signatures for release assets
 - ~~external backup target~~ Done + VPS-validated (2026-06-20) — off-server Cloudflare R2 backups via rclone with retention and a systemd schedule; see the Backups section above.
-- unattended security update setup
-- fail2ban profile
+- ~~unattended security update setup~~ Done + VPS-validated (2026-06-20) — part of `./bin/harden` (installs `unattended-upgrades`, writes `/etc/apt/apt.conf.d/20auto-upgrades`); the installer runs hardening as the final, secure-by-default step (`--no-harden` to opt out).
+- ~~fail2ban profile~~ Done + VPS-validated (2026-06-20) — `./bin/harden` installs fail2ban and writes a minimal `sshd` jail at `/etc/fail2ban/jail.d/vibe-wp.local`; validated active on real hardware alongside `ufw` and unattended-upgrades, with all sites reachable and SSH uninterrupted.
+- ~~health monitoring + alerting~~ Done + VPS-validated (2026-06-20) — `./bin/vibe <env> monitor` checks HTTP uptime, disk, TLS expiry, backup freshness, and container health, with Telegram/webhook/email alerts (`VIBE_MONITOR_*` keys); the installer schedules an hourly `vibe-wp-monitor-<slug>-<env>` systemd timer by default and exposes a Health check & alerts dashboard action.
 - Cloudflare API DNS automation
 
 ## Testing Plan

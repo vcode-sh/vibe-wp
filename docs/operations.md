@@ -220,6 +220,84 @@ make smoke
 
 `smoke` additionally verifies HTTP 200, FastCGI cache HIT, future upload year/month folder creation, and upload file ownership.
 
+## Health monitoring & alerts
+
+Run a one-shot set of health checks against the running stack for an environment:
+
+```sh
+./bin/vibe prod monitor
+./bin/vibe prod monitor --quiet
+./bin/vibe stage monitor
+```
+
+Each check prints `ok:` / `warn:` / `fail:`. The command exits non-zero when any check **fails** (so a systemd service marks the unit failed); warnings alone still exit `0`. `--quiet` suppresses the per-check lines (used by the scheduled timer). The checks are:
+
+1. **HTTP uptime** — `WP_HOME` answers with an HTTP status `< 400`.
+2. **Disk space** — the backup-root filesystem and `/` have headroom (warn at the threshold, fail at `>= 95%`).
+3. **TLS certificate** — the production domain certificate is not near expiry.
+4. **Backup freshness** — a recent backup directory exists under the backup root.
+5. **Container health** — the expected services (`wordpress`, `nginx`, and `db`/`redis` when defined) are running.
+
+### Alerts
+
+When alert channels are configured, `monitor` sends an alert on any **failure** (or also on **warnings** when `VIBE_MONITOR_ALERT_ON_WARN=1`). Each sender is a no-op until its required keys are set, and tokens are only ever passed to `curl` — never printed:
+
+- **Telegram** — `VIBE_MONITOR_TELEGRAM_TOKEN` + `VIBE_MONITOR_TELEGRAM_CHAT_ID`.
+- **Webhook** — `VIBE_MONITOR_WEBHOOK_URL` (JSON `POST` with `env`, `status`, `summary`, `details`).
+- **Email** — `VIBE_MONITOR_EMAIL_TO` (uses the `mail` command when present; otherwise skipped).
+
+### Configuration keys
+
+These keys live in `env/<env>.env` (templates in `env/*.env.example`):
+
+| Key | Purpose | Default |
+| --- | --- | --- |
+| `VIBE_MONITOR_DISK_WARN_PCT` | Warn when a filesystem reaches this % used (fail at `>= 95`) | `85` |
+| `VIBE_MONITOR_CERT_WARN_DAYS` | Warn when the TLS certificate expires within N days | `14` |
+| `VIBE_MONITOR_BACKUP_MAX_AGE_HOURS` | Warn when the newest backup is older than N hours | `26` |
+| `VIBE_MONITOR_ALERT_ON_WARN` | Set to `1` to alert on warnings, not just failures | `0` |
+| `VIBE_MONITOR_TELEGRAM_TOKEN` | Telegram bot token (never printed) | empty |
+| `VIBE_MONITOR_TELEGRAM_CHAT_ID` | Telegram chat id | empty |
+| `VIBE_MONITOR_WEBHOOK_URL` | Generic JSON webhook URL | empty |
+| `VIBE_MONITOR_EMAIL_TO` | Alert recipient address | empty |
+
+### Hourly timer
+
+The installer schedules monitoring by default: it installs a systemd service + timer named `vibe-wp-monitor-<slug>-<env>` whose service runs `./bin/vibe <env> monitor --quiet` on an `OnCalendar=hourly`, `Persistent=true` schedule. Inspect or run it manually with:
+
+```sh
+systemctl status vibe-wp-monitor-<slug>-<env>.timer
+systemctl start  vibe-wp-monitor-<slug>-<env>.service
+journalctl -u vibe-wp-monitor-<slug>-<env>.service
+```
+
+The installer Manage dashboard also exposes monitoring on demand via the **Health check & alerts** action. See [installer.md](installer.md).
+
+## Server hardening
+
+Apply idempotent host-level baseline hardening for the Ubuntu VPS that runs the stack:
+
+```sh
+./bin/vibe prod harden
+./bin/harden                 # equivalent; host-level, not per-env
+./bin/harden --dry-run       # preview without changing anything
+```
+
+`harden` is safe to run repeatedly — each step detects already-applied state and skips it. It applies:
+
+1. **Firewall (`ufw`)** — default deny incoming / allow outgoing, then allows SSH (the `OpenSSH` profile or port `22`) **before** enabling so you are never locked out, allows `80/tcp` and `443/tcp`, then enables `ufw`.
+2. **fail2ban** — installs, enables and starts it, and writes a minimal `sshd` jail at `/etc/fail2ban/jail.d/vibe-wp.local`.
+3. **Automatic security updates** — installs `unattended-upgrades` and writes `/etc/apt/apt.conf.d/20auto-upgrades`.
+4. **Kernel/network `sysctl` basics** — writes `/etc/sysctl.d/99-vibe-wp.conf` (`rp_filter`, `tcp_syncookies`) and applies it.
+
+Flags:
+
+- `--dry-run` — print what would be done without changing anything.
+- `--ssh-key-only` — **DANGEROUS, off by default.** Also disables SSH password authentication and sets `PermitRootLogin prohibit-password` via `/etc/ssh/sshd_config.d/99-vibe-wp.conf`, validating the config with `sshd -t` before reloading. Key-based SSH **must already work** for your user or root, or you can lock yourself out of the server with no remote recovery.
+- `-h`, `--help` — show usage.
+
+The guided installer runs hardening as the **final** install step (secure by default). The Manage dashboard exposes it via the **Secure the server** action. See [installer.md](installer.md).
+
 ## Update Images
 
 Pull and rebuild:
@@ -272,6 +350,8 @@ The guided installer's Manage screen (`manage-existing` mode) is a friendly fron
 | Dashboard action | `bin/vibe` command |
 | --- | --- |
 | Check it's healthy | `smoke` |
+| Health check & alerts | `monitor` |
+| Secure the server | `harden` |
 | Speed report | `perf-report` |
 | What's running | `ps` |
 | Check the server itself | `doctor-runtime` |

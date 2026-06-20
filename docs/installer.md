@@ -45,11 +45,13 @@ Installer `0.1.2` includes:
 - masked secret fields for passwords and API keys
 - typed confirmation before execution
 - a real task runner wired to the interactive Execute screen
-- a Manage dashboard wrapping the full `bin/vibe` operation set (health/smoke, performance, status, server checks, recent logs, config, backup, cache flush, restart, staging refresh/promote, restore, and stop)
+- a Manage dashboard wrapping the full `bin/vibe` operation set (health/smoke, health check & alerts, secure the server, performance, status, server checks, recent logs, config, backup, cache flush, restart, staging refresh/promote, restore, and stop)
 - safe-remove tasks that back up, stop containers, and disable the site's Caddy snippet without deleting files or Docker volumes
 - idempotent env-file writes so installs can be safely retried
 - preservation of existing install secrets (DB/Redis passwords) on retry, keeping them in sync with the persisted Docker volumes
 - an editable Performance screen: pick a preset, or turn on Customize to edit any individual setting (PHP/WP memory, PHP-FPM pool, Redis, MariaDB buffer pool, Nginx cache) and the assumed server memory; the PHP-FPM pool is auto-clamped so no edit can produce an invalid, crash-looping config
+- secure-by-default **server hardening** as the final install step: a System screen "Secure the server" toggle (on by default) runs `./bin/harden` to set up the `ufw` firewall (allowing SSH + 80/443 before enabling), fail2ban, automatic security updates, and safe `sysctl` defaults. Opt out with `--no-harden` (it is also disabled by `--no-host-install`). The Manage dashboard exposes it via the **Secure the server** action. See [operations.md](operations.md)
+- built-in **health monitoring**: an hourly systemd service + timer named `vibe-wp-monitor-<slug>-<env>` (on by default) runs `./bin/vibe <env> monitor --quiet` to check HTTP uptime, disk space, TLS expiry, backup freshness, and container health, sending Telegram/webhook/email alerts on failure when configured. Opt out with `--no-monitor`; preseed alert channels with `--monitor-email <addr>` and `--monitor-webhook <url>`. The Manage dashboard runs it on demand via **Health check & alerts**. See the checks and `VIBE_MONITOR_*` keys in [operations.md](operations.md)
 - a Backup screen offering three destinations: **Manual** (no automatic backups), **Local backups** (a backup folder created on install, with retention and an optional schedule), and **Local + Cloudflare R2** (also copy each backup off-server). Choosing R2 collects the R2 account ID, access key ID, secret access key, and bucket. On install it creates the backup folder (`install -d -m 0750`), installs rclone when R2 is enabled and host installs are allowed, runs a first backup, and — when a daily or weekly schedule is chosen — installs a systemd service + timer named `vibe-wp-backup-<slug>-<env>` that runs `./bin/vibe <env> backup`. See the engine, retention, and env keys in [operations.md](operations.md)
 
 ## Installer Modes
@@ -89,6 +91,8 @@ Value flags:
 
   Any `--r2-*` flag opts into off-server backups (sets the backup policy and enables R2).
 
+- `--monitor-email <addr>` — preseed `VIBE_MONITOR_EMAIL_TO` so the hourly health monitor sends email alerts
+- `--monitor-webhook <url>` — preseed `VIBE_MONITOR_WEBHOOK_URL` so the hourly health monitor POSTs JSON alerts
 - `--install-dir <path>` — install directory, default `/opt/vibe-wp`
 - `--repo <url>` / `--ref <ref>` — Vibe WP git repository and branch/tag (default `main`)
 - `--perf KEY=VALUE` — override a single performance setting (repeatable), e.g. `--perf REDIS_MAXMEMORY=512mb --perf PHP_FPM_PM_MAX_CHILDREN=24`. Recognised keys match the Performance screen; the PHP-FPM pool is always clamped to a valid shape (`min_spare ≤ max_spare ≤ max_children`) so an override cannot crash the container
@@ -103,7 +107,9 @@ Boolean flags:
 - `--local` — use the safe macOS local sandbox (UI/UX and planner work only)
 - `--no-www` — do not add a `www.` alias or require its DNS
 - `--no-caddy` — do not manage Caddy
-- `--no-host-install` — do not install missing host packages
+- `--no-host-install` — do not install missing host packages (also disables server hardening)
+- `--no-harden` — skip the secure-by-default server hardening step
+- `--no-monitor` — do not install the hourly health-monitoring systemd timer
 - `--compact` — force the compact UI layout
 - `--ascii` — avoid Unicode UI characters (SSH/legacy terminals)
 - `--version` — print the installer version

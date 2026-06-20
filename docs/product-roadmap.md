@@ -90,6 +90,22 @@ agent docs, never in tracked files). Outcome:
   restore-from-remote, and the systemd timer enabled + active with a successful manual
   run. Remaining gap: a live Cloudflare R2 upload through the installer still needs a real
   R2 API token (mechanics proven against an S3-compatible store).
+- **Health monitoring + alerts implemented and VPS-validated.** `./bin/vibe <env> monitor`
+  checks HTTP uptime, disk space, TLS certificate expiry, backup freshness, and container
+  health (ok/warn/fail, non-zero exit on failure), and sends Telegram/webhook/email alerts
+  when configured (thresholds and channels via `VIBE_MONITOR_*` env keys). The installer
+  installs an hourly systemd service+timer (`vibe-wp-monitor-<slug>-<env>`) by default and
+  exposes a **Health check & alerts** dashboard action. Validated on real hardware:
+  all-green monitor run (HTTP 200, TLS 89 days, fresh backup) plus the hourly timer
+  enabled + active with a successful service run logged to journald.
+- **Host hardening implemented and VPS-validated.** `./bin/vibe <env> harden` (idempotent
+  `./bin/harden`) sets up the `ufw` firewall (allowing SSH + 80/443 before enabling),
+  fail2ban (`sshd` jail), automatic security updates, and safe `sysctl` defaults; an
+  `--ssh-key-only` opt-in additionally disables SSH password/root-password login. The
+  installer runs hardening as the final install step (secure by default; `--no-harden` to
+  opt out) and exposes a **Secure the server** dashboard action. Validated on real
+  hardware: applied 9 items, `ufw` active (OpenSSH/80/443 allowed), fail2ban active,
+  unattended-upgrades enabled, all sites still reachable (200), and SSH uninterrupted.
 
 ## Phases
 
