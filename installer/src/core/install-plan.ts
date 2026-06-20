@@ -118,7 +118,10 @@ function buildTasks(state: InstallerState): InstallTask[] {
     id: "env-prod",
     title: "Generate production environment",
     description: "Create production env file with loopback HTTP binding and generated secrets.",
-    command: ["sh", "-lc", `cd ${installDir} && make init-prod`]
+    // Idempotent: make init-* refuses to overwrite an existing env file, so a
+    // retried install would fail here. Only scaffold when missing; the
+    // task-runner's writeEnvFile special-write merges plan values on top.
+    command: ["sh", "-lc", `cd ${installDir} && { [ -f env/prod.env ] || make init-prod; }`]
   });
 
   if (state.stagingEnabled) {
@@ -126,7 +129,7 @@ function buildTasks(state: InstallerState): InstallTask[] {
       id: "env-stage",
       title: "Generate staging environment",
       description: "Create isolated staging env file with noindex and mail safeguards.",
-      command: ["sh", "-lc", `cd ${installDir} && make init-stage`]
+      command: ["sh", "-lc", `cd ${installDir} && { [ -f env/stage.env ] || make init-stage; }`]
     });
   }
 
