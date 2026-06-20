@@ -79,6 +79,21 @@ export async function detectHostFacts(): Promise<HostFacts> {
   return facts;
 }
 
+// Compose project names with at least one running container, for live status.
+async function detectRunningProjects(): Promise<Set<string>> {
+  const output = await runText([
+    "sh",
+    "-lc",
+    "docker ps --format '{{.Label \"com.docker.compose.project\"}}' 2>/dev/null"
+  ]);
+  return new Set(
+    (output ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+  );
+}
+
 async function detectExistingSites(): Promise<ExistingSite[]> {
   const output = await runText([
     "sh",
@@ -88,6 +103,7 @@ async function detectExistingSites(): Promise<ExistingSite[]> {
   const dirs = [
     ...new Set((output ?? "").split("\n").map((line) => line.replace(binVibeSuffixPattern, "")))
   ];
+  const running = await detectRunningProjects();
   const sites: ExistingSite[] = [];
 
   for (const installDir of dirs.filter(Boolean).sort()) {
@@ -96,13 +112,15 @@ async function detectExistingSites(): Promise<ExistingSite[]> {
     if (!(production.WP_HOME || staging.WP_HOME)) {
       continue;
     }
+    const project = production.COMPOSE_PROJECT_NAME ?? null;
     sites.push({
       installDir,
       productionUrl: production.WP_HOME ?? null,
       stagingUrl: staging.WP_HOME ?? null,
-      productionProject: production.COMPOSE_PROJECT_NAME ?? null,
+      productionProject: project,
       stagingProject: staging.COMPOSE_PROJECT_NAME ?? null,
-      hasStaging: Boolean(staging.WP_HOME)
+      hasStaging: Boolean(staging.WP_HOME),
+      running: Boolean(project && running.has(project))
     });
   }
 

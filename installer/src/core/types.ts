@@ -78,6 +78,7 @@ export interface ExistingSite {
   installDir: string;
   productionProject: string | null;
   productionUrl: string | null;
+  running?: boolean;
   stagingProject: string | null;
   stagingUrl: string | null;
 }

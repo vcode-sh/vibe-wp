@@ -48,6 +48,7 @@ const SETUP_CHOICES = [
 // The landing control panel: existing sites first (pick one to act on it), with
 // create actions as peers — a manager, not a linear wizard.
 export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
+  const glyphs = useGlyphs();
   const sites = state.host.existingSites;
   const selected = sites.find((site) => site.installDir === state.selectedSiteDir);
   const siteSelected = Boolean(state.selectedSiteDir) && SITE_MODES.has(state.mode);
@@ -56,7 +57,7 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
   const primaryOptions = [
     ...sites.map((site) => ({
       name: site.productionUrl ?? site.installDir,
-      description: `Manage this site${site.hasStaging ? " · has staging" : ""} · ${site.installDir}`,
+      description: `${site.running ? `${glyphs.ok} running` : `${glyphs.pending} stopped`}${site.hasStaging ? " · staging" : ""} · ${site.installDir}`,
       value: site.installDir
     })),
     ...CREATE_OPTIONS
