@@ -90,7 +90,10 @@ export interface InstallerState {
   installDocker: boolean;
   locale: string;
   localSandbox: boolean;
+  memoryOverrideMb: string;
   mode: InstallMode;
+  performanceCustom: boolean;
+  performanceOverrides: Record<string, string>;
   performancePreset: PerformancePreset;
   productionDomain: string;
   productionHttpPort: string;

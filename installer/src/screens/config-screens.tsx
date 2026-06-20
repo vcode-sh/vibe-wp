@@ -1,40 +1,11 @@
 import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
-import { backupOptions, performanceOptions } from "../app/steps";
+import { backupOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
-import { InfoGrid } from "../components/data-display";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
-import { performanceValues } from "../core/defaults";
-import type { BackupPolicy, PerformancePreset } from "../core/types";
-
-export function PerformanceScreen({ state, update, focusIndex, next }: ScreenProps) {
-  const values = performanceValues(state.performancePreset, state.host.totalMemoryMb);
-  return (
-    <box flexDirection="column" flexGrow={1} gap={1}>
-      <text fg={color("muted")} wrapMode="word">
-        We match PHP, Redis, and cache settings to your server's memory. Not sure? Keep Balanced —
-        it fits most business sites.
-      </text>
-      <ChoiceList
-        focused={focusIndex === 0}
-        onChange={(value) => update("performancePreset", value as PerformancePreset)}
-        options={performanceOptions}
-        value={state.performancePreset}
-      />
-      <InfoGrid rows={Object.entries(values).slice(0, 8)} />
-      <text fg={color("subtle")} truncate>
-        These exact values are written to your env files, so nothing is hidden.
-      </text>
-      <ActionRow
-        onPrimary={next}
-        primary="Continue"
-        secondary="Balanced is safest for most VPS sites"
-      />
-    </box>
-  );
-}
+import type { BackupPolicy } from "../core/types";
 
 export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (

@@ -1,4 +1,14 @@
-import type { BackupPolicy, InstallMode, PerformancePreset } from "../core/types";
+import { PERFORMANCE_FIELDS } from "../core/performance";
+import type { BackupPolicy, InstallerState, InstallMode, PerformancePreset } from "../core/types";
+
+// Most steps have a fixed focusable count; the Performance step grows when the
+// user turns on per-setting customisation (preset + toggle + memory + N fields).
+export function focusCountFor(step: Step, state: InstallerState): number {
+  if (step.id === "performance" && state.performanceCustom) {
+    return 3 + PERFORMANCE_FIELDS.length;
+  }
+  return step.focusCount;
+}
 
 export type StepId =
   | "welcome"
@@ -82,9 +92,9 @@ export const steps: Step[] = [
   },
   {
     id: "performance",
-    focusCount: 1,
+    focusCount: 3,
     title: "Performance",
-    help: "Maps VPS memory to PHP-FPM, Redis, MariaDB, and Nginx settings."
+    help: "Maps VPS memory to PHP-FPM, Redis, MariaDB, and Nginx — and lets you tune each value."
   },
   {
     id: "backup",

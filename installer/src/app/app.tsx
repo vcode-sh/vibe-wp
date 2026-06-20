@@ -17,6 +17,7 @@ import { stepKind } from "./nav-hints";
 import type { ScreenProps } from "./screen-props";
 import { renderScreen } from "./screen-router";
 import type { Step } from "./steps";
+import { focusCountFor } from "./steps";
 import { color } from "./theme";
 
 interface AppProps {
@@ -45,13 +46,14 @@ export function App({ initialState, options }: AppProps) {
   );
   const activeIndex = Math.min(stepIndex, flowSteps.length - 1);
   const current = getStep(flowSteps, activeIndex);
+  const focusCount = focusCountFor(current, state);
   const plan = useMemo(() => buildInstallPlan(state), [state]);
   const redactedPlan = useMemo(() => redactPlan(plan), [plan]);
   const validationErrors = useMemo(() => validateState(state), [state]);
 
   useEffect(() => {
-    setFocusIndex((value) => Math.min(value, current.focusCount - 1));
-  }, [current.focusCount]);
+    setFocusIndex((value) => Math.min(value, focusCount - 1));
+  }, [focusCount]);
 
   // Keep the step index valid when the mode change shrinks the visible flow.
   useEffect(() => {
@@ -83,7 +85,7 @@ export function App({ initialState, options }: AppProps) {
   }
 
   function moveFocus(delta: number) {
-    setFocusIndex((value) => (value + delta + current.focusCount) % current.focusCount);
+    setFocusIndex((value) => (value + delta + focusCount) % focusCount);
   }
 
   useKeyboard((key) =>
@@ -140,7 +142,7 @@ export function App({ initialState, options }: AppProps) {
         {logOpen && <LogStrip lines={executionLines} />}
         <Footer
           currentIndex={activeIndex}
-          focusCount={current.focusCount}
+          focusCount={focusCount}
           kind={stepKind(current.id)}
           total={flowSteps.length}
           validationCount={validationErrors.length}

@@ -1,13 +1,9 @@
-import {
-  AiScreen,
-  BackupScreen,
-  PerformanceScreen,
-  StagingScreen
-} from "../screens/config-screens";
+import { AiScreen, BackupScreen, StagingScreen } from "../screens/config-screens";
 import { DashboardScreen } from "../screens/dashboard-screen";
 import { DomainScreen } from "../screens/domain-screen";
 import { ExecuteScreen } from "../screens/execute-screen";
 import { ExternalDbScreen, ExternalRedisScreen } from "../screens/external-screens";
+import { PerformanceScreen } from "../screens/performance-screen";
 import { ReviewScreen, SuccessScreen } from "../screens/review-screens";
 import { AdminScreen, ModeScreen, SystemScreen } from "../screens/setup-screens";
 import { SitesScreen } from "../screens/site-screens";

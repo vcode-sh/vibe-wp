@@ -1,6 +1,6 @@
-import { performanceValues } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { quoteEnv, saltKeys } from "./env-writer";
+import { effectivePerformanceValues } from "./performance";
 import { randomHex, slugFromDomain } from "./secrets";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallTask } from "./types";
@@ -59,7 +59,7 @@ export function externalEnvValues(state: InstallerState): Record<string, string>
     WP_REDIS_MAXTTL: "604800",
     WP_REDIS_SELECTIVE_FLUSH: "1",
     WP_REDIS_GRACEFUL: "1",
-    ...performanceValues(state.performancePreset, state.host.totalMemoryMb),
+    ...effectivePerformanceValues(state),
     ...externalSalts()
   };
 }
