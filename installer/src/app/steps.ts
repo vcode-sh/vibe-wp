@@ -14,6 +14,9 @@ export function focusCountFor(step: Step, state: InstallerState): number {
     };
     return counts[state.backupPolicy];
   }
+  if (step.id === "monitoring") {
+    return state.monitorEnabled ? 5 : 1;
+  }
   return step.focusCount;
 }
 
@@ -30,6 +33,7 @@ export type StepId =
   | "performance"
   | "ai"
   | "backup"
+  | "monitoring"
   | "staging"
   | "review"
   | "execute"
@@ -108,6 +112,12 @@ export const steps: Step[] = [
     focusCount: 1,
     title: "Backups",
     help: "Makes backups visible in the install flow instead of an afterthought."
+  },
+  {
+    id: "monitoring",
+    focusCount: 1,
+    title: "Monitoring",
+    help: "Hourly health checks (uptime, disk, TLS, backups) with optional alerts."
   },
   {
     id: "ai",

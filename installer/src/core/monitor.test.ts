@@ -13,6 +13,15 @@ describe("monitorEnvValues", () => {
     expect(v.VIBE_MONITOR_EMAIL_TO).toBe("ops@example.com");
     expect(v.VIBE_MONITOR_WEBHOOK_URL).toBe("https://hooks.example.com/x");
   });
+
+  test("includes Telegram channel from state", () => {
+    const state = defaultState();
+    state.monitorTelegramToken = "123:abc";
+    state.monitorTelegramChat = "999";
+    const v = monitorEnvValues(state);
+    expect(v.VIBE_MONITOR_TELEGRAM_TOKEN).toBe("123:abc");
+    expect(v.VIBE_MONITOR_TELEGRAM_CHAT_ID).toBe("999");
+  });
 });
 
 describe("buildMonitorTimerTask", () => {

@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { defaultState } from "./defaults";
 import { MANAGE_OPERATIONS } from "./manage-operations";
-import { buildBackupsListTask, buildOperationTask } from "./manage-tasks";
+import {
+  buildBackupsListTask,
+  buildOperationTask,
+  buildRemoteBackupsListTask
+} from "./manage-tasks";
 
 function cmd(parts: string[] | undefined): string {
   return parts?.join(" ") ?? "";
@@ -38,4 +42,10 @@ test("logs op uses the non-following logs-recent command", () => {
 
 test("buildBackupsListTask lists backups for the env", () => {
   expect(cmd(buildBackupsListTask("prod", state).command)).toContain("./bin/vibe prod backups");
+});
+
+test("buildRemoteBackupsListTask lists off-server backups for the env", () => {
+  expect(cmd(buildRemoteBackupsListTask("prod", state).command)).toContain(
+    "./bin/vibe prod backups-remote"
+  );
 });

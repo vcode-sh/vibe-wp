@@ -6,7 +6,8 @@ test("custom new-site reveals the full build flow", () => {
   expect(ids).toContain("domain");
   expect(ids).toContain("admin");
   expect(ids).toContain("staging");
-  expect(ids.length).toBe(13);
+  expect(ids).toContain("monitoring");
+  expect(ids.length).toBe(14);
 });
 
 test("custom new-site orders essentials before options and advanced last", () => {
@@ -20,6 +21,7 @@ test("custom new-site orders essentials before options and advanced last", () =>
     "staging",
     "performance",
     "backup",
+    "monitoring",
     "ai",
     "mode",
     "review",

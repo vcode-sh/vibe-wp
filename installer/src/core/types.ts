@@ -32,6 +32,8 @@ export interface InstallerOptions {
   local: boolean;
   mode?: InstallMode;
   monitorEmail?: string;
+  monitorTelegramChat?: string;
+  monitorTelegramToken?: string;
   monitorWebhook?: string;
   noCaddy: boolean;
   noHarden: boolean;
@@ -112,6 +114,8 @@ export interface InstallerState {
   mode: InstallMode;
   monitorEmail: string;
   monitorEnabled: boolean;
+  monitorTelegramChat: string;
+  monitorTelegramToken: string;
   monitorWebhookUrl: string;
   performanceCustom: boolean;
   performanceOverrides: Record<string, string>;

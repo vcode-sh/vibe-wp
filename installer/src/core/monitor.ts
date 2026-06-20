@@ -11,8 +11,8 @@ export function monitorEnvValues(state: InstallerState): Record<string, string> 
     VIBE_MONITOR_ALERT_ON_WARN: "0",
     VIBE_MONITOR_EMAIL_TO: state.monitorEmail.trim(),
     VIBE_MONITOR_WEBHOOK_URL: state.monitorWebhookUrl.trim(),
-    VIBE_MONITOR_TELEGRAM_TOKEN: "",
-    VIBE_MONITOR_TELEGRAM_CHAT_ID: ""
+    VIBE_MONITOR_TELEGRAM_TOKEN: state.monitorTelegramToken.trim(),
+    VIBE_MONITOR_TELEGRAM_CHAT_ID: state.monitorTelegramChat.trim()
   };
 }
 

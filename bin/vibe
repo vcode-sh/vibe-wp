@@ -21,6 +21,7 @@ Commands:
   backup-verify <backup> [args...] Verify a backup without restoring it
   restore <backup> [args...] Restore a backup
   backups                    List available backups for this env (newest last)
+  backups-remote             List off-server (R2) backups as restorable paths
   monitor [--quiet]          Run health checks (uptime, disk, TLS, backups, containers) and alert
   harden [--dry-run] [--ssh-key-only]  Apply host hardening (firewall, fail2ban, auto-updates)
   doctor-runtime             Run runtime checks
@@ -86,6 +87,10 @@ case "${command}" in
   backups)
     # List available backup directories for this env (newest last), one per line.
     ls -1d "$(backup_root)"/*/ 2>/dev/null | sed 's#/*$##' || true
+    ;;
+  backups-remote)
+    # List off-server (R2) backups as local-equivalent paths; restore auto-fetches.
+    backup_list_remote || true
     ;;
   install)
     "${VIBE_BIN_DIR}/install-wordpress" "$@"

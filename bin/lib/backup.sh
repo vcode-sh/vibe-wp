@@ -90,6 +90,20 @@ backup_prune_remote() {
     done
 }
 
+# List remote backups as local-equivalent paths (newest last), so a restore can
+# use the same path it would for a local backup; the restore auto-fetches it.
+backup_list_remote() {
+  backup_remote_enabled || return 0
+  backup_require_rclone || return 0
+  backup_export_rclone
+  root="$(backup_root)"
+  base="$(backup_remote_base)"
+  rclone lsf --dirs-only "${base}/" 2>/dev/null | sed 's#/*$##' | sort | while IFS= read -r name; do
+    [ -n "${name}" ] || continue
+    printf '%s/%s\n' "${root}" "${name}"
+  done
+}
+
 # Pull a named backup directory down from the remote into <dest>.
 backup_fetch_remote() {
   name="$1"

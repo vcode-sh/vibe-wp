@@ -32,6 +32,8 @@ type StringOption =
   | "exportPlan"
   | "monitorEmail"
   | "monitorWebhook"
+  | "monitorTelegramToken"
+  | "monitorTelegramChat"
   | "r2AccountId"
   | "r2AccessKeyId"
   | "r2Bucket"
@@ -71,6 +73,8 @@ const stringFlags = new Map<string, StringOption>([
   ["--backup-dir", "backupDir"],
   ["--monitor-email", "monitorEmail"],
   ["--monitor-webhook", "monitorWebhook"],
+  ["--monitor-telegram-token", "monitorTelegramToken"],
+  ["--monitor-telegram-chat", "monitorTelegramChat"],
   ["--r2-account", "r2AccountId"],
   ["--r2-access-key", "r2AccessKeyId"],
   ["--r2-bucket", "r2Bucket"],

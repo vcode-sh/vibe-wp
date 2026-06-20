@@ -49,6 +49,12 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
   if (options.monitorWebhook) {
     state.monitorWebhookUrl = options.monitorWebhook;
   }
+  if (options.monitorTelegramToken) {
+    state.monitorTelegramToken = options.monitorTelegramToken;
+  }
+  if (options.monitorTelegramChat) {
+    state.monitorTelegramChat = options.monitorTelegramChat;
+  }
 
   return state;
 }

@@ -93,6 +93,8 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     monitorEnabled: true,
     monitorEmail: "",
     monitorWebhookUrl: "",
+    monitorTelegramToken: "",
+    monitorTelegramChat: "",
     localSandbox: false,
     host
   };

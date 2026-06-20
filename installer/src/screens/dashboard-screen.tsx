@@ -5,7 +5,11 @@ import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
 import { groupedOperations, type ManageOperation } from "../core/manage-operations";
-import { buildBackupsListTask, buildOperationTask } from "../core/manage-tasks";
+import {
+  buildBackupsListTask,
+  buildOperationTask,
+  buildRemoteBackupsListTask
+} from "../core/manage-tasks";
 import { runTask, type TaskStatus } from "../core/task-runner";
 import { GroupedOpList, type HealthState, StatusCards } from "./dashboard-cards";
 import { BackupPicker, OpDetail, ResultPanel } from "./dashboard-detail";
@@ -36,11 +40,18 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
     if (state.localSandbox) {
       return SANDBOX_BACKUPS;
     }
-    const res = await runTask(buildBackupsListTask("prod", state), true, plan);
-    return res.output
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const parse = (text: string): string[] =>
+      text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const localRes = await runTask(buildBackupsListTask("prod", state), true, plan);
+    const local = parse(localRes.output);
+    // Merge in off-server (R2) backups not present locally; restore auto-fetches them.
+    const remoteRes = await runTask(buildRemoteBackupsListTask("prod", state), true, plan);
+    const localSet = new Set(local);
+    const remoteOnly = parse(remoteRes.output).filter((path) => !localSet.has(path));
+    return [...local, ...remoteOnly];
   }
 
   async function openRestore(op: ManageOperation) {

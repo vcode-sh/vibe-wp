@@ -31,3 +31,17 @@ export function buildBackupsListTask(env: "prod" | "stage", state: InstallerStat
     command: ["sh", "-lc", `cd ${dir} && ./bin/vibe ${env} backups`]
   };
 }
+
+// Lists off-server (R2) backups as restorable paths; restore auto-fetches them.
+export function buildRemoteBackupsListTask(
+  env: "prod" | "stage",
+  state: InstallerState
+): InstallTask {
+  const dir = shellQuote(state.selectedSiteDir || state.installDir);
+  return {
+    id: "list-backups-remote",
+    title: "List off-server backups",
+    description: "List backups stored off-server (R2).",
+    command: ["sh", "-lc", `cd ${dir} && ./bin/vibe ${env} backups-remote`]
+  };
+}
