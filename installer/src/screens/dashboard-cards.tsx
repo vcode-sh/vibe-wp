@@ -52,11 +52,15 @@ function agoLabel(hours: number): string {
 export function StatusCards({
   health,
   state,
-  lastBackup
+  lastBackup,
+  twoPerRow = false
 }: {
   health: HealthState;
   state: InstallerState;
   lastBackup?: string | null;
+  // When the panel is too narrow for four cards in a row (a long domain would
+  // truncate), lay them out 2×2 so each card has room for the full value.
+  twoPerRow?: boolean;
 }) {
   const glyphs = useGlyphs();
   const cards: CardSpec[] = [
@@ -73,10 +77,16 @@ export function StatusCards({
     backupCard(lastBackup),
     healthCard(health, glyphs)
   ];
+  const rows = twoPerRow ? [cards.slice(0, 2), cards.slice(2)] : [cards];
   return (
-    <box flexDirection="row" gap={space.sm}>
-      {cards.map((card) => (
-        <StatusCard card={card} key={card.label} />
+    <box flexDirection="column" gap={space.sm}>
+      {rows.map((row, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: fixed two-row split
+        <box flexDirection="row" gap={space.sm} key={index}>
+          {row.map((card) => (
+            <StatusCard card={card} key={card.label} />
+          ))}
+        </box>
       ))}
     </box>
   );

@@ -29,7 +29,7 @@ interface RestoreState {
 
 export function DashboardScreen({ state, plan }: ScreenProps) {
   const glyphs = useGlyphs();
-  const { height } = useTerminalDimensions();
+  const { width, height } = useTerminalDimensions();
   const groups = useMemo(() => groupedOperations(state.stagingEnabled), [state.stagingEnabled]);
   const ops = useMemo(() => groups.flatMap((group) => group.operations), [groups]);
   const [selected, setSelected] = useState(0);
@@ -140,8 +140,12 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
   // On short terminals the status cards cost rows the action list needs more —
   // hide them so the actual controls stay fully visible and never overdraw.
   const tight = height < 32;
+  // Four cards in a row truncate a long staging domain unless the panel is very
+  // wide; below ~108 inner columns lay them out 2×2 instead (one extra row).
+  const innerWidth = width < 92 ? width - 8 : width - 30;
+  const twoPerRow = innerWidth < 108;
   const resultRows = output.length > 0 ? Math.min(8, output.length) + 3 : 0;
-  const maxRows = Math.max(3, height - (tight ? 19 : 23) - resultRows);
+  const maxRows = Math.max(3, height - dashboardChrome(tight, twoPerRow) - resultRows);
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <box alignItems="center" flexDirection="row" gap={space.md}>
@@ -153,7 +157,9 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
         </text>
         {state.stagingEnabled && <text fg={color("muted")}>· staging</text>}
       </box>
-      {!tight && <StatusCards health={health} lastBackup={lastBackup} state={state} />}
+      {!tight && (
+        <StatusCards health={health} lastBackup={lastBackup} state={state} twoPerRow={twoPerRow} />
+      )}
       {restore ? (
         <BackupPicker index={restore.index} items={restore.items} />
       ) : (
@@ -172,6 +178,14 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
       {output.length > 0 && <ResultPanel output={output} status={status} />}
     </box>
   );
+}
+
+// Rows consumed by everything except the operations list, so it can size to fit.
+function dashboardChrome(tight: boolean, twoPerRow: boolean): number {
+  if (tight) {
+    return 19;
+  }
+  return twoPerRow ? 24 : 23;
 }
 
 function handleRestoreKey(
