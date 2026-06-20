@@ -49,6 +49,7 @@ Installer `0.1.2` includes:
 - safe-remove tasks that back up, stop containers, and disable the site's Caddy snippet without deleting files or Docker volumes
 - idempotent env-file writes so installs can be safely retried
 - preservation of existing install secrets (DB/Redis passwords) on retry, keeping them in sync with the persisted Docker volumes
+- an editable Performance screen: pick a preset, or turn on Customize to edit any individual setting (PHP/WP memory, PHP-FPM pool, Redis, MariaDB buffer pool, Nginx cache) and the assumed server memory; the PHP-FPM pool is auto-clamped so no edit can produce an invalid, crash-looping config
 
 ## Installer Modes
 
@@ -80,6 +81,7 @@ Value flags:
 - `--ext-redis-password <password>` — external Redis password
 - `--install-dir <path>` — install directory, default `/opt/vibe-wp`
 - `--repo <url>` / `--ref <ref>` — Vibe WP git repository and branch/tag (default `main`)
+- `--perf KEY=VALUE` — override a single performance setting (repeatable), e.g. `--perf REDIS_MAXMEMORY=512mb --perf PHP_FPM_PM_MAX_CHILDREN=24`. Recognised keys match the Performance screen; the PHP-FPM pool is always clamped to a valid shape (`min_spare ≤ max_spare ≤ max_children`) so an override cannot crash the container
 - `--export-plan <file>` — write the computed install plan to a JSON file and exit
 - `--headless <file>` — run from a prepared plan JSON file (pair with `--yes` to execute host changes)
 
