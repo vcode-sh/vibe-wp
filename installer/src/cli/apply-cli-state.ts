@@ -9,6 +9,12 @@ import type { InstallerOptions, InstallerState } from "../core/types";
 import { DEFAULT_INSTALL_DIR } from "./args";
 
 const DEFAULT_TITLES = new Set(["", "Vibe WP", "My Site"]);
+const EXISTING_SITE_MODES = new Set([
+  "manage-existing",
+  "remove-existing",
+  "update-existing",
+  "staging-only"
+]);
 
 // Apply non-interactive CLI flags onto the freshly built installer state so a
 // headless install can run without the TUI. Mirrors domain-screen's
@@ -24,6 +30,10 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
     // External mode has no bundled staging path.
     if (options.mode === "external-services") {
       state.stagingEnabled = false;
+    }
+    // Existing-site modes act on --install-dir, so treat it as the selected site.
+    if (EXISTING_SITE_MODES.has(options.mode) && options.installDir) {
+      state.selectedSiteDir = options.installDir;
     }
   }
 
