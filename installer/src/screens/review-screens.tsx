@@ -1,4 +1,5 @@
 import { TextAttributes } from "@opentui/core";
+import { useTerminalDimensions } from "@opentui/react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { Credits } from "../components/credits";
@@ -35,8 +36,13 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
 
 export function SuccessScreen({ redactedPlan, state }: ScreenProps) {
   const glyphs = useGlyphs();
+  const { width } = useTerminalDimensions();
   const summary = redactedPlan.summary;
   const stagingLive = state.stagingEnabled && summary.stagingUrl !== "disabled";
+  // Three link cards in a row truncate their URLs (admin URLs run ~32 chars)
+  // unless the panel is very wide; stack them otherwise so each shows in full.
+  const innerWidth = width < 92 ? width - 8 : width - 30;
+  const stack = innerWidth < 100;
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <NoteBox tone="success">
@@ -48,10 +54,12 @@ export function SuccessScreen({ redactedPlan, state }: ScreenProps) {
           below to finish in wp-admin.
         </text>
       </NoteBox>
-      <box flexDirection="row" gap={1}>
-        <LinkCard label="Your site" tone="accent" url={summary.productionUrl ?? ""} />
-        <LinkCard label="Admin login" tone="accent" url={summary.adminUrl ?? ""} />
-        {stagingLive && <LinkCard label="Staging" tone="muted" url={summary.stagingUrl ?? ""} />}
+      <box flexDirection={stack ? "column" : "row"} gap={1}>
+        <LinkCard label="Your site" stack={stack} tone="accent" url={summary.productionUrl ?? ""} />
+        <LinkCard label="Admin login" stack={stack} tone="accent" url={summary.adminUrl ?? ""} />
+        {stagingLive && (
+          <LinkCard label="Staging" stack={stack} tone="muted" url={summary.stagingUrl ?? ""} />
+        )}
       </box>
       <NoteBox tone="info">
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
@@ -73,21 +81,34 @@ export function SuccessScreen({ redactedPlan, state }: ScreenProps) {
   );
 }
 
-function LinkCard({ label, url, tone }: { label: string; url: string; tone: "accent" | "muted" }) {
+function LinkCard({
+  label,
+  url,
+  tone,
+  stack = false
+}: {
+  label: string;
+  url: string;
+  tone: "accent" | "muted";
+  stack?: boolean;
+}) {
   return (
     <box
       backgroundColor={color("panel3")}
       borderColor={color(tone === "accent" ? "accent" : "divider")}
       borderStyle="rounded"
-      flexBasis={0}
+      flexBasis={stack ? undefined : 0}
       flexDirection="column"
-      flexGrow={1}
+      flexGrow={stack ? 0 : 1}
       paddingX={1}
     >
-      <text fg={color("muted")}>{label}</text>
+      <text fg={color("muted")} height={1} truncate>
+        {label}
+      </text>
       <text
         attributes={TextAttributes.BOLD}
         fg={color(tone === "accent" ? "accent" : "text")}
+        height={1}
         truncate
       >
         {url}
