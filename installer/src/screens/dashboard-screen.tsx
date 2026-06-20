@@ -4,12 +4,8 @@ import { useMemo, useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
-import {
-  buildBackupsListTask,
-  buildOperationTask,
-  groupedOperations,
-  type ManageOperation
-} from "../core/manage-operations";
+import { groupedOperations, type ManageOperation } from "../core/manage-operations";
+import { buildBackupsListTask, buildOperationTask } from "../core/manage-tasks";
 import { runTask, type TaskStatus } from "../core/task-runner";
 import { GroupedOpList, type HealthState, StatusCards } from "./dashboard-cards";
 import { BackupPicker, OpDetail, ResultPanel } from "./dashboard-detail";

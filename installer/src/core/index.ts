@@ -21,10 +21,10 @@ export { applyLocalSandboxDefaults, createLocalSandboxHostFacts } from "./local-
 export type { ManageOperation, OpGroup, OpGroupView, OpSafety } from "./manage-operations";
 export {
   availableOperations,
-  buildOperationTask,
   groupedOperations,
   MANAGE_OPERATIONS
 } from "./manage-operations";
+export { buildBackupsListTask, buildOperationTask } from "./manage-tasks";
 export { redact, redactPlan } from "./redaction";
 export {
   defaultInstallDir,

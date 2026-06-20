@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { defaultState } from "./defaults";
-import { buildBackupsListTask, buildOperationTask, MANAGE_OPERATIONS } from "./manage-operations";
+import { MANAGE_OPERATIONS } from "./manage-operations";
+import { buildBackupsListTask, buildOperationTask } from "./manage-tasks";
 
 function cmd(parts: string[] | undefined): string {
   return parts?.join(" ") ?? "";
