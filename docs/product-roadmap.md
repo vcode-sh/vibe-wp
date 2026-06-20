@@ -26,8 +26,9 @@ sync to production.
 - **Multi-environment**: local / stage / prod / external, with staging
   `refresh-from-prod` and `promote-files-to-prod` already implemented.
 - **A guided TUI installer** (Bun + React + OpenTUI): `new-site` install (validated on a
-  real VPS), a 13-operation manage dashboard, plus `remove-existing` and `update-existing`
-  (both validated on a real VPS 2026-06-20) and wired-but-DNS-blocked `staging-only`.
+  real VPS), a 13-operation manage dashboard, plus `remove-existing` (incl. opt-in `--purge`
+  full delete), `update-existing`, and `staging-only` — all validated on a real VPS
+  (2026-06-20).
   Mode-aware planner, real host detection (scans `/opt` + `/srv`), dynamic wizard flow, and
   a headless core with `--export-plan` / `--headless` / `--headless-json` / `--dry-run` /
   `--resume` / `--support-bundle`.
@@ -112,6 +113,23 @@ agent docs, never in tracked files). Outcome:
   healthchecks caused a transient smoke 503 — `bin/vibe up` now uses `compose up --wait`,
   `bin/smoke` retries the first request, and `bin/restore` verifies the backup archive
   before resetting the database.
+- **`staging-only` end-to-end validated on real hardware.** Attaching staging to a live
+  prod-only site now writes a *separate* staging Caddy snippet (`vibe-wp-<slug>-stage.caddy`,
+  prod snippet untouched), scaffolds `env/stage.env`, and runs the DNS preflight against the
+  staging domain only (prod is already live). Validated: attaching a staging subdomain to a
+  prod-only site served staging over HTTPS with a valid cert + noindex, prod unaffected.
+- **Full-delete mode implemented and VPS-validated.** `remove-existing --purge`
+  (`state.fullDelete`) now drops Docker volumes (`down -v --remove-orphans`), deletes the
+  install directory, and removes the Caddy snippets — always after the safety backup;
+  default remove stays stop-only. Validated on a VPS: directory + 4 volumes removed,
+  off-server backup preserved, other sites unaffected.
+- **SSH visual checks done.** The TUI was PTY-rendered at wide (120x40), medium (92x30),
+  compact (80x24), and emergency (60x18) sizes for the welcome/performance/backup screens
+  with no crashes or errors (compact mode engages for the two smaller sizes).
+- **Clearer destructive-action confirmation.** Dashboard danger operations
+  (restore/stop/publish staging) now show an explicit plain-language consequence and an
+  "Enter to confirm, Esc to cancel" prompt (`ManageOperation.consequence`,
+  `dashboard-detail.tsx`).
 - **Host hardening implemented and VPS-validated.** `./bin/vibe <env> harden` (idempotent
   `./bin/harden`) sets up the `ufw` firewall (allowing SSH + 80/443 before enabling),
   fail2ban (`sshd` jail), automatic security updates, and safe `sysctl` defaults; an
@@ -201,18 +219,25 @@ Wedge: "managed-WordPress quality on a VPS you own," reachable over plain SSH to
 
 ## Remaining / untested installer work
 
-`remove-existing` and `update-existing` are now proven on hardware; `staging-only` remains
-the one mode unproven end-to-end (blocked on staging DNS):
+`remove-existing` (incl. `--purge`), `update-existing`, and `staging-only` are all now
+proven on hardware:
 
 - **`remove-existing`** — wired (pre-remove-backup, optional stage-down, prod-down,
-  disable-caddy-route in `buildRemoveTasks`) and **validated on a real VPS (2026-06-20)**.
+  disable-caddy-route in `buildRemoveTasks`) and **validated on a real VPS (2026-06-20)**,
+  including the opt-in `--purge` full delete (drops Docker volumes, deletes the install
+  directory, removes the Caddy snippets — after the safety backup).
 - **`update-existing`** — wired (checkout, prod-config, prod-up, prod-smoke in
   `buildUpdateTasks`) and **validated on a real VPS (2026-06-20)**.
-- **`staging-only`** — wired (dns-preflight, stage-config, stage-up = up+install+smoke).
-  The full fresh-staging path is **not validated end-to-end** because the staging
-  subdomain needs a public DNS record (stage-smoke fails without it). Note the staging
-  *data* workflows (`refresh-from-prod`, `promote-files-to-prod`) **were** validated on
-  real hardware via the manage dashboard.
+- **`staging-only`** — wired (dns-preflight on the staging domain only, env-stage,
+  stage-config, stage-caddyfile separate snippet, stage-up = up+install+smoke) and
+  **validated end-to-end on a real VPS (2026-06-20)**: attaching staging to a live
+  prod-only site served staging over HTTPS with a valid cert + noindex, prod untouched.
+
+The one installer path still unproven on hardware is a real production-plus-staging install
+with two fresh isolated domains. The "first screen becomes a full site dashboard" rework is
+a separate, subjective cosmetic item still open (the underlying create/manage/remove/full-delete
+actions all exist; the Execute screen already shows a progress bar + per-task status + live
+log).
 
 ## Risks / open questions
 
@@ -223,6 +248,10 @@ the one mode unproven end-to-end (blocked on staging DNS):
   (`buildExternalTasks` + `externalEnvValues`, writing `env/external.env`), headless
   `--ext-*` flags exist, and the root stack's `compose.external.yaml` + `env/external.env`
   are now driven by the installer. See the validation milestone above.
+- ~~**Safe-remove: stay stop-only, or add a destructive full-delete mode?**~~ **Resolved
+  (2026-06-20):** default remove stays stop-only; full delete is opt-in via
+  `remove-existing --purge`, which drops Docker volumes, deletes the install directory, and
+  removes the Caddy snippets after the safety backup. Done + VPS-validated.
 - Desktop app is a **separate product** with real cost (auto-update, signing, cross-OS
   Docker). Sequence it last.
 - Headless-core refactor must not regress the TUI; do it behind tests.

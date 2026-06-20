@@ -44,13 +44,18 @@ Wired in the planner and **now validated on real hardware (2026-06-20)**:
   transient 503) — `bin/vibe up` now uses `compose up --wait` and `bin/smoke` retries the
   first request.
 
-**Blocked on DNS:**
+**Done + VPS-validated — `staging-only` end-to-end (2026-06-20):**
 
-- [ ] **`staging-only` full fresh-staging path** — `buildStagingOnlyTasks`: dns-preflight,
-  stage-config, stage-up (up + install + smoke). Not validated end-to-end because the
-  staging subdomain needs a public DNS record; `stage-smoke` fails without it. The staging
-  *data* workflows (refresh-from-prod, promote-files-to-prod) were validated separately via
-  the manage dashboard.
+- [x] **`staging-only` attaches staging to a live prod-only site.** `buildStagingOnlyTasks`
+  now writes a *separate* staging Caddy snippet (`vibe-wp-<slug>-stage.caddy`, leaving the
+  prod snippet untouched), scaffolds `env/stage.env`, and the DNS preflight checks **only**
+  the staging domain — `dns-preflight.ts` short-circuits to `[stagingDomain]` for this mode
+  since prod is already live, so re-checking prod (and its `www`) cannot fail needlessly.
+  The staging snippet is written via the `stage-caddyfile` special-write in `task-runner.ts`
+  (`renderStagingCaddyfile` in `caddyfile.ts`). Validated on a real VPS: attaching
+  `stage.<domain>` to a prod-only site served staging over HTTPS with a valid cert +
+  noindex, with prod untouched. The staging *data* workflows (refresh-from-prod,
+  promote-files-to-prod) were validated separately via the manage dashboard.
 
 **Done + VPS-validated — `external-services` is fully implemented (2026-06-20):**
 
@@ -119,7 +124,10 @@ Implemented in the management/UI pass after the first VPS TUI audit:
   backup, list-backups, cache-flush, restart, refresh-from-prod, promote-files-to-prod,
   restore, and down. Validated against real prod on 2026-06-20.
 - Safe-remove mode can plan backup, stop production/staging containers, and disable the
-  site's Caddy snippet (wired; validated on a real VPS (2026-06-20)).
+  site's Caddy snippet (wired; validated on a real VPS (2026-06-20)). A full-delete variant
+  (`remove-existing --purge`, `state.fullDelete`) additionally drops Docker volumes
+  (`down -v --remove-orphans`), deletes the install directory, and removes the Caddy
+  snippets — always after the safety backup. Default remove stays stop-only.
 - Caddy integration is site-scoped through `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy`.
 - Secrets are masked in form fields and redacted in generated previews.
 - Execution requires a typed confirmation phrase.
@@ -132,7 +140,10 @@ Implemented in the management/UI pass after the first VPS TUI audit:
   `.vibe-installer/` so a failed/interrupted install can be re-run with `--resume`
   (done + VPS-validated 2026-06-20). The interactive Execute screen does not yet surface
   resume as first-class UI.
-- Safe-remove is intentionally conservative and stop-only; there is no separate full-delete flow for removing files and Docker volumes.
+- Safe-remove is intentionally conservative and stop-only by default. A separate
+  opt-in full-delete flow now exists (`remove-existing --purge`): it drops Docker volumes,
+  deletes the install directory, and removes the Caddy snippets after the safety backup.
+  Done + VPS-validated (2026-06-20).
 - DNS validation exists, but the full DNS-not-ready guidance needs better copy, retry UX, and advanced override dialog treatment.
 - Management mode exists, but it is not yet a full site operations console with backups, restore, update, staging refresh, logs, and removal grouped as first-class actions.
 - Headless/export modes exist, but they need the same validation and resume story as interactive installs before being recommended for production.
@@ -148,11 +159,24 @@ Implemented in the management/UI pass after the first VPS TUI audit:
   plan.redacted.json) via `core/support-bundle.ts`. Validated: a run failing at step 2 left
   a journal, and re-running with `--resume` skipped step 1 and continued.
 - A `summary.txt` install summary alongside the journal.
-- Dialog/layer system for destructive actions, advanced overrides, and failure recovery.
-- Full-delete mode with files, Caddy snippets, Docker volumes, and backup confirmation.
-- Terminal screenshot/snapshot acceptance for wide, medium, compact, and emergency layouts.
-- Real end-to-end production-plus-staging proof with isolated domains (blocked on staging
-  DNS; the `staging-only` plan is wired but `stage-smoke` needs a public staging record).
+- A full dialog/layer system for advanced overrides and failure recovery. (Partly done:
+  dashboard danger ops now show an explicit plain-language consequence + an
+  "Enter to confirm, Esc to cancel" prompt — done + VPS-validated 2026-06-20 via
+  `ManageOperation.consequence` + `dashboard-detail.tsx`.)
+- ~~Full-delete mode with files, Caddy snippets, Docker volumes, and backup confirmation.~~
+  **Done + VPS-validated (2026-06-20)** — `remove-existing --purge` (`state.fullDelete`)
+  drops Docker volumes (`down -v --remove-orphans`), deletes the install directory, and
+  removes the Caddy snippets, always after the safety backup. Validated on a VPS: directory
+  + 4 volumes removed, off-server backup preserved, other sites unaffected.
+- ~~Terminal screenshot/snapshot acceptance for wide, medium, compact, and emergency
+  layouts.~~ **Done (SSH visual checks, 2026-06-20)** — the TUI was PTY-rendered at wide
+  (120x40), medium (92x30), compact (80x24), and emergency (60x18) sizes for the
+  welcome/performance/backup screens with no crashes or errors at any size (compact mode
+  engages for the smaller two). Automated snapshot *fixtures* in the test suite are still
+  open.
+- Real end-to-end production-plus-staging proof with two isolated *fresh* domains. (The
+  `staging-only` attach-to-live-prod path is now validated end-to-end on a real VPS —
+  separate staging snippet, staging-only DNS preflight, HTTPS + noindex, prod untouched.)
 - ~~A decision + implementation/removal for `external-services`.~~ Done + VPS-validated
   (2026-06-20) — see the `external-services` section above.
 
@@ -175,11 +199,20 @@ cache. What remains unproven is the production-plus-staging path and the other m
   writes a redacted bundle (host.json, install.log, state.json, plan.redacted.json) via
   `core/support-bundle.ts`. Still open: including recent Docker status and Caddy validation
   output in the bundle.
-- Add a real dialog/layer system for destructive actions, failure recovery, support bundle export, DNS override, and quit-during-execution confirmation.
-- Rework the first screen into a true site dashboard with clear actions: create site, manage detected site, safe remove, full delete when implemented, and open docs.
-- Add a visual progress timeline with current task, completed tasks, skipped tasks, failed task, retry action, and log drawer.
-- Run and record real SSH visual checks at wide, medium, compact, and emergency terminal sizes.
+- Add a real dialog/layer system for failure recovery, support bundle export, DNS override,
+  and quit-during-execution confirmation. (Partly done: destructive dashboard ops now show
+  an explicit plain-language consequence + an "Enter to confirm, Esc to cancel" prompt —
+  done + VPS-validated 2026-06-20.)
+- Rework the first screen into a true site dashboard with clear actions: create site, manage detected site, safe remove, full delete, and open docs. (Still open — cosmetic/subjective rework; the underlying actions all exist.)
+- ~~Add a visual progress timeline with current task, completed tasks, skipped tasks, failed
+  task, retry action, and log drawer.~~ Already present: the Execute screen shows a progress
+  bar, a per-task status list, and a live log.
+- ~~Run and record real SSH visual checks at wide, medium, compact, and emergency terminal
+  sizes.~~ **Done (2026-06-20)** — PTY-rendered at 120x40, 92x30, 80x24, and 60x18 for the
+  welcome/performance/backup screens; no crashes/errors, compact mode engages for the two
+  smaller sizes.
 - Run and record disposable real-domain production and production-plus-staging installs.
+  (The `staging-only` attach-to-live-prod path is now validated end-to-end on a real VPS.)
 
 ### P1 - Required For "Wow" Quality
 
@@ -207,8 +240,14 @@ Remaining P0 implementation work:
 - ~~Add persistent installer state, resumable execution, and an install log under
   `.vibe-installer/`.~~ **Done + VPS-validated (2026-06-20)** (`core/journal.ts`,
   `--resume`; support bundle via `--support-bundle`). Still open: a final `summary.txt`.
-- Add first-class modal/dialog flows for destructive actions, support bundle export, and failure recovery.
-- Decide whether safe-remove should remain stop-only or add a separate full-delete mode that removes files and Docker volumes after a stronger confirmation.
+- Add first-class modal/dialog flows for support bundle export and failure recovery.
+  (Destructive actions now show a plain-language consequence + explicit
+  "Enter to confirm, Esc to cancel" prompt — done + VPS-validated 2026-06-20.)
+- ~~Decide whether safe-remove should remain stop-only or add a separate full-delete mode
+  that removes files and Docker volumes after a stronger confirmation.~~ **Resolved
+  (2026-06-20):** default remove stays stop-only; full delete is opt-in via
+  `remove-existing --purge`, which drops Docker volumes, deletes the install directory, and
+  removes the Caddy snippets after the safety backup. Done + VPS-validated.
 - Run and record a real production install on a disposable Ubuntu 26.04 VPS with a real domain.
 - Run and record a production-plus-staging install on a disposable Ubuntu 26.04 VPS with real domains.
 - Verify post-install WordPress Site Health REST and loopback, uploads year/month creation, Redis Object Cache, and FastCGI cache HIT.
@@ -216,7 +255,8 @@ Remaining P0 implementation work:
 Remaining P1 quality work:
 
 - Improve the OpenTUI visual polish after another SSH run; the UI has had a first neutral dark-mode pass but has not been accepted visually.
-- Add terminal-size snapshot checks for wide, medium, compact, and emergency layouts.
+- Add automated terminal-size snapshot *fixtures* for wide, medium, compact, and emergency
+  layouts. (Manual SSH visual checks at all four sizes done + recorded 2026-06-20.)
 - Add better non-technical copy for failure states and next actions.
 
 Safe commands today:
@@ -230,9 +270,9 @@ curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --version
 As of 2026-06-20 the `new-site` install was completed on a real server and is no longer
 unproven. Still: only run `--headless plan.json --yes` or a full TUI install on a server
 whose DNS is correctly configured and after the generated plan has been reviewed.
-`remove-existing` and `update-existing` are now validated on real hardware (2026-06-20);
-`staging-only` remains unproven end-to-end because its `stage-smoke` needs a public staging
-DNS record.
+`remove-existing` (including the opt-in `--purge` full delete), `update-existing`, and
+`staging-only` are now all validated on real hardware (2026-06-20). The remaining unproven
+path is a real production-plus-staging install with two fresh isolated domains.
 
 ## Goal
 

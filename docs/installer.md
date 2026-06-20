@@ -46,7 +46,9 @@ Installer `0.1.2` includes:
 - typed confirmation before execution
 - a real task runner wired to the interactive Execute screen
 - a Manage dashboard wrapping the full `bin/vibe` operation set (health/smoke, health check & alerts, secure the server, performance, status, server checks, recent logs, config, backup, cache flush, restart, staging refresh/promote, restore, and stop)
-- safe-remove tasks that back up, stop containers, and disable the site's Caddy snippet without deleting files or Docker volumes
+- safe-remove tasks that back up, stop containers, and disable the site's Caddy snippet without deleting files or Docker volumes — plus an opt-in **full delete** (`remove-existing --purge`) that, after the safety backup, drops Docker volumes (`down -v --remove-orphans`), deletes the install directory, and removes the Caddy snippets
+- a **staging-only HTTPS route** for attaching staging to a live prod-only site: it writes a *separate* staging Caddy snippet (`vibe-wp-<site>-stage.caddy`, leaving prod untouched) and runs the DNS preflight against the staging domain only, so staging gets a valid cert + noindex without re-checking already-live prod
+- plain-language confirmation for destructive dashboard actions (restore/stop/publish staging): each shows its concrete consequence and an explicit "Enter to confirm, Esc to cancel" prompt
 - idempotent env-file writes so installs can be safely retried
 - preservation of existing install secrets (DB/Redis passwords) on retry, keeping them in sync with the persisted Docker volumes
 - an editable Performance screen: pick a preset, or turn on Customize to edit any individual setting (PHP/WP memory, PHP-FPM pool, Redis, MariaDB buffer pool, Nginx cache) and the assumed server memory; the PHP-FPM pool is auto-clamped so no edit can produce an invalid, crash-looping config
@@ -60,9 +62,9 @@ The first screen offers these intents (the menu only shows manage/remove/update/
 
 - **Create a new WordPress** (`new-site`) — full guided install: production, optional staging, isolated ports, and tuned env files. Fully working and validated on a disposable VPS.
 - **Manage detected site** (`manage-existing`) — a dashboard that runs status, health/smoke, performance, logs, backup, cache, restart, staging, restore, and stop actions against a detected site. See the dashboard mapping in [operations.md](operations.md).
-- **Remove detected site** (`remove-existing`) — creates a safety backup, stops containers, and disables the site's Caddy snippet without deleting files or Docker volumes. Validated on a real VPS (2026-06-20).
+- **Remove detected site** (`remove-existing`) — creates a safety backup, stops containers, and disables the site's Caddy snippet without deleting files or Docker volumes. Pass `--purge` for an opt-in full delete that (after the backup) also drops Docker volumes, deletes the install directory, and removes the Caddy snippets. Validated on a real VPS (2026-06-20), including `--purge` (directory + 4 volumes removed, off-server backup preserved, other sites unaffected).
 - **Update existing checkout** (`update-existing`) — fast-forwards the existing repository and rebuilds/restarts production in place, without touching data. Validated on a real VPS (2026-06-20).
-- **Create staging only** (`staging-only`) — attaches an isolated staging environment to an existing production site.
+- **Create staging only** (`staging-only`) — attaches an isolated staging environment to an existing live production site. It writes a *separate* staging Caddy snippet (`vibe-wp-<site>-stage.caddy`) so the prod snippet is untouched, scaffolds `env/stage.env`, and runs the DNS preflight against the staging domain only (prod is already live). Validated on a real VPS (2026-06-20): attaching a staging subdomain to a prod-only site served staging over HTTPS with a valid cert + noindex, prod unaffected.
 - **Use external database and Redis** (`external-services`) — bring-your-own MariaDB and Redis: only WordPress and Nginx (plus cron) run in Docker. After the Domain screen the flow collects external Database details (host:port, name, user, password, charset, table prefix) and external Redis details (host, port, password, database, scheme) on dedicated screens, then writes `env/external.env` and runs the install via `./bin/vibe external ...`. There is no bundled staging step in this mode. Validated end-to-end on a real VPS (2026-06-20): HTTPS site, only `wordpress`/`nginx`/`cron` containers running, WordPress data in the external MariaDB, and the object cache connected to the external Redis.
 
 ## Headless And CLI Flags
@@ -108,6 +110,7 @@ Boolean flags:
 - `--dry-run` — plan without making host changes
 - `--yes` — confirm and execute host changes non-interactively
 - `--local` — use the safe macOS local sandbox (UI/UX and planner work only)
+- `--purge` — in `remove-existing` mode, perform a full delete: after the safety backup, drop Docker volumes, delete the install directory, and remove the Caddy snippets (default remove is stop-only)
 - `--no-www` — do not add a `www.` alias or require its DNS
 - `--no-caddy` — do not manage Caddy
 - `--no-host-install` — do not install missing host packages (also disables server hardening)
@@ -132,11 +135,11 @@ Done since the last revision (done + VPS-validated 2026-06-20):
 The installer is not complete until these gaps are closed:
 
 - a final `summary.txt` written alongside the install journal
-- first-class modal/dialog layers for destructive actions, failure recovery, and advanced overrides
-- full-delete mode for intentionally removing files and Docker volumes
-- terminal snapshot checks for wide, medium, compact, and emergency layouts
+- first-class modal/dialog layers for failure recovery and advanced overrides (destructive dashboard actions already show a plain-language consequence + an explicit confirm/cancel prompt — done + VPS-validated 2026-06-20)
+- ~~full-delete mode for intentionally removing files and Docker volumes~~ done + VPS-validated 2026-06-20 (`remove-existing --purge`)
+- ~~terminal snapshot checks for wide, medium, compact, and emergency layouts~~ manual SSH visual checks at 120x40 / 92x30 / 80x24 / 60x18 done + recorded 2026-06-20 (automated snapshot fixtures still open)
 - real production install proof on a disposable Ubuntu 26.04 VPS with a real domain
-- real production-plus-staging install proof on a disposable Ubuntu 26.04 VPS with real domains
+- real production-plus-staging install proof with two fresh isolated domains (the `staging-only` attach-to-live-prod path is now validated end-to-end on a real VPS, 2026-06-20)
 - post-install proof for WordPress Site Health REST and loopback checks
 - post-install proof for uploads year/month directory creation
 - post-install proof for Redis Object Cache connectivity
@@ -153,7 +156,7 @@ Do not mark the installer complete or recommend unattended `--headless --yes` pr
 - a redacted support bundle can be exported for diagnostics (met — `--support-bundle <dir>`, validated 2026-06-20)
 - failures show plain-English next steps and allow retry or support bundle export
 - secrets are redacted from UI, logs, plans, summaries, and support bundles
-- the TUI has been visually checked on real SSH terminals, not only local terminal sessions
+- the TUI has been visually checked on real SSH terminals, not only local terminal sessions (met — PTY-rendered at wide/medium/compact/emergency sizes, validated 2026-06-20)
 
 ## Local macOS Testing
 
