@@ -3,6 +3,7 @@ import {
   portPairFromSlug,
   siteSlugFromDomain,
   stagingDomainFor,
+  stripProtocol,
   titleFromDomain
 } from "../core/site-profile";
 import type { InstallerOptions, InstallerState } from "../core/types";
@@ -31,9 +32,13 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
     if (options.mode === "external-services") {
       state.stagingEnabled = false;
     }
-    // Existing-site modes act on --install-dir, so treat it as the selected site.
+    // Existing-site modes act on --install-dir, so treat it as the selected
+    // site and adopt its identity (slug/domains) from host detection — the
+    // headless mirror of picking a site in the TUI. Needed so e.g. remove finds
+    // the right Caddy snippet (named after the site slug).
     if (EXISTING_SITE_MODES.has(options.mode) && options.installDir) {
       state.selectedSiteDir = options.installDir;
+      adoptDetectedSite(state, options.installDir);
     }
   }
 
@@ -103,6 +108,27 @@ function applyPerfOverrides(state: InstallerState, options: InstallerOptions): v
   }
   state.performanceOverrides = overrides;
   state.performanceCustom = true;
+}
+
+// Adopt a detected site's identity (slug, domains, staging) by install dir, so
+// existing-site operations target the right files. Falls back to the dir
+// basename as the slug when host detection has no matching record.
+function adoptDetectedSite(state: InstallerState, installDir: string): void {
+  const site = state.host.existingSites.find((candidate) => candidate.installDir === installDir);
+  if (site?.productionUrl) {
+    const domain = stripProtocol(site.productionUrl);
+    state.productionDomain = domain;
+    state.siteSlug = siteSlugFromDomain(domain);
+    state.stagingEnabled = site.hasStaging;
+    if (site.stagingUrl) {
+      state.stagingDomain = stripProtocol(site.stagingUrl);
+    }
+    return;
+  }
+  const base = installDir.split("/").pop() ?? "";
+  if (base) {
+    state.siteSlug = base;
+  }
 }
 
 function applyExternalServices(state: InstallerState, options: InstallerOptions): void {

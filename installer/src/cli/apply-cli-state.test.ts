@@ -127,6 +127,38 @@ describe("applyCliState", () => {
     expect(state.r2Bucket).toBe("bucket");
   });
 
+  test("existing-site mode adopts the detected site's slug + domain from --install-dir", () => {
+    const base = defaultState();
+    base.host = {
+      ...base.host,
+      existingSites: [
+        {
+          installDir: "/opt/vibe-wp-sites/shop-example",
+          hasStaging: false,
+          productionProject: "p",
+          productionUrl: "https://shop.example.io",
+          stagingProject: null,
+          stagingUrl: null
+        }
+      ]
+    };
+    const state = applyCliState(
+      base,
+      options({ mode: "remove-existing", installDir: "/opt/vibe-wp-sites/shop-example" })
+    );
+    expect(state.selectedSiteDir).toBe("/opt/vibe-wp-sites/shop-example");
+    expect(state.productionDomain).toBe("shop.example.io");
+    expect(state.siteSlug).toBe("shop-example-io");
+  });
+
+  test("existing-site mode falls back to the dir basename as slug when undetected", () => {
+    const state = applyCliState(
+      defaultState(),
+      options({ mode: "remove-existing", installDir: "/opt/vibe-wp-sites/lonely-site" })
+    );
+    expect(state.siteSlug).toBe("lonely-site");
+  });
+
   test("leaves state untouched when flags are absent", () => {
     const base = defaultState();
     const before = base.productionDomain;
