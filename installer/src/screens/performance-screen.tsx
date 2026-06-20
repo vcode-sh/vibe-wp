@@ -73,11 +73,49 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
       ) : (
         <InfoGrid rows={Object.entries(values).slice(0, 8)} />
       )}
+      <MemoryBar memory={memory} values={values} />
       <ActionRow
         onPrimary={next}
         primary="Continue"
         secondary="Exact values are written to your env files — nothing hidden"
       />
+    </box>
+  );
+}
+
+const SIZE_PATTERN = /(\d+(?:\.\d+)?)\s*([gGmM])?/;
+const GIGABYTE_PATTERN = /g/i;
+
+function parseMb(value: string | undefined): number {
+  const match = (value ?? "").match(SIZE_PATTERN);
+  if (!match) {
+    return 0;
+  }
+  const n = Number.parseFloat(match[1] ?? "0");
+  return GIGABYTE_PATTERN.test(match[2] ?? "") ? Math.round(n * 1024) : Math.round(n);
+}
+
+// A visual RAM budget: how much the reserved caches (Redis + MariaDB buffer
+// pool) claim out of the server's memory, so over-provisioning is obvious.
+function MemoryBar({ memory, values }: { memory: number | null; values: Record<string, string> }) {
+  if (!memory) {
+    return null;
+  }
+  const redis = parseMb(values.REDIS_MAXMEMORY);
+  const db = parseMb(values.MARIADB_INNODB_BUFFER_POOL_SIZE);
+  const free = Math.max(0, memory - redis - db);
+  const tone = redis + db > memory ? "warning" : "muted";
+  return (
+    <box flexDirection="column" gap={0}>
+      <box flexDirection="row" height={1}>
+        <box backgroundColor={color("accent")} flexGrow={Math.max(1, redis)} />
+        <box backgroundColor={color("warning")} flexGrow={Math.max(1, db)} />
+        <box backgroundColor={color("panel3")} flexGrow={Math.max(1, free)} />
+      </box>
+      <text fg={color(tone)} truncate>
+        Caches reserve ~{redis + db} MB (Redis {redis} + MariaDB {db}) of {memory} MB · PHP-FPM up
+        to {values.PHP_FPM_PM_MAX_CHILDREN} workers
+      </text>
     </box>
   );
 }
