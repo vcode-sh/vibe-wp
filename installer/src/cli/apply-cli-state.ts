@@ -41,8 +41,25 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
   }
 
   applyExternalServices(state, options);
+  applyPerfOverrides(state, options);
 
   return state;
+}
+
+function applyPerfOverrides(state: InstallerState, options: InstallerOptions): void {
+  if (!options.perfOverrides?.length) {
+    return;
+  }
+  const overrides: Record<string, string> = { ...state.performanceOverrides };
+  for (const entry of options.perfOverrides) {
+    const eq = entry.indexOf("=");
+    if (eq <= 0) {
+      continue;
+    }
+    overrides[entry.slice(0, eq).trim()] = entry.slice(eq + 1).trim();
+  }
+  state.performanceOverrides = overrides;
+  state.performanceCustom = true;
 }
 
 function applyExternalServices(state: InstallerState, options: InstallerOptions): void {

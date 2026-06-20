@@ -118,6 +118,14 @@ export function parseArgs(argv: string[]): InstallerOptions {
       continue;
     }
 
+    // Repeatable: --perf KEY=VALUE overrides a single performance setting.
+    if (arg === "--perf") {
+      options.perfOverrides = options.perfOverrides ?? [];
+      options.perfOverrides.push(requireValue(argv, index, arg));
+      index += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -165,6 +173,15 @@ Options:
   --no-caddy             Do not manage Caddy
   --no-www               Do not add a www. alias or require its DNS
   --no-host-install      Do not install missing host packages
+  --ext-db-host <h:port> External MariaDB host (external-services mode)
+  --ext-db-name <name>   External database name
+  --ext-db-user <user>   External database user
+  --ext-db-password <pw> External database password
+  --ext-redis-host <h>   External Redis host
+  --ext-redis-port <p>   External Redis port
+  --ext-redis-password <pw> External Redis password
+  --perf KEY=VALUE       Override a performance setting (repeatable),
+                         e.g. --perf REDIS_MAXMEMORY=512mb
   --compact              Force compact UI
   --ascii                Avoid Unicode UI characters
   --version              Print version

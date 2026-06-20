@@ -95,6 +95,16 @@ describe("applyCliState", () => {
     expect(state.stagingEnabled).toBe(false);
   });
 
+  test("--perf KEY=VALUE entries enable customization and set overrides", () => {
+    const state = applyCliState(
+      defaultState(),
+      options({ perfOverrides: ["REDIS_MAXMEMORY=512mb", "PHP_FPM_PM_MAX_CHILDREN=24"] })
+    );
+    expect(state.performanceCustom).toBe(true);
+    expect(state.performanceOverrides.REDIS_MAXMEMORY).toBe("512mb");
+    expect(state.performanceOverrides.PHP_FPM_PM_MAX_CHILDREN).toBe("24");
+  });
+
   test("leaves state untouched when flags are absent", () => {
     const base = defaultState();
     const before = base.productionDomain;

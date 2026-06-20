@@ -31,6 +31,7 @@ export interface InstallerOptions {
   noCaddy: boolean;
   noHostInstall: boolean;
   noWww: boolean;
+  perfOverrides?: string[];
   ref: string;
   repo: string;
   stagingDomain?: string;
