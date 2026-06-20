@@ -1,8 +1,60 @@
 # Vibe WP Installer TUI Plan
 
-Date: 2026-06-19
-Status: installer `0.1.2` released; management pass implemented; production readiness not complete
+Date: 2026-06-20
+Status: installer released; `new-site` install + manage dashboard validated end-to-end on a real VPS; headless core done; other modes wired but not all hardware-tested
 Primary decision: OpenTUI + React + Bun
+
+## Ground-truth reconciliation - 2026-06-20
+
+A real-VPS validation session ran on a disposable test server (SSH details stay in
+local-only agent docs). Reconciling this checklist against the code and that session:
+
+Done **and validated on real hardware**:
+
+- [x] **`new-site` install end-to-end.** 10-task plan (dns-preflight, checkout, env-prod,
+  caddyfile, prod-config, prod-up, prod-install, prod-smoke, prod-perf, first-backup) ran
+  clean. Host `install-docker`/`install-caddy` tasks are gated by `--no-host-install`;
+  staging tasks gated by `stagingEnabled`. Live HTTPS WordPress 7.0 + Redis Object Cache
+  confirmed; multiple sites coexisting on one VPS confirmed.
+- [x] **Manage dashboard** (`core/manage-operations.ts`): 13 operations across Check /
+  Maintain / Staging / Danger groups, each mapped to a real `bin/vibe` command. Exercised
+  on real prod: smoke, perf-report, ps, recent logs, config, backup + list-backups,
+  restore round-trip, refresh-from-prod, promote-files-to-prod.
+- [x] **Headless core (Phase 3).** `core/boundary.test.ts` enforces a no-UI boundary; 46
+  tests pass. `--export-plan`, `--headless <plan>`, `--headless-json`, `--dry-run`, and the
+  CLI flags `--domain` / `--admin-email` / `--mode` / `--staging-domain` / `--no-www` /
+  `--no-host-install` were all run on the real VPS.
+- [x] **Two install-blocking bugs found via SSH and fixed 2026-06-20:** (a) `env-prod`/
+  `env-stage` made idempotent (skip `make init-*` when the env file exists) so retried
+  installs no longer fail; (b) `writeEnvFile` preserves write-once secrets (DB/Redis
+  passwords) on retry (`preserveExisting: SECRET_ENV_KEYS` in `task-runner.ts`) so they
+  stay in sync with the persisted Docker volumes.
+- [x] New `bin/vibe` commands the older sections below predate: `logs-recent` (one-shot,
+  non-following tail) and `backups` (list backup directories).
+
+Wired in the planner but **NOT yet tested on hardware**:
+
+- [ ] **`remove-existing`** — `buildRemoveTasks`: pre-remove-backup, optional stage-down,
+  prod-down, disable-caddy-route. Needs a real disposable-VPS run.
+- [ ] **`update-existing`** — `buildUpdateTasks`: checkout, prod-config, prod-up,
+  prod-smoke. Needs a real run against an existing checkout.
+
+**Blocked on DNS:**
+
+- [ ] **`staging-only` full fresh-staging path** — `buildStagingOnlyTasks`: dns-preflight,
+  stage-config, stage-up (up + install + smoke). Not validated end-to-end because the
+  staging subdomain needs a public DNS record; `stage-smoke` fails without it. The staging
+  *data* workflows (refresh-from-prod, promote-files-to-prod) were validated separately via
+  the manage dashboard.
+
+**Decision pending — `external-services` is half-removed:**
+
+- [ ] Removed from the TUI menu, but still present in the `InstallMode` type union
+  (`core/types.ts`), the `--mode` CLI arg, and the `--help` text (`cli/args.ts`). In
+  `install-plan.ts` it falls through to a normal bundled-DB install (see the comment in
+  `buildTasks`). The root stack already has `compose.external.yaml` + `env/external.env`.
+  Decide: **fully implement** bring-your-own MariaDB/Redis, or **fully remove** it from the
+  type union + CLI. Do not leave it half-wired.
 
 ## Current Audit - 2026-06-19
 
@@ -51,8 +103,12 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - New-site planning supports site slugs, per-site Compose project names, per-site loopback HTTP ports, production domain, optional staging, AI keys, backup policy, and performance preset.
 - Existing Vibe WP installs are detected under `/opt` and `/srv` when they expose `bin/vibe` plus env files.
 - Local macOS testing is available through `--local`, with deterministic host facts, sample existing sites, sandbox paths under `installer/.vibe-local/`, and simulated task execution.
-- Manage mode can plan status, production smoke, performance report, and optional staging smoke tasks.
-- Safe-remove mode can plan backup, stop production/staging containers, and disable the site's Caddy snippet.
+- Manage mode is now a 13-operation per-site dashboard (Check / Maintain / Staging / Danger
+  groups) over `bin/vibe`: smoke, perf-report, ps, doctor-runtime, logs-recent, config,
+  backup, list-backups, cache-flush, restart, refresh-from-prod, promote-files-to-prod,
+  restore, and down. Validated against real prod on 2026-06-20.
+- Safe-remove mode can plan backup, stop production/staging containers, and disable the
+  site's Caddy snippet (wired; not yet run on real hardware).
 - Caddy integration is site-scoped through `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy`.
 - Secrets are masked in form fields and redacted in generated previews.
 - Execution requires a typed confirmation phrase.
@@ -75,11 +131,16 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - Dialog/layer system for destructive actions, advanced overrides, failure recovery, and support bundle export.
 - Full-delete mode with files, Caddy snippets, Docker volumes, and backup confirmation.
 - Terminal screenshot/snapshot acceptance for wide, medium, compact, and emergency layouts.
-- Real end-to-end install proof on a clean Ubuntu 26.04 VPS with a real production domain.
-- Real end-to-end production-plus-staging proof with isolated domains.
-- Post-install proof for WordPress Site Health REST and loopback checks.
-- Post-install proof for uploads year/month directory creation.
-- Post-install proof for Redis Object Cache and FastCGI cache `HIT`.
+- Real end-to-end production-plus-staging proof with isolated domains (blocked on staging
+  DNS; the `staging-only` plan is wired but `stage-smoke` needs a public staging record).
+- Hardware test of `remove-existing` and `update-existing` (planner wired, not yet run).
+- A decision + implementation/removal for `external-services` (see reconciliation above).
+
+Note (updated 2026-06-20): the earlier "no real install proof" items are now partly
+satisfied — a `new-site` production install was validated end-to-end on a real VPS, with
+live HTTPS WordPress 7.0, Redis Object Cache, and multi-site coexistence confirmed. The
+prod-smoke task that ran there covers HTTP, REST loopback, uploads, Redis, and FastCGI
+cache. What remains unproven is the production-plus-staging path and the other modes.
 
 ## UI/UX 2026 Upgrade Backlog
 
@@ -137,7 +198,11 @@ curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --dry-run
 curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --version
 ```
 
-Do not run `--headless plan.json --yes` or complete a TUI install on a real server until a real domain is configured and the generated plan has been reviewed.
+As of 2026-06-20 the `new-site` install was completed on a real server and is no longer
+unproven. Still: only run `--headless plan.json --yes` or a full TUI install on a server
+whose DNS is correctly configured and after the generated plan has been reviewed. The
+other modes (`remove-existing`, `update-existing`, `staging-only`) have not been run on
+real hardware yet — treat them as untested.
 
 ## Goal
 

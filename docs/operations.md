@@ -56,6 +56,15 @@ docker compose logs -f db
 docker compose logs -f redis
 ```
 
+`bin/vibe` exposes two log commands per environment:
+
+```sh
+./bin/vibe prod logs          # follow logs (-f), streams until interrupted
+./bin/vibe prod logs-recent   # one-shot, prints the last ~200 lines and returns
+```
+
+Use `logs` for live tailing. Use `logs-recent` in non-interactive contexts (scripts, the installer Manage dashboard) where a following stream would hang forever; it prints the latest lines without `-f` and exits.
+
 ## Adminer
 
 ```sh
@@ -94,6 +103,13 @@ backups/<environment>/<timestamp>/manifest.txt
 ```
 
 The backup command dumps the database and archives `wp-content` from the running WordPress container. This works for both local bind mounts and production/staging named volumes.
+
+List existing backup directories for an environment (newest last, one per line):
+
+```sh
+./bin/vibe prod backups
+./bin/vibe stage backups
+```
 
 Verify a backup before relying on it:
 
@@ -213,3 +229,32 @@ docker compose up -d
 ```
 
 If `COMPOSE_PROJECT_NAME` is changed, adjust the volume name.
+
+## Installer Manage Dashboard
+
+The guided installer's Manage screen (`manage-existing` mode) is a friendly front end for the same `bin/vibe` commands documented here. It runs them against the selected site directory and never bypasses the scripts. Its operations map to:
+
+| Dashboard action | `bin/vibe` command |
+| --- | --- |
+| Check it's healthy | `smoke` |
+| Speed report | `perf-report` |
+| What's running | `ps` |
+| Check the server itself | `doctor-runtime` |
+| Recent logs | `logs-recent` |
+| Double-check your settings | `config` |
+| Back up now | `backup` |
+| Clear the cache | `cache-flush` |
+| Restart the site | `restart` |
+| Copy live to staging | `refresh-from-prod` |
+| Publish staging to live | `promote-files-to-prod` |
+| Restore a backup | `restore` |
+| Stop the site | `down` |
+
+Staging actions appear only when the selected site has staging configured. See [installer.md](installer.md).
+
+## Installer Retry Safety
+
+Two installer behaviors make repeated runs against the same host safe:
+
+- Env-file writes are idempotent. Re-running an install reconciles the env files instead of duplicating or corrupting keys.
+- Install secrets (DB and Redis passwords) are preserved on retry. Regenerating them would desync from the credentials already baked into the persisted Docker volumes, so existing secrets are read back and kept.

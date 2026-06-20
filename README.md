@@ -26,11 +26,15 @@
 
 If you are not technical, start with [docs/quick-start-for-site-owners.md](docs/quick-start-for-site-owners.md). It explains local use, VPS setup, staging, backups, and safe plugin/theme updates without Docker internals.
 
-For a new Ubuntu VPS, the guided installer is the intended path:
+For a new Ubuntu/Debian VPS, the guided installer is the intended path. It walks you through a new site and shows the exact plan before changing anything:
 
 ```sh
 curl -fsSL https://wp.vcode.sh/install.sh | sh
 ```
+
+See [Guided VPS Installer](#guided-vps-installer) below for what it does, the management dashboard, and headless flags.
+
+To run the stack directly on your own machine:
 
 ```sh
 make init
@@ -67,6 +71,8 @@ docs/                architecture, configuration, operations, research
 ```sh
 make ps
 make logs
+./bin/vibe local logs-recent
+./bin/vibe local backups
 make wp ARGS="plugin list"
 ./bin/wp user list
 make wp-info
@@ -106,9 +112,68 @@ See [docs/deployment.md](docs/deployment.md) and [docs/staging.md](docs/staging.
 
 ## Guided VPS Installer
 
-The public installer host is served from `wp.vcode.sh`. It downloads a versioned Linux installer binary, verifies SHA256, and then opens the guided terminal UI.
+For a fresh Ubuntu/Debian VPS, the guided installer is the intended path. The public installer host is served from `wp.vcode.sh`: the one-liner downloads a versioned Linux installer binary, verifies its SHA256, and opens a guided terminal UI (a Bun + React/OpenTUI app).
 
-Current installer version: `0.1.2`. It is usable for bootstrap verification, dry-run planning, and TUI review, but it is not yet the completed production installer. See [docs/installer.md](docs/installer.md) for current capabilities, production readiness gates, release workflow, and Dokploy deployment model.
+```sh
+curl -fsSL https://wp.vcode.sh/install.sh | sh
+```
+
+The installer never changes the server without first showing the exact plan for review (or you pass `--yes` for a headless run). What it does on a new site:
+
+- installs missing host packages (Docker, Caddy) unless you opt out
+- writes per-site env files with generated secrets and isolated ports, so several sites coexist on one host
+- brings the Docker stack up and runs the WordPress install
+- configures Caddy as the reverse proxy with automatic HTTPS (Let's Encrypt)
+- optionally sets up a staging site on a separate domain
+
+A site built this way has been validated live on a real VPS: HTTPS via Caddy + Let's Encrypt, WordPress 7.0, Redis Object Cache active, Nginx FastCGI cache reaching `HIT`, and multiple sites coexisting on one host.
+
+### Installer modes
+
+The installer opens with a menu of intents:
+
+- **Create a new WordPress** — production, optional staging, isolated ports, tuned env files. This is the fully working, VPS-validated path.
+- **Manage detected site** — opens a management dashboard for an already-installed site (see below).
+- **Remove detected site** — makes a safety backup, then stops containers without deleting data.
+- **Update existing checkout** — keeps the current directory and refreshes config.
+- **Create staging only** — attaches a staging site to an existing production site.
+
+Bring-your-own managed MariaDB/Redis is not offered in the installer menu. Advanced operators can run the root stack directly with `./bin/vibe external up`.
+
+### Management dashboard
+
+"Manage detected site" is a control panel that runs read-and-maintain operations against a detected site, each backed by a `bin/vibe` command and grouped from safest to most dangerous:
+
+- **Check on it** — check it's healthy (`smoke`), speed report (`perf-report`), what's running (`ps`), check the server (`doctor-runtime`), recent logs (`logs-recent`), double-check settings (`config`).
+- **Maintain** — back up now (`backup`), clear the cache (`cache-flush`), restart the site (`restart`).
+- **Staging** (shown when staging exists) — copy live to staging (`refresh-from-prod`), publish staging to live (`promote-files-to-prod`).
+- **Danger zone** — restore a backup (`restore`), stop the site (`down`).
+
+### Headless / non-interactive use
+
+The installer accepts flags for scripted runs. The main ones:
+
+```text
+--domain <host>          Production domain (derives slug, ports, staging, title)
+--admin-email <email>    WordPress admin email
+--mode <mode>            new-site | manage-existing | remove-existing |
+                         update-existing | staging-only
+--staging-domain <host>  Staging domain (enables staging)
+--no-www                 Do not add a www. alias or require its DNS
+--no-caddy               Do not manage Caddy
+--no-host-install        Do not install missing host packages
+--install-dir <path>     Install directory, default /opt/vibe-wp
+--repo <url> / --ref <r> Source repository and branch/tag
+--yes                    Run without the interactive review step
+--dry-run                Plan only, make no host changes
+--export-plan <file>     Write the computed install plan to a JSON file
+--headless <plan.json>   Execute a previously exported plan
+--headless-json          Read a plan from stdin
+--local                  Safe local sandbox for macOS/UI testing
+--compact / --ascii      Force compact UI / avoid Unicode characters
+```
+
+See [docs/installer.md](docs/installer.md) for current capabilities, release workflow, and deployment model.
 
 For local macOS UI/core testing without touching a VPS:
 

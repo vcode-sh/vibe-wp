@@ -45,8 +45,53 @@ Installer `0.1.2` includes:
 - masked secret fields for passwords and API keys
 - typed confirmation before execution
 - a real task runner wired to the interactive Execute screen
-- manage tasks for `ps`, production smoke, performance report, and optional staging smoke
+- a Manage dashboard wrapping the full `bin/vibe` operation set (health/smoke, performance, status, server checks, recent logs, config, backup, cache flush, restart, staging refresh/promote, restore, and stop)
 - safe-remove tasks that back up, stop containers, and disable the site's Caddy snippet without deleting files or Docker volumes
+- idempotent env-file writes so installs can be safely retried
+- preservation of existing install secrets (DB/Redis passwords) on retry, keeping them in sync with the persisted Docker volumes
+
+## Installer Modes
+
+The first screen offers these intents (the menu only shows manage/remove/update/staging-only when existing Vibe WP sites are detected):
+
+- **Create a new WordPress** (`new-site`) — full guided install: production, optional staging, isolated ports, and tuned env files. Fully working and validated on a disposable VPS.
+- **Manage detected site** (`manage-existing`) — a dashboard that runs status, health/smoke, performance, logs, backup, cache, restart, staging, restore, and stop actions against a detected site. See the dashboard mapping in [operations.md](operations.md).
+- **Remove detected site** (`remove-existing`) — creates a safety backup, stops containers, and disables the site's Caddy snippet without deleting files or Docker volumes.
+- **Update existing checkout** (`update-existing`) — fast-forwards the existing repository and rebuilds/restarts production in place, without touching data.
+- **Create staging only** (`staging-only`) — attaches an isolated staging environment to an existing production site.
+
+`external-services` (bring-your-own MariaDB/Redis) is intentionally not offered in the menu: choosing it would silently run the bundled-database install and mislead non-technical users. It still exists as a `--mode` value and `InstallMode`; advanced operators should instead run `bin/vibe external` against the root stack.
+
+## Headless And CLI Flags
+
+The installer accepts these arguments (see `installer/src/cli/args.ts`):
+
+Value flags:
+
+- `--domain <host>` — production domain (also derives the slug, ports, staging domain, and a guessed site title)
+- `--admin-email <email>` — WordPress admin email
+- `--staging-domain <host>` — staging domain (enables staging)
+- `--mode <mode>` — `new-site`, `manage-existing`, `remove-existing`, `update-existing`, `staging-only`, or `external-services`
+- `--install-dir <path>` — install directory, default `/opt/vibe-wp`
+- `--repo <url>` / `--ref <ref>` — Vibe WP git repository and branch/tag (default `main`)
+- `--export-plan <file>` — write the computed install plan to a JSON file and exit
+- `--headless <file>` — run from a prepared plan JSON file (pair with `--yes` to execute host changes)
+
+Boolean flags:
+
+- `--headless-json` — read the plan JSON from stdin instead of a file
+- `--dry-run` — plan without making host changes
+- `--yes` — confirm and execute host changes non-interactively
+- `--local` — use the safe macOS local sandbox (UI/UX and planner work only)
+- `--no-www` — do not add a `www.` alias or require its DNS
+- `--no-caddy` — do not manage Caddy
+- `--no-host-install` — do not install missing host packages
+- `--compact` — force the compact UI layout
+- `--ascii` — avoid Unicode UI characters (SSH/legacy terminals)
+- `--version` — print the installer version
+- `-h`, `--help` — print usage
+
+All host-changing actions stay behind the reviewed TUI flow or an explicit `--yes`.
 
 ## What The Installer Does Not Have Yet
 

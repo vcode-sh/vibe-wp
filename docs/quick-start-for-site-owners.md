@@ -68,15 +68,48 @@ make down
 
 Use this when the site should run on a VPS.
 
-Recommended guided path:
+### Before you start
+
+You need two things ready:
+
+1. A VPS you can log in to as `root` (a fresh Ubuntu or Debian server is ideal).
+2. A domain name whose DNS already points to your VPS IP address. Create an `A` record for your domain (for example `your-domain.com`) pointing at the server IP (for example `203.0.113.10`). HTTPS certificates can only be issued once DNS points at the server.
+
+If you also want a `www.your-domain.com` alias, point that at the same IP too.
+
+### Recommended guided path
+
+Log in to your VPS, then run:
 
 ```sh
 curl -fsSL https://wp.vcode.sh/install.sh | sh
 ```
 
-The installer asks questions, prepares the production configuration, can set up staging, and shows the exact actions before changing the server.
+This opens a guided terminal installer. It asks for your domain and admin email, lets you choose options (such as staging), and then shows you the exact list of actions before it touches the server. Nothing changes until you approve the plan.
 
-Manual path:
+When you choose to create a new site, the guided flow:
+
+- installs anything missing on the server (Docker, and Caddy for HTTPS)
+- creates the site's settings files with strong, generated passwords
+- starts the WordPress stack (web server, database, cache)
+- sets up HTTPS automatically with a free Let's Encrypt certificate
+- optionally creates a staging site on a separate domain
+- runs a quick health check at the end
+
+Several sites can live on one VPS side by side. The installer keeps their ports and folders separate.
+
+### Managing a site later
+
+Run the same command again and choose "Manage detected site". This opens a friendly dashboard for a site already installed on the server. From it you can:
+
+- check it's healthy, see a speed report, see what's running, check the server, view recent logs, and double-check settings
+- back up now, clear the cache, and restart the site
+- copy live to staging, and publish staging to live (when staging exists)
+- restore a backup, or stop the site (these are clearly marked in a danger zone)
+
+Each action explains what it does before it runs.
+
+### Manual path
 
 Generate production settings:
 
@@ -263,6 +296,18 @@ See logs:
 
 ```sh
 ./bin/vibe prod logs
+```
+
+See just the recent log lines (no live follow):
+
+```sh
+./bin/vibe prod logs-recent
+```
+
+List existing backups for a site:
+
+```sh
+./bin/vibe prod backups
 ```
 
 Flush caches:

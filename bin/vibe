@@ -14,11 +14,13 @@ Commands:
   restart [services...]      Restart services
   ps                         Show service status
   logs [args...]             Follow logs
+  logs-recent [args...]      Print recent logs without following (does not hang)
   install                    Install WordPress and Redis Object Cache
   wp <args...>               Run WP-CLI
   backup [args...]           Create a DB and wp-content backup
   backup-verify <backup> [args...] Verify a backup without restoring it
   restore <backup> [args...] Restore a backup
+  backups                    List available backups for this env (newest last)
   doctor-runtime             Run runtime checks
   perf-report                Print a read-only performance report
   smoke                      Run smoke tests

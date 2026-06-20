@@ -55,7 +55,13 @@ This runs:
 5. Cache flush.
 6. Staging smoke test.
 
-The URL migration uses WP-CLI search-replace with serialized-data-safe mode and skips the `guid` column.
+The URL migration uses WP-CLI search-replace with serialized-data-safe mode and skips the `guid` column. The production DB and uploads are copied into staging while staging keeps its own domain: production content appears in staging, but staging's `siteurl`/`home` stay on the staging domain. The script refuses to run if production and staging resolve to the same `WP_HOME`.
+
+This workflow was validated end to end on a disposable VPS on 2026-06-20. A production marker post appeared in staging after the refresh, while staging's URLs stayed on the staging domain.
+
+### DNS and TLS gotcha
+
+The data copy (steps 1–3) works regardless of DNS. The post-refresh smoke test (step 6) curls the staging `WP_HOME`, so the staging subdomain needs its own public DNS record and a valid certificate for the refresh to finish without a smoke-test failure. If you only need the data copied and the staging domain is not yet resolvable, expect the final smoke step to fail even though the refresh itself succeeded.
 
 ## Staging Safeguards
 
@@ -95,7 +101,9 @@ This copies only managed code surfaces:
 - `wp-content/themes`
 - `wp-content/mu-plugins`
 
-It does not copy the database, uploads, or cache. After confirmation, the command creates and verifies a production backup before replacing files, then restarts PHP-FPM/Nginx, flushes caches, and runs the production smoke test. The preflight refuses to continue if staging and production resolve to the same `WP_HOME` or `COMPOSE_PROJECT_NAME`.
+It does not copy the database, uploads, or cache. After confirmation, the command creates and verifies a production backup (labelled `pre-stage-file-promote`) before replacing files, then restarts PHP-FPM/Nginx, flushes caches, and runs the production smoke test. The preflight refuses to continue if staging and production resolve to the same `WP_HOME` or `COMPOSE_PROJECT_NAME`.
+
+This workflow was validated end to end on a disposable VPS on 2026-06-20. The pre-promotion production backup was created and verified first, a marker file from staging landed in production, and production stayed up throughout.
 
 ## Database Promotion
 
