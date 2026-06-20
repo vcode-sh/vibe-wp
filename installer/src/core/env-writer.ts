@@ -7,7 +7,7 @@ const envPlainValuePattern = /^[A-Za-z0-9_./:@-]+$/;
 const lineBreakPattern = /\r?\n/;
 const trailingLineBreakPattern = /\n*$/;
 
-const saltKeys = [
+export const saltKeys = [
   "WORDPRESS_AUTH_KEY",
   "WORDPRESS_SECURE_AUTH_KEY",
   "WORDPRESS_LOGGED_IN_KEY",

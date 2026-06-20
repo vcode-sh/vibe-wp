@@ -1,6 +1,7 @@
 import { renderCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
+import { buildExternalTasks } from "./external-plan";
 import {
   buildEnvFiles,
   buildManageTasks,
@@ -64,8 +65,9 @@ function buildTasks(state: InstallerState): InstallTask[] {
   if (state.mode === "update-existing") {
     return buildUpdateTasks(state);
   }
-  // external-services intentionally falls through to the full install flow for now,
-  // pending a dedicated bring-your-own-services plan.
+  if (state.mode === "external-services") {
+    return buildExternalTasks(state);
+  }
 
   const tasks: InstallTask[] = [];
   const sudo = state.host.sudo ? "sudo " : "";

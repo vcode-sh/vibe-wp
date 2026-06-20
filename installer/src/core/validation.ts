@@ -66,7 +66,39 @@ export function validateState(state: InstallerState): string[] {
     return validateExistingMode(state);
   }
 
+  if (state.mode === "external-services") {
+    return [
+      ...validateSiteIdentity(state),
+      ...validatePorts(state),
+      ...validateExternalServices(state)
+    ];
+  }
+
   return [...validateSiteIdentity(state), ...validatePorts(state)];
+}
+
+function validateExternalServices(state: InstallerState): string[] {
+  const errors: string[] = [];
+  if (!state.extDbHost.trim()) {
+    errors.push("External database host is required, for example db.example.com:3306.");
+  }
+  if (!state.extDbName.trim()) {
+    errors.push("External database name is required.");
+  }
+  if (!state.extDbUser.trim()) {
+    errors.push("External database user is required.");
+  }
+  if (state.extDbPassword.length < 1) {
+    errors.push("External database password is required.");
+  }
+  if (!state.extRedisHost.trim()) {
+    errors.push("External Redis host is required.");
+  }
+  const redisPort = Number(state.extRedisPort);
+  if (!Number.isInteger(redisPort) || redisPort < 1 || redisPort > 65_535) {
+    errors.push("External Redis port must be between 1 and 65535.");
+  }
+  return errors;
 }
 
 function validateExistingMode(state: InstallerState): string[] {

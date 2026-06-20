@@ -16,6 +16,8 @@ const STEP_KIND: Record<StepId, StepKind> = {
   ai: "fields",
   backup: "choice",
   staging: "mixed",
+  "external-db": "fields",
+  "external-redis": "fields",
   review: "action",
   execute: "fields",
   success: "done"

@@ -35,8 +35,29 @@ const QUICK_NEW_SITE: StepId[] = [
   "success"
 ];
 
+// Bring-your-own MariaDB/Redis: same build flow as new-site but with the two
+// connection screens after Domain, and no bundled staging step.
+const EXTERNAL: StepId[] = [
+  "welcome",
+  "sites",
+  "system",
+  "domain",
+  "external-db",
+  "external-redis",
+  "admin",
+  "performance",
+  "backup",
+  "ai",
+  "mode",
+  "review",
+  "execute",
+  "success"
+];
+
 function visibleStepIds(mode: InstallMode, quickInstall: boolean): StepId[] {
   switch (mode) {
+    case "external-services":
+      return EXTERNAL;
     case "manage-existing":
       return ["welcome", "sites", "dashboard"];
     case "remove-existing":
@@ -46,8 +67,7 @@ function visibleStepIds(mode: InstallMode, quickInstall: boolean): StepId[] {
     case "staging-only":
       return ["welcome", "sites", "system", "domain", "staging", "review", "execute", "success"];
     default:
-      // new-site and external-services need the full build flow, unless the user
-      // picked the quick new-site path.
+      // new-site needs the full build flow, unless the user picked quick install.
       if (mode === "new-site" && quickInstall) {
         return QUICK_NEW_SITE;
       }

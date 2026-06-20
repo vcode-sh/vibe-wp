@@ -73,3 +73,10 @@ test("install flows start at welcome and end at success", () => {
     expect(ids.at(-1)).toBe("success");
   }
 });
+
+test("external-services reveals the connection screens and omits staging", () => {
+  const ids = visibleSteps("external-services", false).map((step) => step.id);
+  expect(ids).toContain("external-db");
+  expect(ids).toContain("external-redis");
+  expect(ids).not.toContain("staging");
+});

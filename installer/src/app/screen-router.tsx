@@ -7,6 +7,7 @@ import {
 import { DashboardScreen } from "../screens/dashboard-screen";
 import { DomainScreen } from "../screens/domain-screen";
 import { ExecuteScreen } from "../screens/execute-screen";
+import { ExternalDbScreen, ExternalRedisScreen } from "../screens/external-screens";
 import { ReviewScreen, SuccessScreen } from "../screens/review-screens";
 import { AdminScreen, ModeScreen, SystemScreen } from "../screens/setup-screens";
 import { SitesScreen } from "../screens/site-screens";
@@ -37,6 +38,10 @@ export function renderScreen(props: ScreenProps) {
       return <BackupScreen {...props} />;
     case "staging":
       return <StagingScreen {...props} />;
+    case "external-db":
+      return <ExternalDbScreen {...props} />;
+    case "external-redis":
+      return <ExternalRedisScreen {...props} />;
     case "review":
       return <ReviewScreen {...props} />;
     case "execute":

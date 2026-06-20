@@ -1,5 +1,6 @@
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { productionEnvValues, stagingEnvValues } from "./env-writer";
+import { externalEnvValues } from "./external-plan";
 import { shellQuote } from "./shell";
 import type { EnvFilePlan, InstallerState, InstallMode, InstallTask } from "./types";
 
@@ -15,6 +16,10 @@ export function skipCaddyForMode(mode: InstallMode): boolean {
 
 export function buildEnvFiles(state: InstallerState): EnvFilePlan[] {
   const dir = state.selectedSiteDir || state.installDir;
+  if (state.mode === "external-services") {
+    // Bring-your-own MariaDB/Redis: only the external env file is emitted.
+    return [{ path: `${state.installDir}/env/external.env`, values: externalEnvValues(state) }];
+  }
   if (state.mode === "staging-only") {
     // Staging-only attaches to a live prod site: emit only the stage env file.
     return [{ path: `${dir}/env/stage.env`, values: stagingEnvValues(state) }];

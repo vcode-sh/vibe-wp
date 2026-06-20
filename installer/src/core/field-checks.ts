@@ -23,6 +23,31 @@ export function checkDomain(value: string): FieldFeedback | undefined {
   return { tone: "ok", text: "Looks good. Point this domain's DNS at this server before install." };
 }
 
+const HOSTPORT_PATTERN = /^[a-z0-9.-]+(:\d{1,5})?$/i;
+const HOST_PATTERN = /^[a-z0-9.-]+$/i;
+
+export function checkExtDbHost(value: string): FieldFeedback | undefined {
+  const v = value.trim();
+  if (!v) {
+    return;
+  }
+  if (!HOSTPORT_PATTERN.test(v)) {
+    return { tone: "error", text: "Use host or host:port, like db.example.com:3306." };
+  }
+  return { tone: "ok", text: "WordPress will connect to this MariaDB/MySQL server." };
+}
+
+export function checkExtHost(value: string): FieldFeedback | undefined {
+  const v = value.trim();
+  if (!v) {
+    return;
+  }
+  if (!HOST_PATTERN.test(v)) {
+    return { tone: "error", text: "Enter a hostname or IP, like redis.example.com." };
+  }
+  return { tone: "ok", text: "WordPress object cache will use this Redis server." };
+}
+
 export function checkEmail(value: string): FieldFeedback | undefined {
   const v = value.trim().toLowerCase();
   if (!v) {

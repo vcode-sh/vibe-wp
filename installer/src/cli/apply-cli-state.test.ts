@@ -75,6 +75,26 @@ describe("applyCliState", () => {
     expect(state.installDir).not.toBe("/opt/vibe-wp");
   });
 
+  test("external-services flags populate the connection profile and disable staging", () => {
+    const state = applyCliState(
+      defaultState(),
+      options({
+        mode: "external-services",
+        domain: "ext.example.net",
+        extDbHost: "db.host:3306",
+        extDbPassword: "dbpw",
+        extRedisHost: "redis.host",
+        extRedisPassword: "redispw"
+      })
+    );
+    expect(state.mode).toBe("external-services");
+    expect(state.extDbHost).toBe("db.host:3306");
+    expect(state.extDbPassword).toBe("dbpw");
+    expect(state.extRedisHost).toBe("redis.host");
+    expect(state.extRedisPassword).toBe("redispw");
+    expect(state.stagingEnabled).toBe(false);
+  });
+
   test("leaves state untouched when flags are absent", () => {
     const base = defaultState();
     const before = base.productionDomain;

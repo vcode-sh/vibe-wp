@@ -16,10 +16,14 @@ const DEFAULT_TITLES = new Set(["", "Vibe WP", "My Site"]);
 export function applyCliState(state: InstallerState, options: InstallerOptions): InstallerState {
   if (options.mode) {
     state.mode = options.mode;
-    // An explicit "new site" must not inherit a site auto-selected from host
+    // A fresh-install mode must not inherit a site auto-selected from host
     // detection, or its install dir would target the existing site and clobber it.
-    if (options.mode === "new-site") {
+    if (options.mode === "new-site" || options.mode === "external-services") {
       state.selectedSiteDir = "";
+    }
+    // External mode has no bundled staging path.
+    if (options.mode === "external-services") {
+      state.stagingEnabled = false;
     }
   }
 
@@ -36,7 +40,33 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
     state.adminEmail = options.adminEmail;
   }
 
+  applyExternalServices(state, options);
+
   return state;
+}
+
+function applyExternalServices(state: InstallerState, options: InstallerOptions): void {
+  if (options.extDbHost) {
+    state.extDbHost = options.extDbHost;
+  }
+  if (options.extDbName) {
+    state.extDbName = options.extDbName;
+  }
+  if (options.extDbUser) {
+    state.extDbUser = options.extDbUser;
+  }
+  if (options.extDbPassword) {
+    state.extDbPassword = options.extDbPassword;
+  }
+  if (options.extRedisHost) {
+    state.extRedisHost = options.extRedisHost;
+  }
+  if (options.extRedisPort) {
+    state.extRedisPort = options.extRedisPort;
+  }
+  if (options.extRedisPassword) {
+    state.extRedisPassword = options.extRedisPassword;
+  }
 }
 
 function applyDomain(state: InstallerState, domain: string, deriveStaging: boolean): void {

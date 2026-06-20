@@ -6,6 +6,8 @@ export type StepId =
   | "dashboard"
   | "system"
   | "domain"
+  | "external-db"
+  | "external-redis"
   | "mode"
   | "admin"
   | "performance"
@@ -65,6 +67,18 @@ export const steps: Step[] = [
     focusCount: 3,
     title: "Staging",
     help: "Creates a safe private test copy with noindex and mail safeguards."
+  },
+  {
+    id: "external-db",
+    focusCount: 6,
+    title: "Database",
+    help: "Connection details for your external MariaDB or MySQL server."
+  },
+  {
+    id: "external-redis",
+    focusCount: 5,
+    title: "Redis",
+    help: "Connection details for your external Redis server."
   },
   {
     id: "performance",
@@ -135,10 +149,12 @@ export const modeOptions: Array<{ name: string; description: string; value: Inst
     name: "Create staging only",
     description: "Attach staging to an existing production site.",
     value: "staging-only"
+  },
+  {
+    name: "Use external database and Redis",
+    description: "Bring your own MariaDB and Redis — only WordPress and Nginx run in Docker.",
+    value: "external-services"
   }
-  // External MariaDB/Redis (bring-your-own services) is not offered here: it
-  // would silently run the bundled-DB install, which misleads non-technical
-  // users. Advanced operators can use `bin/vibe external` against the root stack.
 ];
 
 export const performanceOptions: Array<{

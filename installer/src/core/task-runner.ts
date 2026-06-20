@@ -1,4 +1,5 @@
 import { SECRET_ENV_KEYS, writeEnvFile } from "./env-writer";
+import { EXTERNAL_PRESERVE_KEYS } from "./external-plan";
 import { redact } from "./redaction";
 import type { InstallPlan, InstallTask } from "./types";
 
@@ -114,6 +115,27 @@ export async function runPlan(
   return results;
 }
 
+// env special-writes: which file each env task owns and which secrets are
+// write-once. External DB/Redis creds are user-provided, so only salts preserve.
+const ENV_WRITE_SPECS: Record<string, { suffix: string; preserve: ReadonlySet<string> }> = {
+  "env-prod": { suffix: "/env/prod.env", preserve: SECRET_ENV_KEYS },
+  "env-stage": { suffix: "/env/stage.env", preserve: SECRET_ENV_KEYS },
+  "env-external": { suffix: "/env/external.env", preserve: EXTERNAL_PRESERVE_KEYS }
+};
+
+async function runEnvWrite(taskId: string, plan: InstallPlan): Promise<TaskResult | null> {
+  const spec = ENV_WRITE_SPECS[taskId];
+  if (!spec) {
+    return null;
+  }
+  const env = plan.envFiles.find((file) => file.path.endsWith(spec.suffix));
+  if (!env) {
+    return null;
+  }
+  await writeEnvFile(env.path, env.values, { preserveExisting: spec.preserve });
+  return { id: taskId, status: "done", output: `Updated ${env.path}.`, code: 0 };
+}
+
 async function runSpecialWrite(
   task: InstallTask,
   apply: boolean,
@@ -125,19 +147,10 @@ async function runSpecialWrite(
   }
 
   try {
-    if (phase === "after" && task.id === "env-prod") {
-      const env = plan.envFiles.find((file) => file.path.endsWith("/env/prod.env"));
-      if (env) {
-        await writeEnvFile(env.path, env.values, { preserveExisting: SECRET_ENV_KEYS });
-        return { id: task.id, status: "done", output: `Updated ${env.path}.`, code: 0 };
-      }
-    }
-
-    if (phase === "after" && task.id === "env-stage") {
-      const env = plan.envFiles.find((file) => file.path.endsWith("/env/stage.env"));
-      if (env) {
-        await writeEnvFile(env.path, env.values, { preserveExisting: SECRET_ENV_KEYS });
-        return { id: task.id, status: "done", output: `Updated ${env.path}.`, code: 0 };
+    if (phase === "after") {
+      const envWrite = await runEnvWrite(task.id, plan);
+      if (envWrite) {
+        return envWrite;
       }
     }
 

@@ -39,7 +39,9 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
   const sites = state.host.existingSites;
   const hasSites = sites.length > 0;
   // Hide existing-site intents when nothing is installed yet.
-  const intents = modeOptions.filter((option) => hasSites || option.value === "new-site");
+  const intents = modeOptions.filter(
+    (option) => hasSites || option.value === "new-site" || option.value === "external-services"
+  );
   const needsSite = SITE_MODES.has(state.mode) && hasSites;
   const isNewSite = state.mode === "new-site";
 

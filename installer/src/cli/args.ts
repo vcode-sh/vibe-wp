@@ -27,6 +27,13 @@ type StringOption =
   | "adminEmail"
   | "domain"
   | "exportPlan"
+  | "extDbHost"
+  | "extDbName"
+  | "extDbPassword"
+  | "extDbUser"
+  | "extRedisHost"
+  | "extRedisPassword"
+  | "extRedisPort"
   | "headlessPlan"
   | "installDir"
   | "ref"
@@ -52,6 +59,13 @@ const stringFlags = new Map<string, StringOption>([
   ["--admin-email", "adminEmail"],
   ["--domain", "domain"],
   ["--export-plan", "exportPlan"],
+  ["--ext-db-host", "extDbHost"],
+  ["--ext-db-name", "extDbName"],
+  ["--ext-db-password", "extDbPassword"],
+  ["--ext-db-user", "extDbUser"],
+  ["--ext-redis-host", "extRedisHost"],
+  ["--ext-redis-password", "extRedisPassword"],
+  ["--ext-redis-port", "extRedisPort"],
   ["--headless", "headlessPlan"],
   ["--install-dir", "installDir"],
   ["--ref", "ref"],
