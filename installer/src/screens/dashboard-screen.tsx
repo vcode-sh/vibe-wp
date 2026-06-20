@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
+import { useGlyphs } from "../components/glyph-context";
 import { groupedOperations, type ManageOperation } from "../core/manage-operations";
 import {
   buildBackupsListTask,
@@ -26,6 +27,7 @@ interface RestoreState {
 }
 
 export function DashboardScreen({ state, plan }: ScreenProps) {
+  const glyphs = useGlyphs();
   const groups = useMemo(() => groupedOperations(state.stagingEnabled), [state.stagingEnabled]);
   const ops = useMemo(() => groups.flatMap((group) => group.operations), [groups]);
   const [selected, setSelected] = useState(0);
@@ -110,13 +112,18 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
   });
 
   const site = state.productionDomain || state.selectedSiteDir || "selected site";
+  const detected = state.host.existingSites.find((s) => s.installDir === state.selectedSiteDir);
+  const running = detected?.running ?? true;
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <box flexDirection="row" gap={space.md}>
-        <text fg={color("muted")}>Managing</text>
+      <box alignItems="center" flexDirection="row" gap={space.md}>
+        <text fg={color(running ? "success" : "warning")}>
+          {running ? glyphs.ok : glyphs.warn} {running ? "running" : "stopped"}
+        </text>
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
           {site}
         </text>
+        {state.stagingEnabled && <text fg={color("muted")}>· staging</text>}
       </box>
       <StatusCards health={health} state={state} />
       {restore ? (
