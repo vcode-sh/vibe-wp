@@ -1,0 +1,333 @@
+#!/usr/bin/env sh
+set -eu
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+# bin/harden — host-level baseline hardening for an Ubuntu VPS running the
+# vibe-wp Docker stack. POSIX sh (dash) only, no bashisms. Idempotent: safe to
+# run repeatedly; each step detects already-applied state and skips.
+#
+# This is a HOST-level script (not per-site). It does not use VIBE_ENV.
+
+# --- options -----------------------------------------------------------------
+SSH_KEY_ONLY=0
+DRY_RUN=0
+
+# --- privilege ---------------------------------------------------------------
+if [ "$(id -u)" = 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+# --- summary counters --------------------------------------------------------
+APPLIED=0
+SKIPPED=0
+WARNINGS=0
+
+ok() {
+  APPLIED=$((APPLIED + 1))
+  printf 'ok:   %s\n' "$1"
+}
+
+skip() {
+  SKIPPED=$((SKIPPED + 1))
+  printf 'skip: %s\n' "$1"
+}
+
+warn() {
+  WARNINGS=$((WARNINGS + 1))
+  printf 'warn: %s\n' "$1" >&2
+}
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/harden [--ssh-key-only] [--dry-run] [-h|--help]
+
+Applies baseline host hardening for an Ubuntu VPS running the vibe-wp stack.
+Idempotent: safe to run multiple times; already-applied steps are skipped.
+
+Steps (always run):
+  1. Firewall (ufw): default deny incoming / allow outgoing, allow SSH (OpenSSH
+     or port 22) BEFORE enabling so you are never locked out, allow 80/tcp and
+     443/tcp, then enable ufw.
+  2. fail2ban: install, enable + start, write a minimal sshd jail to
+     /etc/fail2ban/jail.d/vibe-wp.local, and reload.
+  3. Automatic security updates: install unattended-upgrades, write
+     /etc/apt/apt.conf.d/20auto-upgrades, enable + start the service.
+  4. Kernel/network sysctl basics: write /etc/sysctl.d/99-vibe-wp.conf
+     (rp_filter, tcp_syncookies) and apply.
+
+Flags:
+  --ssh-key-only   DANGEROUS. Also harden SSH: disable password auth and set
+                   PermitRootLogin prohibit-password via a drop-in at
+                   /etc/ssh/sshd_config.d/99-vibe-wp.conf, then reload sshd.
+                   OFF BY DEFAULT. Key-based SSH MUST already work or you can
+                   lock yourself out. Off by default for exactly this reason.
+  --dry-run        Print what WOULD be done without changing anything.
+  -h, --help       Show this help.
+
+Never disables SSH access by default. Never blocks ports 80/443/22.
+USAGE
+}
+
+# --- arg parsing -------------------------------------------------------------
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --ssh-key-only)
+      SSH_KEY_ONLY=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+# --- helpers -----------------------------------------------------------------
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Run a privileged command, or describe it when --dry-run is set.
+run() {
+  if [ "${DRY_RUN}" = 1 ]; then
+    printf 'dry-run: would run: %s\n' "$*"
+    return 0
+  fi
+  # shellcheck disable=SC2086
+  ${SUDO} "$@"
+}
+
+# Write content to a privileged file path (root-owned). Honors --dry-run.
+write_file() {
+  _wf_path="$1"
+  _wf_content="$2"
+  if [ "${DRY_RUN}" = 1 ]; then
+    printf 'dry-run: would write: %s\n' "${_wf_path}"
+    return 0
+  fi
+  printf '%s' "${_wf_content}" | ${SUDO} tee "${_wf_path}" >/dev/null
+}
+
+APT_UPDATED=0
+
+apt_install() {
+  # Ensure a package is installed; refresh the index once per run.
+  _pkg="$1"
+  if [ "${DRY_RUN}" = 1 ]; then
+    printf 'dry-run: would install package: %s\n' "${_pkg}"
+    return 0
+  fi
+  if [ "${APT_UPDATED}" = 0 ]; then
+    DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get update -y >/dev/null 2>&1 || \
+      warn "apt-get update failed; continuing with cached index"
+    APT_UPDATED=1
+  fi
+  # shellcheck disable=SC2086
+  DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y "${_pkg}" >/dev/null 2>&1
+}
+
+# Whether a systemd unit exists on this host.
+unit_exists() {
+  systemctl list-unit-files "$1" >/dev/null 2>&1 && \
+    systemctl list-unit-files "$1" 2>/dev/null | grep -q "^$1"
+}
+
+if ! has_cmd apt-get; then
+  warn "apt-get not found — this script targets Debian/Ubuntu. Aborting."
+  exit 1
+fi
+
+echo "=== vibe-wp host hardening ==="
+if [ "${DRY_RUN}" = 1 ]; then
+  echo "(dry-run: no changes will be made)"
+fi
+echo
+
+# --- 1. Firewall (ufw) -------------------------------------------------------
+echo "[1/4] Firewall (ufw)"
+if ! has_cmd ufw; then
+  apt_install ufw || warn "failed to install ufw"
+fi
+
+if has_cmd ufw || [ "${DRY_RUN}" = 1 ]; then
+  ufw_active=0
+  if has_cmd ufw && ${SUDO} ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw_active=1
+  fi
+
+  # Default policies (idempotent — ufw simply restates them).
+  run ufw default deny incoming && ok "ufw default deny incoming" || \
+    warn "ufw default deny incoming failed"
+  run ufw default allow outgoing && ok "ufw default allow outgoing" || \
+    warn "ufw default allow outgoing failed"
+
+  # CRITICAL: allow SSH BEFORE enabling so we never lock ourselves out.
+  # Prefer the named OpenSSH profile; fall back to port 22.
+  if has_cmd ufw && ${SUDO} ufw app list 2>/dev/null | grep -q "OpenSSH"; then
+    run ufw allow OpenSSH && ok "ufw allow OpenSSH" || warn "ufw allow OpenSSH failed"
+  else
+    run ufw allow 22/tcp && ok "ufw allow 22/tcp (SSH)" || warn "ufw allow 22/tcp failed"
+  fi
+
+  # HTTP/HTTPS for the web tier.
+  run ufw allow 80/tcp && ok "ufw allow 80/tcp" || warn "ufw allow 80/tcp failed"
+  run ufw allow 443/tcp && ok "ufw allow 443/tcp" || warn "ufw allow 443/tcp failed"
+
+  if [ "${ufw_active}" = 1 ]; then
+    skip "ufw already active"
+  else
+    run ufw --force enable && ok "ufw enabled" || warn "ufw enable failed"
+  fi
+else
+  warn "ufw unavailable; skipping firewall step"
+fi
+echo
+
+# --- 2. fail2ban -------------------------------------------------------------
+echo "[2/4] fail2ban"
+if ! has_cmd fail2ban-server && ! has_cmd fail2ban-client; then
+  apt_install fail2ban || warn "failed to install fail2ban"
+fi
+
+if has_cmd fail2ban-client || has_cmd fail2ban-server || [ "${DRY_RUN}" = 1 ]; then
+  jail_file="/etc/fail2ban/jail.d/vibe-wp.local"
+  if [ -f "${jail_file}" ]; then
+    skip "fail2ban jail already present (${jail_file})"
+  else
+    write_file "${jail_file}" '# Managed by vibe-wp bin/harden. Minimal sshd jail.
+[sshd]
+enabled = true
+'
+    ok "wrote fail2ban sshd jail (${jail_file})"
+    run systemctl reload fail2ban || run systemctl restart fail2ban || \
+      warn "fail2ban reload/restart failed"
+  fi
+
+  if [ "${DRY_RUN}" = 1 ]; then
+    printf 'dry-run: would enable + start fail2ban\n'
+  elif systemctl is-enabled fail2ban >/dev/null 2>&1 && \
+       systemctl is-active fail2ban >/dev/null 2>&1; then
+    skip "fail2ban already enabled and running"
+  else
+    run systemctl enable --now fail2ban && ok "fail2ban enabled and started" || \
+      warn "could not enable/start fail2ban"
+  fi
+else
+  warn "fail2ban unavailable; skipping"
+fi
+echo
+
+# --- 3. Automatic security updates ------------------------------------------
+echo "[3/4] Automatic security updates (unattended-upgrades)"
+if ! has_cmd unattended-upgrade && \
+   ! { [ -x /usr/bin/unattended-upgrade ] || [ -x /usr/sbin/unattended-upgrade ]; }; then
+  apt_install unattended-upgrades || warn "failed to install unattended-upgrades"
+fi
+
+auto_file="/etc/apt/apt.conf.d/20auto-upgrades"
+if [ -f "${auto_file}" ] && \
+   grep -q 'APT::Periodic::Unattended-Upgrade "1"' "${auto_file}" 2>/dev/null; then
+  skip "unattended-upgrades periodic config already present (${auto_file})"
+else
+  write_file "${auto_file}" 'APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+'
+  ok "wrote ${auto_file}"
+fi
+
+# The systemd unit name varies; guard accordingly.
+if [ "${DRY_RUN}" = 1 ]; then
+  printf 'dry-run: would enable + start unattended-upgrades\n'
+elif unit_exists "unattended-upgrades.service"; then
+  if systemctl is-enabled unattended-upgrades >/dev/null 2>&1 && \
+     systemctl is-active unattended-upgrades >/dev/null 2>&1; then
+    skip "unattended-upgrades already enabled and running"
+  else
+    run systemctl enable --now unattended-upgrades && \
+      ok "unattended-upgrades enabled and started" || \
+      warn "could not enable/start unattended-upgrades"
+  fi
+else
+  # Periodic config above drives apt's own timers; service unit not required.
+  skip "unattended-upgrades.service not present (apt periodic timers handle it)"
+fi
+echo
+
+# --- 4. Kernel/network sysctl basics ----------------------------------------
+echo "[4/4] Kernel/network sysctl basics"
+sysctl_file="/etc/sysctl.d/99-vibe-wp.conf"
+if [ -f "${sysctl_file}" ]; then
+  skip "sysctl hardening already present (${sysctl_file})"
+else
+  write_file "${sysctl_file}" '# Managed by vibe-wp bin/harden. Conservative, low-risk defaults.
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.tcp_syncookies = 1
+'
+  ok "wrote ${sysctl_file}"
+  if [ "${DRY_RUN}" = 1 ]; then
+    printf 'dry-run: would run: sysctl --system\n'
+  else
+    run sysctl --system >/dev/null 2>&1 && ok "applied sysctl settings" || \
+      warn "sysctl --system failed"
+  fi
+fi
+echo
+
+# --- optional: SSH key-only hardening ---------------------------------------
+if [ "${SSH_KEY_ONLY}" = 1 ]; then
+  echo "[opt] SSH key-only hardening"
+  echo "!!  WARNING: disabling password authentication for SSH." >&2
+  echo "!!  Key-based SSH MUST already work for your user/root, or you" >&2
+  echo "!!  WILL be locked out of this server. No way to recover remotely." >&2
+  ssh_drop="/etc/ssh/sshd_config.d/99-vibe-wp.conf"
+  if [ -f "${ssh_drop}" ] && \
+     grep -q '^PasswordAuthentication no' "${ssh_drop}" 2>/dev/null; then
+    skip "SSH key-only drop-in already present (${ssh_drop})"
+  else
+    run mkdir -p /etc/ssh/sshd_config.d || warn "could not create sshd_config.d"
+    write_file "${ssh_drop}" '# Managed by vibe-wp bin/harden --ssh-key-only.
+PasswordAuthentication no
+PermitRootLogin prohibit-password
+'
+    ok "wrote SSH key-only drop-in (${ssh_drop})"
+    # Validate config before reloading so a syntax error cannot break sshd.
+    if [ "${DRY_RUN}" = 1 ]; then
+      printf 'dry-run: would validate sshd config and reload sshd\n'
+    elif ${SUDO} sshd -t >/dev/null 2>&1; then
+      run systemctl reload ssh 2>/dev/null || run systemctl reload sshd 2>/dev/null || \
+        warn "could not reload sshd; changes apply on next restart"
+      ok "sshd reloaded with key-only policy"
+    else
+      warn "sshd config validation failed; NOT reloading. Review ${ssh_drop}"
+    fi
+  fi
+  echo
+else
+  echo "[opt] SSH key-only hardening: not requested (--ssh-key-only to enable)"
+  echo
+fi
+
+# --- summary -----------------------------------------------------------------
+echo "=== summary ==="
+printf 'applied:  %s\n' "${APPLIED}"
+printf 'skipped:  %s\n' "${SKIPPED}"
+printf 'warnings: %s\n' "${WARNINGS}"
+if [ "${DRY_RUN}" = 1 ]; then
+  echo "(dry-run: nothing was changed)"
+fi
+
+exit 0

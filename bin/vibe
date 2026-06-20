@@ -21,6 +21,8 @@ Commands:
   backup-verify <backup> [args...] Verify a backup without restoring it
   restore <backup> [args...] Restore a backup
   backups                    List available backups for this env (newest last)
+  monitor [--quiet]          Run health checks (uptime, disk, TLS, backups, containers) and alert
+  harden [--dry-run] [--ssh-key-only]  Apply host hardening (firewall, fail2ban, auto-updates)
   doctor-runtime             Run runtime checks
   perf-report                Print a read-only performance report
   smoke                      Run smoke tests
@@ -108,6 +110,12 @@ case "${command}" in
     ;;
   smoke)
     "${VIBE_BIN_DIR}/smoke" "$@"
+    ;;
+  monitor)
+    "${VIBE_BIN_DIR}/monitor" "$@"
+    ;;
+  harden)
+    "${VIBE_BIN_DIR}/harden" "$@"
     ;;
   cache-flush)
     vibe_wp cache flush >/dev/null || true

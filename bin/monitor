@@ -1,0 +1,103 @@
+#!/usr/bin/env sh
+set -eu
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/backup.sh"
+. "${VIBE_BIN_DIR}/lib/monitor.sh"
+
+monitor_quiet=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --quiet)
+      monitor_quiet=1
+      shift
+      ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage:
+  ./bin/monitor [--quiet]
+
+Runs health checks against the running stack for the selected VIBE_ENV and
+reports each as ok:/warn:/fail:. Exits non-zero when any check fails (so a
+systemd service marks the unit failed); exits 0 when only warnings occur.
+
+Checks:
+  1. HTTP uptime      - WP_HOME answers with an HTTP status < 400
+  2. Disk space       - backup-root filesystem and / have headroom
+  3. TLS certificate  - production domain certificate is not near expiry
+  4. Backup freshness - a recent backup directory exists
+  5. Container health - expected services (wordpress, nginx, db, redis) run
+
+Alerts (sent on failure, or on warning when VIBE_MONITOR_ALERT_ON_WARN=1):
+  Telegram  - VIBE_MONITOR_TELEGRAM_TOKEN + VIBE_MONITOR_TELEGRAM_CHAT_ID
+  Webhook   - VIBE_MONITOR_WEBHOOK_URL (POSTs JSON)
+  Email     - VIBE_MONITOR_EMAIL_TO (uses `mail` when present)
+
+Configuration (read from the env file via the env keys):
+  VIBE_MONITOR_DISK_WARN_PCT        warn threshold, %% used (default 85; fail >= 95)
+  VIBE_MONITOR_CERT_WARN_DAYS       warn when cert expires within N days (default 14)
+  VIBE_MONITOR_BACKUP_MAX_AGE_HOURS warn when newest backup older (default 26)
+  VIBE_MONITOR_ALERT_ON_WARN        set to 1 to alert on warnings too
+  VIBE_MONITOR_TELEGRAM_TOKEN       Telegram bot token (never printed)
+  VIBE_MONITOR_TELEGRAM_CHAT_ID     Telegram chat id
+  VIBE_MONITOR_WEBHOOK_URL          generic JSON webhook URL
+  VIBE_MONITOR_EMAIL_TO             alert recipient address
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+vibe_require_env_file
+
+# Run the checks. Each updates monitor_warnings/monitor_failures/monitor_report.
+monitor_check_http
+monitor_check_disk
+monitor_check_tls
+monitor_check_backup
+monitor_check_containers
+
+site="$(vibe_wp_home)"
+[ -n "${site}" ] || site="(unknown)"
+
+if [ "${monitor_failures}" -gt 0 ]; then
+  status="fail"
+elif [ "${monitor_warnings}" -gt 0 ]; then
+  status="warn"
+else
+  status="ok"
+fi
+
+summary="monitor[${VIBE_ENV}] ${status}: ${monitor_failures} failure(s), ${monitor_warnings} warning(s) for ${site}"
+printf '%s\n' "${summary}"
+
+# Decide whether to alert.
+alert_on_warn="$(vibe_env_value VIBE_MONITOR_ALERT_ON_WARN)"
+should_alert=0
+if [ "${monitor_failures}" -gt 0 ]; then
+  should_alert=1
+elif [ "${monitor_warnings}" -gt 0 ] && [ "${alert_on_warn}" = "1" ]; then
+  should_alert=1
+fi
+
+if [ "${should_alert}" = "1" ]; then
+  # Compose the plain-text report: a heading plus each failed/warning line.
+  report_body="$(printf 'vibe-wp monitor alert\nenvironment: %s\nsite: %s\nstatus: %s\n\n%b' \
+    "${VIBE_ENV}" "${site}" "${status}" "${monitor_report}")"
+  subject="[vibe-wp] ${VIBE_ENV} monitor ${status} (${monitor_failures}F/${monitor_warnings}W)"
+
+  monitor_alert_telegram "${status}" "${report_body}"
+  monitor_alert_webhook "${status}" "${summary}" "${report_body}"
+  monitor_alert_email "${status}" "${subject}" "${report_body}"
+fi
+
+if [ "${monitor_failures}" -gt 0 ]; then
+  exit 1
+fi
+exit 0
