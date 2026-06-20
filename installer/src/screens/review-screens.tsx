@@ -7,9 +7,12 @@ import { useGlyphs } from "../components/glyph-context";
 import { Panel } from "../components/panel";
 import { ActionRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
+import { shortPath } from "../core/site-profile";
 
 export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenProps) {
-  const envPaths = redactedPlan.envFiles.map((env) => env.path).join("\n");
+  // Half-width panel: keep just env/<file> so it never truncates; the site is
+  // already named in the plan summary above.
+  const envPaths = redactedPlan.envFiles.map((env) => shortPath(env.path, 2)).join("\n");
   const commands = redactedPlan.tasks
     .map((task, index) => `${index + 1}. ${task.title}`)
     .join("\n");

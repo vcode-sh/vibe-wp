@@ -4,6 +4,7 @@ import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
 import { ActionRow, Field } from "../components/primitives";
 import { suggestedBackupDir } from "../core/backup";
+import { shortPath } from "../core/site-profile";
 import type { BackupPolicy, BackupSchedule } from "../core/types";
 
 // Focus order: destination(0), folder(1), retention(2), schedule(3),
@@ -34,7 +35,7 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
         <>
           <Field
             focused={focusIndex === 1}
-            hint={`Created on install — suggested ${suggestedBackupDir(state.siteSlug)}`}
+            hint={`Created on install — suggested ${shortPath(suggestedBackupDir(state.siteSlug), 2)}`}
             label="Backup folder"
             onInput={(value) => update("backupDir", value)}
             value={state.backupDir}
