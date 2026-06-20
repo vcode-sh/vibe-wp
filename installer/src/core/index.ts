@@ -25,6 +25,8 @@ export {
   MANAGE_OPERATIONS
 } from "./manage-operations";
 export { buildBackupsListTask, buildOperationTask } from "./manage-tasks";
+export type { RunPlanEvents } from "./plan-runner";
+export { runPlan } from "./plan-runner";
 export { redact, redactPlan } from "./redaction";
 export {
   defaultInstallDir,
@@ -32,8 +34,8 @@ export {
   siteSlugFromDomain,
   stripProtocol
 } from "./site-profile";
-export type { RunPlanEvents, TaskResult, TaskStatus } from "./task-runner";
-export { runPlan, runTask } from "./task-runner";
+export type { TaskResult, TaskStatus } from "./task-runner";
+export { runTask } from "./task-runner";
 export type {
   BackupPolicy,
   EnvFilePlan,

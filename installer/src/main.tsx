@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
@@ -9,9 +10,10 @@ import { usage } from "./cli/usage";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
 import { buildInstallPlan } from "./core/install-plan";
+import { openJournal } from "./core/journal";
 import { applyLocalSandboxDefaults, createLocalSandboxHostFacts } from "./core/local-sandbox";
+import { runPlan } from "./core/plan-runner";
 import { redactPlan } from "./core/redaction";
-import { runPlan } from "./core/task-runner";
 
 async function main() {
   const options = parseArgs(Bun.argv.slice(2));
@@ -33,7 +35,10 @@ async function main() {
 
   if (options.headlessPlan) {
     const plan = await Bun.file(options.headlessPlan).json();
-    const results = await runPlan(plan, options.yes);
+    // Persist progress next to the plan so a failed/interrupted run can --resume.
+    const journalDir = `${dirname(options.headlessPlan)}/.vibe-installer`;
+    const journal = await openJournal(journalDir, options.resume);
+    const results = await runPlan(plan, options.yes, {}, journal);
     console.log(JSON.stringify(results, null, 2));
     return;
   }

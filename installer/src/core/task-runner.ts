@@ -14,16 +14,6 @@ export interface TaskResult {
   status: TaskStatus;
 }
 
-export interface RunPlanEvents {
-  onTaskResult?: (
-    task: InstallTask,
-    result: TaskResult,
-    index: number,
-    total: number
-  ) => void | Promise<void>;
-  onTaskStart?: (task: InstallTask, index: number, total: number) => void | Promise<void>;
-}
-
 export async function runTask(
   task: InstallTask,
   apply: boolean,
@@ -97,24 +87,6 @@ export async function runTask(
   };
 }
 
-export async function runPlan(
-  plan: InstallPlan,
-  apply: boolean,
-  events: RunPlanEvents = {}
-): Promise<TaskResult[]> {
-  const results: TaskResult[] = [];
-  for (const [index, task] of plan.tasks.entries()) {
-    await events.onTaskStart?.(task, index, plan.tasks.length);
-    const result = await runTask(task, apply, plan);
-    results.push(result);
-    await events.onTaskResult?.(task, result, index, plan.tasks.length);
-    if (result.status === "failed") {
-      break;
-    }
-  }
-  return results;
-}
-
 // env special-writes: which file each env task owns and which secrets are
 // write-once. External DB/Redis creds are user-provided, so only salts preserve.
 const ENV_WRITE_SPECS: Record<string, { suffix: string; preserve: ReadonlySet<string> }> = {
@@ -136,6 +108,42 @@ async function runEnvWrite(taskId: string, plan: InstallPlan): Promise<TaskResul
   return { id: taskId, status: "done", output: `Updated ${env.path}.`, code: 0 };
 }
 
+// Writes the site's Caddy snippet, ensures the global import, and reports the
+// privileged install's exit status as the task result.
+async function deployCaddyfile(taskId: string, plan: InstallPlan): Promise<TaskResult> {
+  const tempPath = `/tmp/vibe-wp-caddyfile-${Date.now()}`;
+  await Bun.write(tempPath, plan.caddyfile);
+  const sitePath = `/etc/caddy/sites-enabled/vibe-wp-${plan.siteSlug}.caddy`;
+  const script = [
+    'if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi',
+    "$SUDO install -d -m 0755 /etc/caddy/sites-enabled",
+    "if [ -f /etc/caddy/Caddyfile ]; then $SUDO cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.vibe-wp.$(date -u +%Y%m%dT%H%M%SZ).bak; fi",
+    "if [ ! -f /etc/caddy/Caddyfile ]; then printf '%s\\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee /etc/caddy/Caddyfile >/dev/null; fi",
+    "grep -q 'sites-enabled/\\*.caddy' /etc/caddy/Caddyfile || printf '\\n%s\\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null",
+    `$SUDO install -m 0644 ${tempPath} ${sitePath}`
+  ].join("; ");
+  const install = Bun.spawn(["sh", "-lc", script], { stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(install.stdout).text(),
+    new Response(install.stderr).text(),
+    install.exited
+  ]);
+  if (code !== 0) {
+    return {
+      id: taskId,
+      status: "failed",
+      output: redact([stdout, stderr].join("\n").trim()),
+      code
+    };
+  }
+  return {
+    id: taskId,
+    status: "done",
+    output: `Installed ${sitePath} and ensured the global Caddy import.`,
+    code: 0
+  };
+}
+
 async function runSpecialWrite(
   task: InstallTask,
   apply: boolean,
@@ -155,46 +163,7 @@ async function runSpecialWrite(
     }
 
     if (phase === "before" && task.id === "caddyfile") {
-      const tempPath = `/tmp/vibe-wp-caddyfile-${Date.now()}`;
-      await Bun.write(tempPath, plan.caddyfile);
-      const sitePath = `/etc/caddy/sites-enabled/vibe-wp-${plan.siteSlug}.caddy`;
-      const install = Bun.spawn(
-        [
-          "sh",
-          "-lc",
-          [
-            'if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi',
-            "$SUDO install -d -m 0755 /etc/caddy/sites-enabled",
-            "if [ -f /etc/caddy/Caddyfile ]; then $SUDO cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.vibe-wp.$(date -u +%Y%m%dT%H%M%SZ).bak; fi",
-            "if [ ! -f /etc/caddy/Caddyfile ]; then printf '%s\\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee /etc/caddy/Caddyfile >/dev/null; fi",
-            "grep -q 'sites-enabled/\\*.caddy' /etc/caddy/Caddyfile || printf '\\n%s\\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null",
-            `$SUDO install -m 0644 ${tempPath} ${sitePath}`
-          ].join("; ")
-        ],
-        {
-          stdout: "pipe",
-          stderr: "pipe"
-        }
-      );
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(install.stdout).text(),
-        new Response(install.stderr).text(),
-        install.exited
-      ]);
-      if (code !== 0) {
-        return {
-          id: task.id,
-          status: "failed",
-          output: redact([stdout, stderr].join("\n").trim()),
-          code
-        };
-      }
-      return {
-        id: task.id,
-        status: "done",
-        output: `Installed ${sitePath} and ensured the global Caddy import.`,
-        code: 0
-      };
+      return await deployCaddyfile(task.id, plan);
     }
 
     return { id: task.id, status: "done", output: "", code: 0 };

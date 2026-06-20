@@ -19,6 +19,7 @@ function options(overrides: Partial<InstallerOptions>): InstallerOptions {
     noMonitor: false,
     ref: "main",
     repo: "https://example.com/vibe-wp.git",
+    resume: false,
     version: false,
     yes: false,
     ...overrides

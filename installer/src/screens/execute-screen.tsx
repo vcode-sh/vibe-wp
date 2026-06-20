@@ -5,7 +5,8 @@ import { color } from "../app/theme";
 import { space } from "../app/tokens";
 import { ActionRow, Field, Panel } from "../components/primitives";
 import { ProgressBar, Spinner } from "../components/spinner";
-import { runPlan, type TaskResult } from "../core/task-runner";
+import { runPlan } from "../core/plan-runner";
+import type { TaskResult } from "../core/task-runner";
 import {
   type ExecuteStatus,
   executionTitle,

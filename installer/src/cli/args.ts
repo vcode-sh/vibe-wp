@@ -23,6 +23,7 @@ type BooleanOption =
   | "noHostInstall"
   | "noHarden"
   | "noMonitor"
+  | "resume"
   | "version"
   | "yes";
 type StringOption =
@@ -64,6 +65,7 @@ const booleanFlags = new Map<string, BooleanOption>([
   ["--no-host-install", "noHostInstall"],
   ["--no-harden", "noHarden"],
   ["--no-monitor", "noMonitor"],
+  ["--resume", "resume"],
   ["--version", "version"],
   ["--yes", "yes"]
 ]);
@@ -110,6 +112,7 @@ export function parseArgs(argv: string[]): InstallerOptions {
     noHostInstall: false,
     noHarden: false,
     noMonitor: false,
+    resume: false,
     version: false,
     help: false,
     headlessJson: false

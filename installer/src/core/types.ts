@@ -47,7 +47,9 @@ export interface InstallerOptions {
   r2SecretKey?: string;
   ref: string;
   repo: string;
+  resume: boolean;
   stagingDomain?: string;
+  supportBundle?: string;
   version: boolean;
   yes: boolean;
 }

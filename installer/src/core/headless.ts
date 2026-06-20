@@ -2,8 +2,9 @@ import { detectHostFacts } from "./host";
 import { buildInstallPlan } from "./install-plan";
 import { availableOperations, type ManageOperation } from "./manage-operations";
 import { buildOperationTask } from "./manage-tasks";
+import { runPlan } from "./plan-runner";
 import { redactPlan } from "./redaction";
-import { runPlan, runTask, type TaskResult } from "./task-runner";
+import { runTask, type TaskResult } from "./task-runner";
 import type { HostFacts, InstallerState, InstallPlan } from "./types";
 import { validateState } from "./validation";
 
