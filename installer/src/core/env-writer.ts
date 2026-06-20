@@ -94,7 +94,26 @@ export function quoteEnv(value: string): string {
   return `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
 }
 
-export async function writeEnvFile(path: string, values: Record<string, string>): Promise<void> {
+// Secret keys are write-once: on a retried install the DB/Redis volumes still
+// hold credentials from the first run, so rotating these would break the
+// database connection. Preserve any that already exist on disk; everything
+// else (URL, ports, title, email) still updates to the latest plan values.
+export const SECRET_ENV_KEYS: ReadonlySet<string> = new Set<string>([
+  ...saltKeys,
+  "MARIADB_PASSWORD",
+  "MARIADB_ROOT_PASSWORD",
+  "WORDPRESS_DB_PASSWORD",
+  "REDIS_PASSWORD",
+  "WP_REDIS_PASSWORD",
+  "WP_INSTALL_ADMIN_PASSWORD"
+]);
+
+export async function writeEnvFile(
+  path: string,
+  values: Record<string, string>,
+  options?: { preserveExisting?: ReadonlySet<string> }
+): Promise<void> {
+  const preserve = options?.preserveExisting;
   const file = Bun.file(path);
   const text = (await file.exists()) ? await file.text() : "";
   const lines = text ? text.split(lineBreakPattern) : [];
@@ -109,6 +128,10 @@ export async function writeEnvFile(path: string, values: Record<string, string>)
       return line;
     }
     seen.add(key);
+    // Keep the on-disk secret so it stays in sync with the persisted DB volume.
+    if (preserve?.has(key)) {
+      return line;
+    }
     return `${key}=${values[key] ?? ""}`;
   });
 

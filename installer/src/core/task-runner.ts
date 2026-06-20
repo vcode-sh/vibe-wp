@@ -1,4 +1,4 @@
-import { writeEnvFile } from "./env-writer";
+import { SECRET_ENV_KEYS, writeEnvFile } from "./env-writer";
 import { redact } from "./redaction";
 import type { InstallPlan, InstallTask } from "./types";
 
@@ -128,7 +128,7 @@ async function runSpecialWrite(
     if (phase === "after" && task.id === "env-prod") {
       const env = plan.envFiles.find((file) => file.path.endsWith("/env/prod.env"));
       if (env) {
-        await writeEnvFile(env.path, env.values);
+        await writeEnvFile(env.path, env.values, { preserveExisting: SECRET_ENV_KEYS });
         return { id: task.id, status: "done", output: `Updated ${env.path}.`, code: 0 };
       }
     }
@@ -136,7 +136,7 @@ async function runSpecialWrite(
     if (phase === "after" && task.id === "env-stage") {
       const env = plan.envFiles.find((file) => file.path.endsWith("/env/stage.env"));
       if (env) {
-        await writeEnvFile(env.path, env.values);
+        await writeEnvFile(env.path, env.values, { preserveExisting: SECRET_ENV_KEYS });
         return { id: task.id, status: "done", output: `Updated ${env.path}.`, code: 0 };
       }
     }
