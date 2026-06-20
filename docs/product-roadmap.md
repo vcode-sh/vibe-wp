@@ -189,9 +189,9 @@ Wedge: "managed-WordPress quality on a VPS you own," reachable over plain SSH to
 The other installer modes are **wired in the planner but not all proven on hardware**:
 
 - **`remove-existing`** — wired (pre-remove-backup, optional stage-down, prod-down,
-  disable-caddy-route in `buildRemoveTasks`) but **not yet run on real hardware**.
+  disable-caddy-route in `buildRemoveTasks`) but **validated on a real VPS (2026-06-20)**.
 - **`update-existing`** — wired (checkout, prod-config, prod-up, prod-smoke in
-  `buildUpdateTasks`) but **not yet run on real hardware**.
+  `buildUpdateTasks`) but **validated on a real VPS (2026-06-20)**.
 - **`staging-only`** — wired (dns-preflight, stage-config, stage-up = up+install+smoke).
   The full fresh-staging path is **not validated end-to-end** because the staging
   subdomain needs a public DNS record (stage-smoke fails without it). Note the staging

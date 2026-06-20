@@ -114,7 +114,7 @@ Implemented in the management/UI pass after the first VPS TUI audit:
   backup, list-backups, cache-flush, restart, refresh-from-prod, promote-files-to-prod,
   restore, and down. Validated against real prod on 2026-06-20.
 - Safe-remove mode can plan backup, stop production/staging containers, and disable the
-  site's Caddy snippet (wired; not yet run on real hardware).
+  site's Caddy snippet (wired; validated on a real VPS (2026-06-20)).
 - Caddy integration is site-scoped through `/etc/caddy/sites-enabled/vibe-wp-<site>.caddy`.
 - Secrets are masked in form fields and redacted in generated previews.
 - Execution requires a typed confirmation phrase.
