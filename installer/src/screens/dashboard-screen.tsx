@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ScreenProps } from "../app/screen-props";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
@@ -12,8 +12,8 @@ import {
   buildRemoteBackupsListTask
 } from "../core/manage-tasks";
 import { runTask, type TaskStatus } from "../core/task-runner";
-import { GroupedOpList, type HealthState, StatusCards } from "./dashboard-cards";
-import { BackupPicker, OpDetail, ResultPanel } from "./dashboard-detail";
+import { type HealthState, OpList, StatusCards } from "./dashboard-cards";
+import { BackupPicker, ResultPanel } from "./dashboard-detail";
 
 const SANDBOX_BACKUPS = [
   "backups/prod/20260618T090000Z",
@@ -36,7 +36,28 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
   const [output, setOutput] = useState<string[]>([]);
   const [health, setHealth] = useState<HealthState>("unknown");
   const [restore, setRestore] = useState<RestoreState | null>(null);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
   const current = ops[selected] ?? ops[0];
+
+  // Best-effort: load the newest local backup once, for an at-a-glance card.
+  useEffect(() => {
+    if (state.localSandbox) {
+      return;
+    }
+    let alive = true;
+    runTask(buildBackupsListTask("prod", state), true, plan).then((res) => {
+      const paths = res.output
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (alive) {
+        setLastBackup(paths.at(-1) ?? "");
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [plan, state]);
 
   async function fetchBackups(): Promise<string[]> {
     if (state.localSandbox) {
@@ -125,7 +146,7 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
         </text>
         {state.stagingEnabled && <text fg={color("muted")}>· staging</text>}
       </box>
-      <StatusCards health={health} state={state} />
+      <StatusCards health={health} lastBackup={lastBackup} state={state} />
       {restore ? (
         <BackupPicker index={restore.index} items={restore.items} />
       ) : (
@@ -140,44 +161,6 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
         />
       )}
       {output.length > 0 && <ResultPanel output={output} status={status} />}
-    </box>
-  );
-}
-
-function OpList({
-  groups,
-  ops,
-  current,
-  status,
-  confirmId,
-  set,
-  setConfirm
-}: {
-  groups: ReturnType<typeof groupedOperations>;
-  ops: ManageOperation[];
-  current: ManageOperation | undefined;
-  status: TaskStatus | "idle";
-  confirmId: string | null;
-  set: (n: number) => void;
-  setConfirm: (id: string | null) => void;
-}) {
-  return (
-    <box flexDirection="column" gap={1}>
-      <text fg={color("subtle")} height={1} truncate>
-        Pick an action below. Nothing happens until you press Enter.
-      </text>
-      <GroupedOpList
-        groups={groups}
-        onSelect={(id) => {
-          const index = ops.findIndex((op) => op.id === id);
-          if (index >= 0) {
-            set(index);
-            setConfirm(null);
-          }
-        }}
-        selectedId={current?.id}
-      />
-      <OpDetail confirmPending={confirmId === current?.id} op={current} status={status} />
     </box>
   );
 }

@@ -4,7 +4,9 @@ import { space } from "../app/tokens";
 import { useGlyphs } from "../components/glyph-context";
 import { clickProps } from "../components/mouse";
 import type { ManageOperation, OpGroupView, OpSafety } from "../core/manage-operations";
+import type { TaskStatus } from "../core/task-runner";
 import type { InstallerState } from "../core/types";
+import { OpDetail } from "./dashboard-detail";
 
 // Health is only known once the owner runs the health check — never auto-run.
 export type HealthState = "unknown" | "healthy" | "problem";
@@ -31,7 +33,41 @@ function healthCard(health: HealthState, glyphs: Record<string, string>): CardSp
   return { label: "Health", value: "Not checked yet", tone: "muted" };
 }
 
-export function StatusCards({ health, state }: { health: HealthState; state: InstallerState }) {
+const backupStampPattern = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/;
+
+function backupCard(lastBackup: string | null | undefined): CardSpec {
+  if (lastBackup === null || lastBackup === undefined) {
+    return { label: "Last backup", value: "checking…", tone: "muted" };
+  }
+  const match = lastBackup.match(backupStampPattern);
+  if (!match) {
+    return { label: "Last backup", value: "none yet", tone: "warning" };
+  }
+  const n = (index: number) => Number(match[index] ?? "0");
+  const when = Date.UTC(n(1), n(2) - 1, n(3), n(4), n(5), n(6));
+  const hours = Math.floor((Date.now() - when) / 3_600_000);
+  return { label: "Last backup", value: agoLabel(hours), tone: hours > 48 ? "warning" : "success" };
+}
+
+function agoLabel(hours: number): string {
+  if (hours < 1) {
+    return "under 1h ago";
+  }
+  if (hours < 48) {
+    return `${hours}h ago`;
+  }
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+export function StatusCards({
+  health,
+  state,
+  lastBackup
+}: {
+  health: HealthState;
+  state: InstallerState;
+  lastBackup?: string | null;
+}) {
   const glyphs = useGlyphs();
   const cards: CardSpec[] = [
     {
@@ -41,14 +77,10 @@ export function StatusCards({ health, state }: { health: HealthState; state: Ins
     },
     {
       label: "Staging",
-      value: state.stagingEnabled ? "On" : "Off",
+      value: state.stagingEnabled ? `https://${state.stagingDomain}` : "Off",
       tone: state.stagingEnabled ? "success" : "muted"
     },
-    {
-      label: "Install folder",
-      value: state.selectedSiteDir || state.installDir || "Unknown",
-      tone: "muted"
-    },
+    backupCard(lastBackup),
     healthCard(health, glyphs)
   ];
   return (
@@ -69,6 +101,44 @@ function StatusCard({ card }: { card: CardSpec }) {
       <text attributes={TextAttributes.BOLD} fg={color(card.tone)} height={1} truncate>
         {card.value}
       </text>
+    </box>
+  );
+}
+
+export function OpList({
+  groups,
+  ops,
+  current,
+  status,
+  confirmId,
+  set,
+  setConfirm
+}: {
+  groups: OpGroupView[];
+  ops: ManageOperation[];
+  current: ManageOperation | undefined;
+  status: TaskStatus | "idle";
+  confirmId: string | null;
+  set: (n: number) => void;
+  setConfirm: (id: string | null) => void;
+}) {
+  return (
+    <box flexDirection="column" gap={1}>
+      <text fg={color("subtle")} height={1} truncate>
+        Pick an action below. Nothing happens until you press Enter.
+      </text>
+      <GroupedOpList
+        groups={groups}
+        onSelect={(id) => {
+          const index = ops.findIndex((op) => op.id === id);
+          if (index >= 0) {
+            set(index);
+            setConfirm(null);
+          }
+        }}
+        selectedId={current?.id}
+      />
+      <OpDetail confirmPending={confirmId === current?.id} op={current} status={status} />
     </box>
   );
 }
