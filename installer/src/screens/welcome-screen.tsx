@@ -16,10 +16,13 @@ const FEATURES = [
 ];
 
 export function WelcomeScreen({ state, next }: ScreenProps) {
+  const siteCount = state.host.existingSites.length;
   return (
     <box alignItems="center" flexDirection="column" flexGrow={1} gap={1} justifyContent="center">
       <Banner />
-      <text fg={color("muted")}>Managed WordPress on Docker, tuned for VPS production.</text>
+      <text fg={color("muted")}>
+        Install and manage WordPress on Docker — your VPS control panel.
+      </text>
       <box flexDirection="row" gap={2} paddingY={1}>
         <ReadyChip label="Host" tone="accent" value={state.host.osName} />
         <ReadyChip
@@ -35,12 +38,14 @@ export function WelcomeScreen({ state, next }: ScreenProps) {
       </box>
       <FeatureStrip />
       <text fg={color("subtle")}>
-        Before you start: have a domain ready and pointed at this server's IP.
+        {siteCount > 0
+          ? `${siteCount} site(s) on this server — open the panel to manage them or add another.`
+          : "Before you start: have a domain ready and pointed at this server's IP."}
       </text>
       <box paddingY={1}>
         <ActionRow
           onPrimary={next}
-          primary="Start guided install"
+          primary={siteCount > 0 ? "Open control panel" : "Start guided install"}
           secondary="Nothing privileged runs until review"
         />
       </box>
