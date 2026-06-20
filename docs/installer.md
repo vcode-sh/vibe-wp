@@ -50,6 +50,7 @@ Installer `0.1.2` includes:
 - idempotent env-file writes so installs can be safely retried
 - preservation of existing install secrets (DB/Redis passwords) on retry, keeping them in sync with the persisted Docker volumes
 - an editable Performance screen: pick a preset, or turn on Customize to edit any individual setting (PHP/WP memory, PHP-FPM pool, Redis, MariaDB buffer pool, Nginx cache) and the assumed server memory; the PHP-FPM pool is auto-clamped so no edit can produce an invalid, crash-looping config
+- a Backup screen offering three destinations: **Manual** (no automatic backups), **Local backups** (a backup folder created on install, with retention and an optional schedule), and **Local + Cloudflare R2** (also copy each backup off-server). Choosing R2 collects the R2 account ID, access key ID, secret access key, and bucket. On install it creates the backup folder (`install -d -m 0750`), installs rclone when R2 is enabled and host installs are allowed, runs a first backup, and — when a daily or weekly schedule is chosen — installs a systemd service + timer named `vibe-wp-backup-<slug>-<env>` that runs `./bin/vibe <env> backup`. See the engine, retention, and env keys in [operations.md](operations.md)
 
 ## Installer Modes
 
@@ -79,6 +80,15 @@ Value flags:
 - `--ext-redis-host <host>` — external Redis host
 - `--ext-redis-port <port>` — external Redis port
 - `--ext-redis-password <password>` — external Redis password
+- `--backup-dir <path>` — local backup root for the chosen site
+- `--backup-schedule <off|daily|weekly>` — install a systemd timer that runs backups on this cadence (default off)
+- `--r2-account <id>` — Cloudflare R2 account ID (builds the endpoint `https://<id>.r2.cloudflarestorage.com`)
+- `--r2-access-key <id>` — R2 access key ID
+- `--r2-secret <key>` — R2 secret access key
+- `--r2-bucket <name>` — R2 bucket for off-server backups
+
+  Any `--r2-*` flag opts into off-server backups (sets the backup policy and enables R2).
+
 - `--install-dir <path>` — install directory, default `/opt/vibe-wp`
 - `--repo <url>` / `--ref <ref>` — Vibe WP git repository and branch/tag (default `main`)
 - `--perf KEY=VALUE` — override a single performance setting (repeatable), e.g. `--perf REDIS_MAXMEMORY=512mb --perf PHP_FPM_PM_MAX_CHILDREN=24`. Recognised keys match the Performance screen; the PHP-FPM pool is always clamped to a valid shape (`min_spare ≤ max_spare ≤ max_children`) so an override cannot crash the container

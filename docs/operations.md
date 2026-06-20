@@ -102,7 +102,40 @@ backups/<environment>/<timestamp>/wp-content.tar.gz
 backups/<environment>/<timestamp>/manifest.txt
 ```
 
-The backup command dumps the database and archives `wp-content` from the running WordPress container. This works for both local bind mounts and production/staging named volumes.
+The backup command dumps the database and archives `wp-content` from the running WordPress container. This works for both local bind mounts and production/staging named volumes. Add `--label NAME` to suffix the directory (`<timestamp>-<label>/`).
+
+### Off-server copy to Cloudflare R2
+
+When `VIBE_BACKUP_R2_ENABLED=1`, each backup is also uploaded to S3-compatible object storage (Cloudflare R2 by default) via [rclone](https://rclone.org), then verified with `rclone check` so a corrupt or partial upload fails loudly. rclone is configured entirely from `RCLONE_CONFIG_R2_*` environment variables loaded from the env file, so no separate rclone config file ever holds the secrets. The R2 endpoint follows the form `https://<account-id>.r2.cloudflarestorage.com`.
+
+rclone must be installed on the host for off-server backups. Install it with:
+
+```sh
+curl https://rclone.org/install.sh | sudo bash
+```
+
+### Retention
+
+After every backup, both local and remote backups beyond `VIBE_BACKUP_RETENTION` are pruned, keeping only the newest N. Leave `VIBE_BACKUP_RETENTION` empty to keep all backups.
+
+### Environment keys
+
+These keys live in `env/<env>.env` (templates in `env/*.env.example`):
+
+| Key | Purpose |
+| --- | --- |
+| `VIBE_BACKUP_DIR` | Local backup root (default `backups/<env>/` when empty) |
+| `VIBE_BACKUP_RETENTION` | Keep only the newest N backups locally and remotely (empty = keep all) |
+| `VIBE_BACKUP_R2_ENABLED` | Set to `1` to also upload each backup to object storage |
+| `VIBE_BACKUP_R2_BUCKET` | Target bucket name (e.g. `your-bucket`) |
+| `VIBE_BACKUP_R2_PREFIX` | Path prefix inside the bucket (default: the env name) |
+| `RCLONE_CONFIG_R2_TYPE` | rclone backend type (`s3`) |
+| `RCLONE_CONFIG_R2_PROVIDER` | S3 provider (`Cloudflare`) |
+| `RCLONE_CONFIG_R2_ACCESS_KEY_ID` | R2 access key ID |
+| `RCLONE_CONFIG_R2_SECRET_ACCESS_KEY` | R2 secret access key |
+| `RCLONE_CONFIG_R2_ENDPOINT` | `https://your-account-id.r2.cloudflarestorage.com` |
+| `RCLONE_CONFIG_R2_ACL` | Object ACL (`private`) |
+| `RCLONE_CONFIG_R2_NO_CHECK_BUCKET` | `true` to skip a bucket-create check on upload |
 
 List existing backup directories for an environment (newest last, one per line):
 
@@ -142,6 +175,8 @@ With URL migration:
 ```sh
 make restore BACKUP=backups/local/20260618T195728Z ARGS="--yes --old-url https://old.example.com --new-url https://new.example.com"
 ```
+
+If the named backup directory is not present locally and off-server backups are enabled (`VIBE_BACKUP_R2_ENABLED=1`), restore first fetches it from R2 by name, then restores the database and `wp-content` as usual.
 
 ## Staging
 
