@@ -54,6 +54,7 @@ async function main() {
   if (options.noHostInstall) {
     state.installDocker = false;
     state.installCaddy = false;
+    state.installRclone = false;
   }
   if (options.noCaddy) {
     state.installCaddy = false;

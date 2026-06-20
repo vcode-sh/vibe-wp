@@ -80,7 +80,9 @@ describe("buildExternalTasks", () => {
       "ext-install",
       "ext-smoke",
       "ext-perf",
-      "first-backup"
+      "backup-dir",
+      "first-backup",
+      "backup-timer"
     ]);
   });
 

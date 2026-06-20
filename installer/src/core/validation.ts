@@ -3,6 +3,7 @@ import type { InstallerState } from "./types";
 const domainPattern = /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const siteSlugPattern = /^[a-z0-9][a-z0-9-]{1,48}$/;
+const wholeNumberPattern = /^\d+$/;
 const blockedDomainSuffixes = [".example.com", ".example.net", ".example.org", ".localhost"];
 const blockedDomains = new Set([
   "example.com",
@@ -70,11 +71,40 @@ export function validateState(state: InstallerState): string[] {
     return [
       ...validateSiteIdentity(state),
       ...validatePorts(state),
-      ...validateExternalServices(state)
+      ...validateExternalServices(state),
+      ...validateBackup(state)
     ];
   }
 
-  return [...validateSiteIdentity(state), ...validatePorts(state)];
+  return [...validateSiteIdentity(state), ...validatePorts(state), ...validateBackup(state)];
+}
+
+function validateBackup(state: InstallerState): string[] {
+  const errors: string[] = [];
+  if (state.backupPolicy === "manual") {
+    return errors;
+  }
+  if (!state.backupDir.trim().startsWith("/")) {
+    errors.push("Backup folder must be an absolute path, for example /var/backups/vibe-wp.");
+  }
+  if (state.backupRetention.trim() && !wholeNumberPattern.test(state.backupRetention.trim())) {
+    errors.push("Backup retention must be a whole number of backups to keep.");
+  }
+  if (state.backupPolicy === "external-later") {
+    if (!state.r2AccountId.trim()) {
+      errors.push("Cloudflare R2 account ID is required for off-server backups.");
+    }
+    if (!state.r2AccessKeyId.trim()) {
+      errors.push("Cloudflare R2 access key ID is required.");
+    }
+    if (!state.r2SecretKey.trim()) {
+      errors.push("Cloudflare R2 secret access key is required.");
+    }
+    if (!state.r2Bucket.trim()) {
+      errors.push("Cloudflare R2 bucket name is required.");
+    }
+  }
+  return errors;
 }
 
 function validateExternalServices(state: InstallerState): string[] {

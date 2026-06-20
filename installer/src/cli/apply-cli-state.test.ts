@@ -105,6 +105,26 @@ describe("applyCliState", () => {
     expect(state.performanceOverrides.PHP_FPM_PM_MAX_CHILDREN).toBe("24");
   });
 
+  test("R2 flags enable off-server backups and populate credentials", () => {
+    const state = applyCliState(
+      defaultState(),
+      options({
+        domain: "shop.com",
+        backupDir: "/var/backups/vibe-wp/shop",
+        backupSchedule: "weekly",
+        r2AccountId: "acct",
+        r2AccessKeyId: "akid",
+        r2SecretKey: "sk",
+        r2Bucket: "bucket"
+      })
+    );
+    expect(state.backupPolicy).toBe("external-later");
+    expect(state.backupR2Enabled).toBe(true);
+    expect(state.backupDir).toBe("/var/backups/vibe-wp/shop");
+    expect(state.backupSchedule).toBe("weekly");
+    expect(state.r2Bucket).toBe("bucket");
+  });
+
   test("leaves state untouched when flags are absent", () => {
     const base = defaultState();
     const before = base.productionDomain;

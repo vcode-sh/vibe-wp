@@ -7,10 +7,13 @@ export type InstallMode =
   | "external-services";
 export type PerformancePreset = "conservative" | "balanced" | "high-memory";
 export type BackupPolicy = "manual" | "local-first" | "external-later";
+export type BackupSchedule = "off" | "daily" | "weekly";
 
 export interface InstallerOptions {
   adminEmail?: string;
   ascii: boolean;
+  backupDir?: string;
+  backupSchedule?: BackupSchedule;
   compact: boolean;
   domain?: string;
   dryRun: boolean;
@@ -32,6 +35,10 @@ export interface InstallerOptions {
   noHostInstall: boolean;
   noWww: boolean;
   perfOverrides?: string[];
+  r2AccessKeyId?: string;
+  r2AccountId?: string;
+  r2Bucket?: string;
+  r2SecretKey?: string;
   ref: string;
   repo: string;
   stagingDomain?: string;
@@ -73,7 +80,11 @@ export interface InstallerState {
   aiAnthropicKey: string;
   aiGoogleKey: string;
   aiOpenAiKey: string;
+  backupDir: string;
   backupPolicy: BackupPolicy;
+  backupR2Enabled: boolean;
+  backupRetention: string;
+  backupSchedule: BackupSchedule;
   extDbCharset: string;
   extDbHost: string;
   extDbName: string;
@@ -89,6 +100,7 @@ export interface InstallerState {
   installCaddy: boolean;
   installDir: string;
   installDocker: boolean;
+  installRclone: boolean;
   locale: string;
   localSandbox: boolean;
   memoryOverrideMb: string;
@@ -99,6 +111,10 @@ export interface InstallerState {
   productionDomain: string;
   productionHttpPort: string;
   quickInstall: boolean;
+  r2AccessKeyId: string;
+  r2AccountId: string;
+  r2Bucket: string;
+  r2SecretKey: string;
   ref: string;
   repo: string;
   selectedSiteDir: string;

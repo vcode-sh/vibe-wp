@@ -1,7 +1,9 @@
+import { buildBackupDirTask, buildBackupTimerTask } from "./backup";
 import { renderCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { buildExternalTasks } from "./external-plan";
+import { buildHostInstallTasks } from "./host-install";
 import {
   buildEnvFiles,
   buildManageTasks,
@@ -76,34 +78,7 @@ function buildTasks(state: InstallerState): InstallTask[] {
   const repo = shellQuote(state.repo);
 
   tasks.push(buildDnsPreflightTask(state));
-
-  if (state.installDocker && !state.host.docker) {
-    tasks.push({
-      id: "install-docker",
-      title: "Install Docker Engine",
-      description: "Install Docker from the official apt repository.",
-      privileged: true,
-      command: [
-        "sh",
-        "-lc",
-        `${sudo}apt update && ${sudo}apt install -y ca-certificates curl && ${sudo}install -m 0755 -d /etc/apt/keyrings && ${sudo}curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && ${sudo}chmod a+r /etc/apt/keyrings/docker.asc && ${sudo}tee /etc/apt/sources.list.d/docker.sources >/dev/null <<'EOF'\nTypes: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: $(. /etc/os-release && echo "\${UBUNTU_CODENAME:-$VERSION_CODENAME}")\nComponents: stable\nArchitectures: $(dpkg --print-architecture)\nSigned-By: /etc/apt/keyrings/docker.asc\nEOF\n${sudo}apt update && ${sudo}apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`
-      ]
-    });
-  }
-
-  if (state.installCaddy && !state.host.caddy) {
-    tasks.push({
-      id: "install-caddy",
-      title: "Install Caddy",
-      description: "Install Caddy from the official package repository.",
-      privileged: true,
-      command: [
-        "sh",
-        "-lc",
-        `${sudo}apt install -y debian-keyring debian-archive-keyring apt-transport-https curl && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | ${sudo}gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | ${sudo}tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null && ${sudo}chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list && ${sudo}apt update && ${sudo}apt install -y caddy`
-      ]
-    });
-  }
+  tasks.push(...buildHostInstallTasks(state));
 
   tasks.push({
     id: "checkout",
@@ -200,13 +175,21 @@ function buildTasks(state: InstallerState): InstallTask[] {
     );
   }
 
+  const backupDirTask = buildBackupDirTask(state);
+  if (backupDirTask) {
+    tasks.push(backupDirTask);
+  }
   if (state.backupPolicy !== "manual") {
     tasks.push({
       id: "first-backup",
       title: "Create first backup",
-      description: "Create and verify the first production backup.",
+      description: "Create and verify the first production backup (and upload to R2 if enabled).",
       command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe prod backup`]
     });
+  }
+  const backupTimerTask = buildBackupTimerTask(state, "prod");
+  if (backupTimerTask) {
+    tasks.push(backupTimerTask);
   }
   return tasks;
 }

@@ -1,4 +1,4 @@
-import type { InstallerOptions, InstallMode } from "../core/types";
+import type { BackupSchedule, InstallerOptions, InstallMode } from "../core/types";
 
 export const DEFAULT_INSTALL_DIR = "/opt/vibe-wp";
 
@@ -25,8 +25,13 @@ type BooleanOption =
   | "yes";
 type StringOption =
   | "adminEmail"
+  | "backupDir"
   | "domain"
   | "exportPlan"
+  | "r2AccountId"
+  | "r2AccessKeyId"
+  | "r2Bucket"
+  | "r2SecretKey"
   | "extDbHost"
   | "extDbName"
   | "extDbPassword"
@@ -57,6 +62,11 @@ const booleanFlags = new Map<string, BooleanOption>([
 
 const stringFlags = new Map<string, StringOption>([
   ["--admin-email", "adminEmail"],
+  ["--backup-dir", "backupDir"],
+  ["--r2-account", "r2AccountId"],
+  ["--r2-access-key", "r2AccessKeyId"],
+  ["--r2-bucket", "r2Bucket"],
+  ["--r2-secret", "r2SecretKey"],
   ["--domain", "domain"],
   ["--export-plan", "exportPlan"],
   ["--ext-db-host", "extDbHost"],
@@ -118,6 +128,12 @@ export function parseArgs(argv: string[]): InstallerOptions {
       continue;
     }
 
+    if (arg === "--backup-schedule") {
+      options.backupSchedule = parseSchedule(requireValue(argv, index, arg));
+      index += 1;
+      continue;
+    }
+
     // Repeatable: --perf KEY=VALUE overrides a single performance setting.
     if (arg === "--perf") {
       options.perfOverrides = options.perfOverrides ?? [];
@@ -138,6 +154,13 @@ function parseMode(value: string): InstallMode {
     throw new Error(`Invalid --mode value: ${value}. Allowed: ${INSTALL_MODES.join(", ")}.`);
   }
   return mode;
+}
+
+function parseSchedule(value: string): BackupSchedule {
+  if (value === "off" || value === "daily" || value === "weekly") {
+    return value;
+  }
+  throw new Error(`Invalid --backup-schedule value: ${value}. Allowed: off, daily, weekly.`);
 }
 
 function requireValue(argv: string[], index: number, flag: string): string {

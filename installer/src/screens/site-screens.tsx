@@ -1,5 +1,5 @@
+import { modeOptions } from "../app/options";
 import type { ScreenProps } from "../app/screen-props";
-import { modeOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
 import { ActionRow } from "../components/primitives";

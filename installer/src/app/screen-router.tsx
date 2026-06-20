@@ -1,4 +1,5 @@
-import { AiScreen, BackupScreen, StagingScreen } from "../screens/config-screens";
+import { BackupScreen } from "../screens/backup-screen";
+import { AiScreen, StagingScreen } from "../screens/config-screens";
 import { DashboardScreen } from "../screens/dashboard-screen";
 import { DomainScreen } from "../screens/domain-screen";
 import { ExecuteScreen } from "../screens/execute-screen";

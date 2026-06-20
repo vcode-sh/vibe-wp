@@ -1,11 +1,8 @@
 import { TextAttributes } from "@opentui/core";
 import type { ScreenProps } from "../app/screen-props";
-import { backupOptions } from "../app/steps";
 import { color } from "../app/theme";
-import { ChoiceList } from "../components/choice-list";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
-import type { BackupPolicy } from "../core/types";
 
 export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
@@ -45,32 +42,6 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
         onPrimary={next}
         primary="Continue"
         secondary="You can add keys later in env files"
-      />
-    </box>
-  );
-}
-
-export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
-  return (
-    <box flexDirection="column" flexGrow={1} gap={1}>
-      <text fg={color("muted")} wrapMode="word">
-        How should we protect your site? "Local first" makes a backup right after install — a good
-        safe default.
-      </text>
-      <ChoiceList
-        focused={focusIndex === 0}
-        onChange={(value) => update("backupPolicy", value as BackupPolicy)}
-        options={backupOptions}
-        value={state.backupPolicy}
-      />
-      <text fg={color("warning")} wrapMode="word">
-        Backups on the same server aren't enough if the server itself fails — add off-server backups
-        (R2/S3) later for real safety.
-      </text>
-      <ActionRow
-        onPrimary={next}
-        primary="Continue"
-        secondary="External R2/S3 can be added as a later backend"
       />
     </box>
   );

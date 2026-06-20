@@ -1,11 +1,18 @@
 import { PERFORMANCE_FIELDS } from "../core/performance";
-import type { BackupPolicy, InstallerState, InstallMode, PerformancePreset } from "../core/types";
+import type { BackupPolicy, InstallerState } from "../core/types";
 
-// Most steps have a fixed focusable count; the Performance step grows when the
-// user turns on per-setting customisation (preset + toggle + memory + N fields).
+// Steps with a dynamic focusable count grow with the user's choices.
 export function focusCountFor(step: Step, state: InstallerState): number {
   if (step.id === "performance" && state.performanceCustom) {
     return 3 + PERFORMANCE_FIELDS.length;
+  }
+  if (step.id === "backup") {
+    const counts: Record<BackupPolicy, number> = {
+      "external-later": 8,
+      "local-first": 4,
+      manual: 1
+    };
+    return counts[state.backupPolicy];
   }
   return step.focusCount;
 }
@@ -131,70 +138,5 @@ export const steps: Step[] = [
     focusCount: 1,
     title: "Done",
     help: "Summarizes URLs, commands, and next operational steps."
-  }
-];
-
-export const modeOptions: Array<{ name: string; description: string; value: InstallMode }> = [
-  {
-    name: "Create a new WordPress",
-    description: "Production, optional staging, isolated ports, and tuned env files.",
-    value: "new-site"
-  },
-  {
-    name: "Manage detected site",
-    description: "Run status, smoke checks, and performance diagnostics.",
-    value: "manage-existing"
-  },
-  {
-    name: "Remove detected site",
-    description: "Create a safety backup, then stop containers without deleting data.",
-    value: "remove-existing"
-  },
-  {
-    name: "Update existing checkout",
-    description: "Keeps current directory and refreshes config.",
-    value: "update-existing"
-  },
-  {
-    name: "Create staging only",
-    description: "Attach staging to an existing production site.",
-    value: "staging-only"
-  },
-  {
-    name: "Use external database and Redis",
-    description: "Bring your own MariaDB and Redis — only WordPress and Nginx run in Docker.",
-    value: "external-services"
-  }
-];
-
-export const performanceOptions: Array<{
-  name: string;
-  description: string;
-  value: PerformancePreset;
-}> = [
-  { name: "Conservative", description: "Small VPS, lower memory pressure.", value: "conservative" },
-  { name: "Balanced", description: "Best default for most business sites.", value: "balanced" },
-  {
-    name: "High memory",
-    description: "Bigger VPS, more PHP workers and cache.",
-    value: "high-memory"
-  }
-];
-
-export const backupOptions: Array<{ name: string; description: string; value: BackupPolicy }> = [
-  {
-    name: "Manual",
-    description: "Expose commands only. You run backups yourself.",
-    value: "manual"
-  },
-  {
-    name: "Local first",
-    description: "Create the first local backup after install.",
-    value: "local-first"
-  },
-  {
-    name: "External later",
-    description: "Prepare for R2/S3-style off-server backups.",
-    value: "external-later"
   }
 ];

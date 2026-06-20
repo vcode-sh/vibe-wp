@@ -1,3 +1,9 @@
+import {
+  backupEnvValues,
+  buildBackupDirTask,
+  buildBackupTimerTask,
+  buildRcloneInstallTask
+} from "./backup";
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { quoteEnv, saltKeys } from "./env-writer";
 import { effectivePerformanceValues } from "./performance";
@@ -59,6 +65,7 @@ export function externalEnvValues(state: InstallerState): Record<string, string>
     WP_REDIS_MAXTTL: "604800",
     WP_REDIS_SELECTIVE_FLUSH: "1",
     WP_REDIS_GRACEFUL: "1",
+    ...backupEnvValues(state, "external"),
     ...effectivePerformanceValues(state),
     ...externalSalts()
   };
@@ -130,6 +137,14 @@ export function buildExternalTasks(state: InstallerState): InstallTask[] {
     }
   ];
 
+  const rcloneTask = buildRcloneInstallTask(state);
+  if (rcloneTask) {
+    tasks.splice(1, 0, rcloneTask);
+  }
+  const backupDirTask = buildBackupDirTask(state);
+  if (backupDirTask) {
+    tasks.push(backupDirTask);
+  }
   if (state.backupPolicy !== "manual") {
     tasks.push({
       id: "first-backup",
@@ -137,6 +152,10 @@ export function buildExternalTasks(state: InstallerState): InstallTask[] {
       description: "Create and verify the first backup of files and the external database.",
       command: ["sh", "-lc", `cd ${installDir} && ./bin/vibe external backup`]
     });
+  }
+  const backupTimerTask = buildBackupTimerTask(state, "external");
+  if (backupTimerTask) {
+    tasks.push(backupTimerTask);
   }
   return tasks;
 }

@@ -42,8 +42,29 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
 
   applyExternalServices(state, options);
   applyPerfOverrides(state, options);
+  applyBackup(state, options);
 
   return state;
+}
+
+function applyBackup(state: InstallerState, options: InstallerOptions): void {
+  if (options.backupDir) {
+    state.backupDir = options.backupDir;
+  }
+  if (options.backupSchedule) {
+    state.backupSchedule = options.backupSchedule;
+  }
+  const r2 =
+    options.r2AccountId || options.r2AccessKeyId || options.r2SecretKey || options.r2Bucket;
+  if (r2) {
+    // Any R2 flag opts into off-server backups.
+    state.backupPolicy = "external-later";
+    state.backupR2Enabled = true;
+    state.r2AccountId = options.r2AccountId ?? state.r2AccountId;
+    state.r2AccessKeyId = options.r2AccessKeyId ?? state.r2AccessKeyId;
+    state.r2SecretKey = options.r2SecretKey ?? state.r2SecretKey;
+    state.r2Bucket = options.r2Bucket ?? state.r2Bucket;
+  }
 }
 
 function applyPerfOverrides(state: InstallerState, options: InstallerOptions): void {

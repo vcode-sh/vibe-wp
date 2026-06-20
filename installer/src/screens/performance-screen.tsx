@@ -1,5 +1,5 @@
+import { performanceOptions } from "../app/options";
 import type { ScreenProps } from "../app/screen-props";
-import { performanceOptions } from "../app/steps";
 import { color } from "../app/theme";
 import { ChoiceList } from "../components/choice-list";
 import { InfoGrid } from "../components/data-display";

@@ -1,3 +1,4 @@
+import { suggestedBackupDir as defaultBackupDir } from "./backup";
 import { randomPassword } from "./secrets";
 import {
   defaultInstallDir,
@@ -66,6 +67,14 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     aiGoogleKey: "",
     aiAnthropicKey: "",
     backupPolicy: "local-first",
+    backupDir: defaultBackupDir(siteSlug),
+    backupRetention: "7",
+    backupSchedule: "daily",
+    backupR2Enabled: false,
+    r2AccountId: "",
+    r2AccessKeyId: "",
+    r2SecretKey: "",
+    r2Bucket: "",
     extDbHost: "",
     extDbName: "wordpress",
     extDbUser: "wordpress",
@@ -79,6 +88,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     extRedisDatabase: "0",
     installDocker: !host.docker,
     installCaddy: !host.caddy,
+    installRclone: true,
     localSandbox: false,
     host
   };
