@@ -7,6 +7,7 @@ import {
 import { buildDnsPreflightTask } from "./dns-preflight";
 import { quoteEnv, saltKeys } from "./env-writer";
 import { buildHardenTask } from "./harden";
+import { buildMonitorTimerTask, monitorEnvValues } from "./monitor";
 import { effectivePerformanceValues } from "./performance";
 import { randomHex, slugFromDomain } from "./secrets";
 import { shellQuote } from "./shell";
@@ -67,6 +68,7 @@ export function externalEnvValues(state: InstallerState): Record<string, string>
     WP_REDIS_SELECTIVE_FLUSH: "1",
     WP_REDIS_GRACEFUL: "1",
     ...backupEnvValues(state, "external"),
+    ...monitorEnvValues(state),
     ...effectivePerformanceValues(state),
     ...externalSalts()
   };
@@ -157,6 +159,10 @@ export function buildExternalTasks(state: InstallerState): InstallTask[] {
   const backupTimerTask = buildBackupTimerTask(state, "external");
   if (backupTimerTask) {
     tasks.push(backupTimerTask);
+  }
+  const monitorTimerTask = buildMonitorTimerTask(state, "external");
+  if (monitorTimerTask) {
+    tasks.push(monitorTimerTask);
   }
   const hardenTask = buildHardenTask(state);
   if (hardenTask) {

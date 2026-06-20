@@ -83,6 +83,7 @@ describe("buildExternalTasks", () => {
       "backup-dir",
       "first-backup",
       "backup-timer",
+      "monitor-timer",
       "harden"
     ]);
   });

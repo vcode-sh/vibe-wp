@@ -1,4 +1,5 @@
 import { backupEnvValues } from "./backup";
+import { monitorEnvValues } from "./monitor";
 import { effectivePerformanceValues } from "./performance";
 import { randomHex, randomPassword, slugFromDomain } from "./secrets";
 import type { InstallerState } from "./types";
@@ -59,6 +60,7 @@ export function productionEnvValues(state: InstallerState): Record<string, strin
     GOOGLE_API_KEY: state.aiGoogleKey,
     ANTHROPIC_API_KEY: state.aiAnthropicKey,
     ...backupEnvValues(state, "prod"),
+    ...monitorEnvValues(state),
     ...effectivePerformanceValues(state),
     ...sharedSecrets(state, "prod")
   };
@@ -85,6 +87,7 @@ export function stagingEnvValues(state: InstallerState): Record<string, string> 
     GOOGLE_API_KEY: state.aiGoogleKey,
     ANTHROPIC_API_KEY: state.aiAnthropicKey,
     ...backupEnvValues(state, "stage"),
+    ...monitorEnvValues(state),
     ...effectivePerformanceValues(state),
     ...sharedSecrets(state, "stage")
   };

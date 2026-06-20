@@ -5,6 +5,7 @@ import { buildDnsPreflightTask } from "./dns-preflight";
 import { buildExternalTasks } from "./external-plan";
 import { buildHardenTask } from "./harden";
 import { buildHostInstallTasks } from "./host-install";
+import { buildMonitorTimerTask } from "./monitor";
 import {
   buildEnvFiles,
   buildManageTasks,
@@ -191,6 +192,10 @@ function buildTasks(state: InstallerState): InstallTask[] {
   const backupTimerTask = buildBackupTimerTask(state, "prod");
   if (backupTimerTask) {
     tasks.push(backupTimerTask);
+  }
+  const monitorTimerTask = buildMonitorTimerTask(state, "prod");
+  if (monitorTimerTask) {
+    tasks.push(monitorTimerTask);
   }
   const hardenTask = buildHardenTask(state);
   if (hardenTask) {

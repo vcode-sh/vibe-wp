@@ -3,8 +3,9 @@ import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
 import { devModeOverride } from "./app/dev-step";
 import { applyCliState } from "./cli/apply-cli-state";
-import { DEFAULT_INSTALL_DIR, parseArgs, usage } from "./cli/args";
+import { DEFAULT_INSTALL_DIR, parseArgs } from "./cli/args";
 import { runHeadlessJson } from "./cli/headless-cli";
+import { usage } from "./cli/usage";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
 import { buildInstallPlan } from "./core/install-plan";
@@ -59,6 +60,9 @@ async function main() {
   }
   if (options.noHarden) {
     state.hardenServer = false;
+  }
+  if (options.noMonitor) {
+    state.monitorEnabled = false;
   }
   if (options.noCaddy) {
     state.installCaddy = false;

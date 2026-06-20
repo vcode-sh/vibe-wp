@@ -43,6 +43,12 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
   applyExternalServices(state, options);
   applyPerfOverrides(state, options);
   applyBackup(state, options);
+  if (options.monitorEmail) {
+    state.monitorEmail = options.monitorEmail;
+  }
+  if (options.monitorWebhook) {
+    state.monitorWebhookUrl = options.monitorWebhook;
+  }
 
   return state;
 }

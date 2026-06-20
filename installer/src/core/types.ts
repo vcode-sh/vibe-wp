@@ -31,9 +31,12 @@ export interface InstallerOptions {
   installDir: string;
   local: boolean;
   mode?: InstallMode;
+  monitorEmail?: string;
+  monitorWebhook?: string;
   noCaddy: boolean;
   noHarden: boolean;
   noHostInstall: boolean;
+  noMonitor: boolean;
   noWww: boolean;
   perfOverrides?: string[];
   r2AccessKeyId?: string;
@@ -107,6 +110,9 @@ export interface InstallerState {
   localSandbox: boolean;
   memoryOverrideMb: string;
   mode: InstallMode;
+  monitorEmail: string;
+  monitorEnabled: boolean;
+  monitorWebhookUrl: string;
   performanceCustom: boolean;
   performanceOverrides: Record<string, string>;
   performancePreset: PerformancePreset;

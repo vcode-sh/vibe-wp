@@ -22,6 +22,7 @@ type BooleanOption =
   | "noWww"
   | "noHostInstall"
   | "noHarden"
+  | "noMonitor"
   | "version"
   | "yes";
 type StringOption =
@@ -29,6 +30,8 @@ type StringOption =
   | "backupDir"
   | "domain"
   | "exportPlan"
+  | "monitorEmail"
+  | "monitorWebhook"
   | "r2AccountId"
   | "r2AccessKeyId"
   | "r2Bucket"
@@ -58,6 +61,7 @@ const booleanFlags = new Map<string, BooleanOption>([
   ["--no-www", "noWww"],
   ["--no-host-install", "noHostInstall"],
   ["--no-harden", "noHarden"],
+  ["--no-monitor", "noMonitor"],
   ["--version", "version"],
   ["--yes", "yes"]
 ]);
@@ -65,6 +69,8 @@ const booleanFlags = new Map<string, BooleanOption>([
 const stringFlags = new Map<string, StringOption>([
   ["--admin-email", "adminEmail"],
   ["--backup-dir", "backupDir"],
+  ["--monitor-email", "monitorEmail"],
+  ["--monitor-webhook", "monitorWebhook"],
   ["--r2-account", "r2AccountId"],
   ["--r2-access-key", "r2AccessKeyId"],
   ["--r2-bucket", "r2Bucket"],
@@ -99,6 +105,7 @@ export function parseArgs(argv: string[]): InstallerOptions {
     noWww: false,
     noHostInstall: false,
     noHarden: false,
+    noMonitor: false,
     version: false,
     help: false,
     headlessJson: false
@@ -172,45 +179,4 @@ function requireValue(argv: string[], index: number, flag: string): string {
     throw new Error(`${flag} requires a value.`);
   }
   return value;
-}
-
-export function usage(): string {
-  return `vibe-wp-installer
-
-Usage:
-  vibe-wp-installer
-  vibe-wp-installer --dry-run
-  vibe-wp-installer --local
-  vibe-wp-installer --export-plan install-plan.json
-  vibe-wp-installer --headless install-plan.json [--yes]
-  echo '<json>' | vibe-wp-installer --headless-json
-
-Options:
-  --domain <host>        Production domain (derives slug, ports, staging, title)
-  --admin-email <email>  WordPress admin email
-  --staging-domain <h>   Staging domain (enables staging)
-  --mode <mode>          Install mode: new-site, manage-existing,
-                         remove-existing, update-existing, staging-only,
-                         external-services
-  --install-dir <path>   Install directory, default /opt/vibe-wp
-  --repo <url>           Vibe WP git repository
-  --ref <ref>            Git branch or tag, default main
-  --local                Use a safe local sandbox for macOS/UI testing
-  --no-caddy             Do not manage Caddy
-  --no-www               Do not add a www. alias or require its DNS
-  --no-host-install      Do not install missing host packages
-  --no-harden            Do not apply server hardening (firewall, fail2ban, auto-updates)
-  --ext-db-host <h:port> External MariaDB host (external-services mode)
-  --ext-db-name <name>   External database name
-  --ext-db-user <user>   External database user
-  --ext-db-password <pw> External database password
-  --ext-redis-host <h>   External Redis host
-  --ext-redis-port <p>   External Redis port
-  --ext-redis-password <pw> External Redis password
-  --perf KEY=VALUE       Override a performance setting (repeatable),
-                         e.g. --perf REDIS_MAXMEMORY=512mb
-  --compact              Force compact UI
-  --ascii                Avoid Unicode UI characters
-  --version              Print version
-`;
 }
