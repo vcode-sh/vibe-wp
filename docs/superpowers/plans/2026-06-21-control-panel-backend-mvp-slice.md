@@ -964,7 +964,7 @@ git commit -m "feat(panel): admin plugin + access-control roles + first-user boo
 - Consumes: `o` (`orpc/base`), `protectedProcedure`.
 - Produces: `operatorProcedure`, `adminProcedure`.
 
-- [ ] **Step 1: Append to `packages/api/src/procedures.ts`:**
+- [x] **Step 1: Append to `packages/api/src/procedures.ts`:**
 
 ```ts
 import { ORPCError } from "@orpc/server";
@@ -985,7 +985,7 @@ export const operatorProcedure = protectedProcedure.use(requireRole("operator"))
 export const adminProcedure = protectedProcedure.use(requireRole("admin"));
 ```
 
-- [ ] **Step 2: Verify + commit** — `bun run check-types`, `bun run check`.
+- [x] **Step 2: Verify + commit** — `bun run check-types`, `bun run check`.
 
 ```bash
 git add control-panel/packages/api/src/procedures.ts
