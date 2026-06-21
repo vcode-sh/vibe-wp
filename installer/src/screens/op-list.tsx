@@ -1,4 +1,5 @@
 import { TextAttributes } from "@opentui/core";
+import { useState } from "react";
 import { color, type ThemeColor } from "../app/theme";
 import { space } from "../app/tokens";
 import { useGlyphs } from "../components/glyph-context";
@@ -126,13 +127,17 @@ function OpRow({
   onSelect?: (id: string) => void;
 }) {
   const glyphs = useGlyphs();
+  const [hovered, setHovered] = useState(false);
   const clickHandlers = onSelect ? clickProps(() => onSelect(op.id)) : {};
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI <box> is a terminal renderable; hover mirrors the choice-row affordance so clickable rows are discoverable.
     <box
       alignItems="stretch"
-      backgroundColor={active ? color("selectionBg") : undefined}
+      backgroundColor={active || hovered ? color("selectionBg") : undefined}
       flexDirection="row"
       height={1}
+      onMouseOut={() => setHovered(false)}
+      onMouseOver={() => setHovered(true)}
       {...clickHandlers}
     >
       <box backgroundColor={active ? color("accentBar") : undefined} flexShrink={0} width={1} />
@@ -142,7 +147,7 @@ function OpRow({
         </text>
         <text
           attributes={active ? TextAttributes.BOLD : TextAttributes.NONE}
-          fg={color(active ? "text" : "muted")}
+          fg={color(active || hovered ? "text" : "muted")}
           truncate
         >
           {op.label}

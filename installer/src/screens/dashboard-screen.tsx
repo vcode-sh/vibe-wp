@@ -161,7 +161,11 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
         <StatusCards health={health} lastBackup={lastBackup} state={state} twoPerRow={twoPerRow} />
       )}
       {restore ? (
-        <BackupPicker index={restore.index} items={restore.items} />
+        <BackupPicker
+          index={restore.index}
+          items={restore.items}
+          onPick={(i) => setRestore((r) => (r ? { ...r, index: i } : r))}
+        />
       ) : (
         <OpList
           confirmId={confirmId}

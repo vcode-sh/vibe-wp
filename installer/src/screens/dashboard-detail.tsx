@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import { color } from "../app/theme";
 import { space } from "../app/tokens";
 import { useGlyphs } from "../components/glyph-context";
+import { clickProps } from "../components/mouse";
 import { Panel } from "../components/panel";
 import { Spinner } from "../components/spinner";
 import type { ManageOperation } from "../core/manage-operations";
@@ -93,13 +94,23 @@ function statusLine(status: TaskStatus | "idle", op: ManageOperation): string {
 }
 
 // Restore picker: a small list whose first row is always "Cancel" so the owner
-// can back out without touching their live site.
-export function BackupPicker({ items, index }: { items: string[]; index: number }) {
+// can back out without touching their live site. Clicking a row only selects it
+// (highlights) — running the restore still requires Enter, so a stray click can
+// never overwrite the live site.
+export function BackupPicker({
+  items,
+  index,
+  onPick
+}: {
+  items: string[];
+  index: number;
+  onPick?: (index: number) => void;
+}) {
   const glyphs = useGlyphs();
   return (
     <box flexDirection="column" gap={space.xs}>
       <text attributes={TextAttributes.BOLD} fg={color("danger")} height={1} truncate>
-        {glyphs.warn} Restoring replaces your live site. Pick a backup, or Cancel:
+        {glyphs.warn} Restoring replaces your live site. Pick a backup, then Enter; or Cancel:
       </text>
       {items.map((item, i) => (
         <PickerRow
@@ -108,13 +119,24 @@ export function BackupPicker({ items, index }: { items: string[]; index: number 
           // biome-ignore lint/suspicious/noArrayIndexKey: list is positional
           key={`${item}-${i}`}
           label={item}
+          onSelect={onPick ? () => onPick(i) : undefined}
         />
       ))}
     </box>
   );
 }
 
-function PickerRow({ active, cancel, label }: { active: boolean; cancel: boolean; label: string }) {
+function PickerRow({
+  active,
+  cancel,
+  label,
+  onSelect
+}: {
+  active: boolean;
+  cancel: boolean;
+  label: string;
+  onSelect?: () => void;
+}) {
   const tone: Parameters<typeof color>[0] = cancel ? "muted" : "text";
   return (
     <box
@@ -122,6 +144,7 @@ function PickerRow({ active, cancel, label }: { active: boolean; cancel: boolean
       backgroundColor={active ? color("selectionBg") : undefined}
       flexDirection="row"
       height={1}
+      {...(onSelect ? clickProps(onSelect) : {})}
     >
       <box backgroundColor={active ? color("accentBar") : undefined} flexShrink={0} width={1} />
       <box flexDirection="row" paddingX={1}>
