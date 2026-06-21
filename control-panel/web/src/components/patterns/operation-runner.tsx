@@ -1,5 +1,4 @@
 import { Progress } from "@control-panel/ui/components/progress";
-import { ScrollArea } from "@control-panel/ui/components/scroll-area";
 import { CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -9,6 +8,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function OperationRunner({
 	open,
