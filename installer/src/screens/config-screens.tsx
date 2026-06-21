@@ -7,12 +7,9 @@ import { NoteBox } from "../components/section";
 export function AiScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-        Optional — press Enter to skip.
-      </text>
       <text fg={color("muted")} wrapMode="word">
-        The WordPress AI plugin installs either way. Only paste a provider key if you already have
-        one; you can always add them later.
+        Optional — press Enter to skip. The WordPress AI plugin installs either way; only paste a
+        provider key if you already have one. You can always add them later.
       </text>
       <Field
         focused={focusIndex === 0}

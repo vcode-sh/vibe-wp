@@ -124,7 +124,7 @@ export function AdminScreen({ state, update, focusIndex, setFocusIndex, next }: 
       />
       <Field
         focused={focusIndex === 3}
-        hint="Auto-generated and strong. Saved to your env file — keep it safe to log in."
+        hint="strong, auto-generated — saved to your env file to log in with"
         label="Admin password"
         onFocus={() => setFocusIndex(3)}
         onInput={(value) => update("adminPassword", value)}

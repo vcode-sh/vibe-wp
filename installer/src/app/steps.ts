@@ -62,7 +62,7 @@ export const steps: Step[] = [
   {
     id: "dashboard",
     focusCount: 1,
-    title: "Manage",
+    title: "Control panel",
     help: "Run safe checks and maintenance on the selected site, in plain language."
   },
   {

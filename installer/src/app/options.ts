@@ -1,43 +1,10 @@
-import type { BackupPolicy, BackupSchedule, InstallMode, PerformancePreset } from "../core/types";
+import type { BackupPolicy, BackupSchedule, PerformancePreset } from "../core/types";
 
 interface Option<T> {
   description: string;
   name: string;
   value: T;
 }
-
-export const modeOptions: Option<InstallMode>[] = [
-  {
-    name: "Create a new WordPress",
-    description: "Production, optional staging, isolated ports, and tuned env files.",
-    value: "new-site"
-  },
-  {
-    name: "Manage detected site",
-    description: "Run status, smoke checks, and performance diagnostics.",
-    value: "manage-existing"
-  },
-  {
-    name: "Remove detected site",
-    description: "Create a safety backup, then stop containers without deleting data.",
-    value: "remove-existing"
-  },
-  {
-    name: "Update existing checkout",
-    description: "Keeps current directory and refreshes config.",
-    value: "update-existing"
-  },
-  {
-    name: "Create staging only",
-    description: "Attach staging to an existing production site.",
-    value: "staging-only"
-  },
-  {
-    name: "Use external database and Redis",
-    description: "Bring your own MariaDB and Redis — only WordPress and Nginx run in Docker.",
-    value: "external-services"
-  }
-];
 
 export const performanceOptions: Option<PerformancePreset>[] = [
   { name: "Conservative", description: "Small VPS, lower memory pressure.", value: "conservative" },
