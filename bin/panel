@@ -52,26 +52,29 @@ install_panel() {
   fi
 
   # Build
-  $SUDO install -d -m 0755 "$PANEL_DIR" "$PANEL_DIR/data"
+  $SUDO install -d -m 0755 "$PANEL_DIR"
+  $SUDO install -d -m 0700 "$PANEL_DIR/data"
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
   printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
   ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build )
   $SUDO rm -rf "$PANEL_DIR/app"
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
 
-  # Env
+  # Env (contains BETTER_AUTH_SECRET — keep it root-only, never world-readable)
   SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
-  printf '%s\n' \
+  ( umask 077 && printf '%s\n' \
     "DATABASE_URL=file:$PANEL_DIR/data/panel.db" \
     "BETTER_AUTH_SECRET=$SECRET" \
     "BETTER_AUTH_URL=https://$DOMAIN" \
     "CORS_ORIGIN=https://$DOMAIN" \
     "NODE_ENV=production" \
     "PANEL_SITES_ROOTS=/opt:/srv" \
-    | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null
+    | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null )
+  $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
 
-  # DB migrate
+  # DB migrate (the auth DB holds password hashes + sessions — keep it root-only)
   ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push )
+  $SUDO chmod 600 "$PANEL_DIR/data/panel.db" 2>/dev/null || true
 
   # systemd service (Bun runtime). The MVP runs as root for full host access
   # to site operations (backup writes, docker), matching the existing
