@@ -1,6 +1,6 @@
-import { Button } from "@control-panel/ui/components/button";
-import { Card } from "@control-panel/ui/components/card";
 import { Check, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 import type { NeedItem } from "@/data/types";
 

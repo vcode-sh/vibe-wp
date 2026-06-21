@@ -6,10 +6,9 @@ import {
 	BreadcrumbSeparator,
 } from "@control-panel/ui/components/breadcrumb";
 import { Separator } from "@control-panel/ui/components/separator";
-import { SidebarTrigger } from "@control-panel/ui/components/sidebar";
 import { Fragment } from "react";
-
 import { ModeToggle } from "@/components/mode-toggle";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export function TopBar({ crumbs }: { crumbs: string[] }) {
 	return (

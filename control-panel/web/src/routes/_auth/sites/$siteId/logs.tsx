@@ -1,17 +1,12 @@
-import { Badge } from "@control-panel/ui/components/badge";
 import { ScrollArea } from "@control-panel/ui/components/scroll-area";
-import {
-	Tabs,
-	TabsContent,
-	TabsList,
-	TabsTrigger,
-} from "@control-panel/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { TopBar } from "@/components/top-bar";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { logsQuery } from "@/data/queries";
 import type { LogLine } from "@/data/types";
 

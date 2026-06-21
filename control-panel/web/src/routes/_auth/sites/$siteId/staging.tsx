@@ -1,11 +1,3 @@
-import { Badge } from "@control-panel/ui/components/badge";
-import { Button } from "@control-panel/ui/components/button";
-import {
-	Card,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "@control-panel/ui/components/card";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -14,6 +6,9 @@ import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { TopBar } from "@/components/top-bar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stagingQuery } from "@/data/queries";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/staging")({

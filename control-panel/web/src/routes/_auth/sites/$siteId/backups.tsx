@@ -1,5 +1,3 @@
-import { Badge } from "@control-panel/ui/components/badge";
-import { Button } from "@control-panel/ui/components/button";
 import {
 	Table,
 	TableBody,
@@ -18,6 +16,8 @@ import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { TopBar } from "@/components/top-bar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/data/derive";
 import { backupsQuery } from "@/data/queries";
 import type { BackupRecord } from "@/data/types";

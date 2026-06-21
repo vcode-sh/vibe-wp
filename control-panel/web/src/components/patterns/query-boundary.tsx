@@ -1,6 +1,6 @@
-import { Button } from "@control-panel/ui/components/button";
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 export function QueryBoundary({
 	isError,

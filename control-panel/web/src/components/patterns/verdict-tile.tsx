@@ -1,10 +1,10 @@
-import { Card } from "@control-panel/ui/components/card";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@control-panel/ui/components/tooltip";
 import { HelpCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 import { verdictTone } from "@/data/derive";
 import type { MetricTile } from "@/data/types";

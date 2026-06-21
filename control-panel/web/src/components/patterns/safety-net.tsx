@@ -1,6 +1,6 @@
-import { Button } from "@control-panel/ui/components/button";
-import { Card, CardHeader, CardTitle } from "@control-panel/ui/components/card";
 import { CopyCheck, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 
 import type { SiteOverview } from "@/data/types";
 

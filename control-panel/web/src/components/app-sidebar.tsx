@@ -1,14 +1,3 @@
-import {
-	Sidebar,
-	SidebarContent,
-	SidebarFooter,
-	SidebarGroup,
-	SidebarGroupLabel,
-	SidebarHeader,
-	SidebarMenu,
-	SidebarMenuButton,
-	SidebarMenuItem,
-} from "@control-panel/ui/components/sidebar";
 import { Link, useMatchRoute, useParams } from "@tanstack/react-router";
 import {
 	Activity,
@@ -20,8 +9,18 @@ import {
 	ShieldCheck,
 } from "lucide-react";
 import type { ComponentType } from "react";
-
 import { SiteSwitcher } from "@/components/site-switcher";
+import {
+	Sidebar,
+	SidebarContent,
+	SidebarFooter,
+	SidebarGroup,
+	SidebarGroupLabel,
+	SidebarHeader,
+	SidebarMenu,
+	SidebarMenuButton,
+	SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/user-menu";
 
 interface SiteLink {

@@ -1,14 +1,14 @@
+import { Progress } from "@control-panel/ui/components/progress";
+import { ScrollArea } from "@control-panel/ui/components/scroll-area";
+import { CheckCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
 	DialogTitle,
-} from "@control-panel/ui/components/dialog";
-import { Progress } from "@control-panel/ui/components/progress";
-import { ScrollArea } from "@control-panel/ui/components/scroll-area";
-import { CheckCircle2 } from "lucide-react";
-import { useEffect, useState } from "react";
+} from "@/components/ui/dialog";
 
 export function OperationRunner({
 	open,

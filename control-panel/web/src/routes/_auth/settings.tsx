@@ -1,17 +1,11 @@
-import { Button } from "@control-panel/ui/components/button";
-import {
-	Card,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "@control-panel/ui/components/card";
-import { Input } from "@control-panel/ui/components/input";
 import { Label } from "@control-panel/ui/components/label";
 import { createFileRoute } from "@tanstack/react-router";
-
 import { ModeToggle } from "@/components/mode-toggle";
 import { PageHeader } from "@/components/patterns/page-header";
 import { TopBar } from "@/components/top-bar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/_auth/settings")({
 	component: SettingsPage,

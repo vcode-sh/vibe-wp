@@ -1,17 +1,12 @@
-import { Badge } from "@control-panel/ui/components/badge";
-import { Button } from "@control-panel/ui/components/button";
-import {
-	Card,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "@control-panel/ui/components/card";
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Database, Plus } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { TopBar } from "@/components/top-bar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { relativeTime, verdictTone } from "@/data/derive";
 import { serverInfoQuery, sitesQuery } from "@/data/queries";
 import type { ServerInfo, SiteSummary } from "@/data/types";

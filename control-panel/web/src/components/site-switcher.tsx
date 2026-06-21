@@ -1,4 +1,7 @@
 import { Avatar, AvatarFallback } from "@control-panel/ui/components/avatar";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronsUpDown, Plus } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -7,11 +10,8 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-} from "@control-panel/ui/components/dropdown-menu";
-import { SidebarMenuButton } from "@control-panel/ui/components/sidebar";
-import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDown, Plus } from "lucide-react";
+} from "@/components/ui/dropdown-menu";
+import { SidebarMenuButton } from "@/components/ui/sidebar";
 
 import { sitesQuery } from "@/data/queries";
 

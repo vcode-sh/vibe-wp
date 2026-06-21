@@ -1,4 +1,4 @@
-import { Card, CardHeader, CardTitle } from "@control-panel/ui/components/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { relativeTime } from "@/data/derive";
 import type { ActivityEntry } from "@/data/types";

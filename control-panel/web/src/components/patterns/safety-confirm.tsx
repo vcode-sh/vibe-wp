@@ -7,8 +7,8 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-} from "@control-panel/ui/components/alert-dialog";
-import { Badge } from "@control-panel/ui/components/badge";
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 
 export function SafetyConfirm({
 	open,

@@ -1,11 +1,7 @@
-import {
-	SidebarInset,
-	SidebarProvider,
-} from "@control-panel/ui/components/sidebar";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandMenu } from "@/components/command-menu";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth")({

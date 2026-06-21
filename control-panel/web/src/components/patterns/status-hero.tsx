@@ -1,5 +1,5 @@
-import { Card } from "@control-panel/ui/components/card";
 import { Check } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 import { verdictTone } from "@/data/derive";
 import type { Verdict } from "@/data/types";
