@@ -8,15 +8,15 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 
-import Loader from "./loader";
+import { Loader } from "./loader";
 
-export default function SignInForm({
+export function SignInForm({
 	onSwitchToSignUp,
 }: {
 	onSwitchToSignUp: () => void;
 }) {
 	const navigate = useNavigate({
-		from: "/",
+		from: "/login",
 	});
 	const { isPending } = authClient.useSession();
 
