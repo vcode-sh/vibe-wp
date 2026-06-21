@@ -10,6 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
+import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { TopBar } from "@/components/top-bar";
 import { serverInfoQuery } from "@/data/queries";
@@ -35,28 +36,37 @@ function ServerPage() {
 					subtitle="The VPS shared by all your sites."
 					title="Server & security"
 				/>
-				<div className="grid gap-4 sm:grid-cols-2">
-					<Card>
-						<CardHeader>
-							<CardTitle className="text-sm">Host</CardTitle>
-						</CardHeader>
-						<CardContent className="grid gap-1 text-sm">
-							<div>{server.data?.vps ?? "—"}</div>
-							<div>Sites: {server.data?.siteCount ?? "—"}</div>
-							<div>Disk used: {server.data?.diskPercent ?? "—"}%</div>
-						</CardContent>
-					</Card>
-					<Card>
-						<CardHeader>
-							<CardTitle className="text-sm">Security</CardTitle>
-						</CardHeader>
-						<CardContent className="grid gap-1 text-sm">
-							<div className="text-success">Firewall: on</div>
-							<div className="text-success">fail2ban: active</div>
-							<div className="text-success">Auto-updates: on</div>
-						</CardContent>
-					</Card>
-				</div>
+				<QueryBoundary
+					errorMessage="Couldn't load server info."
+					hasData={Boolean(server.data)}
+					isError={server.isError}
+					isLoading={server.isLoading}
+					onRetry={() => server.refetch()}
+					skeletonClassName="h-36 w-full"
+				>
+					<div className="grid gap-4 sm:grid-cols-2">
+						<Card>
+							<CardHeader>
+								<CardTitle className="text-sm">Host</CardTitle>
+							</CardHeader>
+							<CardContent className="grid gap-1 text-sm">
+								<div>{server.data?.vps ?? "—"}</div>
+								<div>Sites: {server.data?.siteCount ?? "—"}</div>
+								<div>Disk used: {server.data?.diskPercent ?? "—"}%</div>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader>
+								<CardTitle className="text-sm">Security</CardTitle>
+							</CardHeader>
+							<CardContent className="grid gap-1 text-sm">
+								<div className="text-success">Firewall: on</div>
+								<div className="text-success">fail2ban: active</div>
+								<div className="text-success">Auto-updates: on</div>
+							</CardContent>
+						</Card>
+					</div>
+				</QueryBoundary>
 				<Card className="border-destructive/40">
 					<CardContent className="flex items-center justify-between py-4">
 						<div className="text-sm">
