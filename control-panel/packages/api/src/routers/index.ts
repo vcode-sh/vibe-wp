@@ -6,6 +6,7 @@ import { healthRouter } from "./health";
 import { operationsRouter } from "./operations";
 import { serverRouter } from "./server";
 import { sitesRouter } from "./sites";
+import { stagingRouter } from "./staging";
 
 export const appRouter = {
 	...healthRouter,
@@ -14,6 +15,7 @@ export const appRouter = {
 	...backupsRouter,
 	...operationsRouter,
 	...serverRouter,
+	...stagingRouter,
 };
 
 export type AppRouter = typeof appRouter;

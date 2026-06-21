@@ -381,7 +381,7 @@ git commit -m "feat(panel): real serverInfo + serverDoctor"
 **Interfaces:**
 - Produces: `healthReport({ siteId }) → HealthReport`; `stagingInfo({ siteId }) → StagingInfo`.
 
-- [ ] **Step 1: Create `routers/health.ts`** — tiles from `smoke --json`, perf numbers from `perf-report --json`, uptime from `monitor --json`, `alertChannels: []` (panel config — Plan C/settings later):
+- [x] **Step 1: Create `routers/health.ts`** — tiles from `smoke --json`, perf numbers from `perf-report --json`, uptime from `monitor --json`, `alertChannels: []` (panel config — Plan C/settings later):
 
 ```ts
 import { z } from "zod";
@@ -425,7 +425,7 @@ export const healthRouter = {
 ```
 (Replace the inline `await import("@orpc/server")` with a top-level `import { ORPCError } from "@orpc/server"` — shown inline only to flag the throw. `tlsDays` stays `0` in Plan A unless a check exposes it; the UI already handles a number.)
 
-- [ ] **Step 2: Create `routers/staging.ts`** — read `stage.WP_HOME`:
+- [x] **Step 2: Create `routers/staging.ts`** — read `stage.WP_HOME`:
 
 ```ts
 import { z } from "zod";
@@ -451,7 +451,7 @@ export const stagingRouter = {
 };
 ```
 
-- [ ] **Step 3: Spread both into `routers/index.ts`. Step 4: Verify + commit:**
+- [x] **Step 3: Spread both into `routers/index.ts`. Step 4: Verify + commit:**
 
 ```bash
 git add control-panel/packages/api/src/routers/health.ts control-panel/packages/api/src/routers/staging.ts control-panel/packages/api/src/routers/index.ts
