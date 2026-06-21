@@ -25,7 +25,7 @@ export function SiteSwitcher({ activeSiteId }: { activeSiteId?: string }) {
 			<DropdownMenuTrigger
 				render={
 					<SidebarMenuButton
-						className="data-[state=open]:bg-sidebar-accent"
+						className="data-[popup-open]:bg-sidebar-accent"
 						size="lg"
 					/>
 				}

@@ -24,7 +24,7 @@ export function StatusHero({
 				<Check className="size-5" />
 			</div>
 			<div className="min-w-0">
-				<h2 className="font-semibold text-xl tracking-tight">{headline}</h2>
+				<h1 className="font-semibold text-xl tracking-tight">{headline}</h1>
 				<p className="mt-1 flex items-center gap-2 text-muted-foreground text-sm">
 					<span className={`inline-flex items-center gap-1 ${tone.text}`}>
 						<span
@@ -37,9 +37,9 @@ export function StatusHero({
 			</div>
 			{calm ? (
 				<div
-					className={`ml-auto whitespace-nowrap rounded-full border px-3 py-1.5 text-sm ${tone.text} ${tone.bg}`}
+					className={`ml-auto inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm ${tone.text} ${tone.bg}`}
 				>
-					✓ Nothing needs you
+					<Check aria-hidden="true" className="size-4" /> Nothing needs you
 				</div>
 			) : null}
 		</Card>

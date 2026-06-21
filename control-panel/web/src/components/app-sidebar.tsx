@@ -22,7 +22,7 @@ import {
 import type { ComponentType } from "react";
 
 import { SiteSwitcher } from "@/components/site-switcher";
-import UserMenu from "@/components/user-menu";
+import { UserMenu } from "@/components/user-menu";
 
 interface SiteLink {
 	icon: ComponentType<{ className?: string }>;

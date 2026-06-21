@@ -19,8 +19,16 @@ export function VerdictTile({ tile }: { tile: MetricTile }) {
 				</span>
 				<Tooltip>
 					<TooltipTrigger
-						render={<HelpCircle className="size-3.5 text-muted-foreground" />}
-					/>
+						render={
+							<button
+								aria-label={tile.help}
+								className="inline-flex items-center rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+								type="button"
+							/>
+						}
+					>
+						<HelpCircle className="size-3.5" />
+					</TooltipTrigger>
 					<TooltipContent>{tile.help}</TooltipContent>
 				</Tooltip>
 			</div>

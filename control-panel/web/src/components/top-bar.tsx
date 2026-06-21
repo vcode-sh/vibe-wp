@@ -3,9 +3,11 @@ import {
 	BreadcrumbItem,
 	BreadcrumbList,
 	BreadcrumbPage,
+	BreadcrumbSeparator,
 } from "@control-panel/ui/components/breadcrumb";
 import { Separator } from "@control-panel/ui/components/separator";
 import { SidebarTrigger } from "@control-panel/ui/components/sidebar";
+import { Fragment } from "react";
 
 import { ModeToggle } from "@/components/mode-toggle";
 
@@ -17,17 +19,20 @@ export function TopBar({ crumbs }: { crumbs: string[] }) {
 			<Breadcrumb>
 				<BreadcrumbList>
 					{crumbs.map((c, i) => (
-						<BreadcrumbItem key={c}>
-							<BreadcrumbPage
-								className={
-									i === crumbs.length - 1
-										? "text-foreground"
-										: "text-muted-foreground"
-								}
-							>
-								{c}
-							</BreadcrumbPage>
-						</BreadcrumbItem>
+						<Fragment key={c}>
+							{i > 0 && <BreadcrumbSeparator />}
+							<BreadcrumbItem>
+								<BreadcrumbPage
+									className={
+										i === crumbs.length - 1
+											? "text-foreground"
+											: "text-muted-foreground"
+									}
+								>
+									{c}
+								</BreadcrumbPage>
+							</BreadcrumbItem>
+						</Fragment>
 					))}
 				</BreadcrumbList>
 			</Breadcrumb>

@@ -44,7 +44,7 @@ export function SafetyConfirm({
 				</p>
 				<AlertDialogFooter>
 					<AlertDialogCancel>Cancel</AlertDialogCancel>
-					<AlertDialogAction onClick={onConfirm}>
+					<AlertDialogAction autoFocus onClick={onConfirm}>
 						{confirmLabel}
 					</AlertDialogAction>
 				</AlertDialogFooter>

@@ -1,11 +1,13 @@
 import {
 	Dialog,
 	DialogContent,
+	DialogDescription,
 	DialogHeader,
 	DialogTitle,
 } from "@control-panel/ui/components/dialog";
 import { Progress } from "@control-panel/ui/components/progress";
 import { ScrollArea } from "@control-panel/ui/components/scroll-area";
+import { CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function OperationRunner({
@@ -40,16 +42,25 @@ export function OperationRunner({
 			<DialogContent className="max-w-lg">
 				<DialogHeader>
 					<DialogTitle>{title}</DialogTitle>
+					<DialogDescription>
+						Running operation — {lines.length} steps.
+					</DialogDescription>
 				</DialogHeader>
 				<Progress value={percent} />
-				<ScrollArea className="h-48 rounded-md border border-border bg-background p-3 font-mono text-xs">
+				<ScrollArea
+					aria-live="polite"
+					className="h-48 rounded-md border border-border bg-background p-3 font-mono text-xs"
+				>
 					{lines.slice(0, shown).map((line) => (
 						<div className="text-muted-foreground" key={line}>
 							{line}
 						</div>
 					))}
 					{shown >= lines.length ? (
-						<div className="text-success">✓ Done</div>
+						<div className="flex items-center gap-1 text-success">
+							<CheckCircle2 aria-hidden="true" className="size-3.5" />
+							<span>Done</span>
+						</div>
 					) : null}
 				</ScrollArea>
 			</DialogContent>
