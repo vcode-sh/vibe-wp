@@ -636,7 +636,7 @@ git commit -m "feat(panel): output parsers + site registry"
 - Consumes: `streamVibe` (Task 3), `findSite` (Task 4).
 - Produces: `LineStream` (`push(line)`, `end(status)`, `subscribe(): AsyncIterable<StreamEvent>` that **replays buffered lines then follows**); `startBackupJob(siteId): Promise<{ jobId }>`, `getJob(jobId)`, `streamJob(jobId): AsyncIterable<StreamEvent>`.
 
-- [ ] **Step 1: Write the failing test** `line-stream.test.ts`:
+- [x] **Step 1: Write the failing test** `line-stream.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -680,9 +680,9 @@ describe("LineStream", () => {
 });
 ```
 
-- [ ] **Step 2: Run it — FAIL.**
+- [x] **Step 2: Run it — FAIL.**
 
-- [ ] **Step 3: Implement `line-stream.ts`:**
+- [x] **Step 3: Implement `line-stream.ts`:**
 
 ```ts
 import type { JobStatus, StreamEvent } from "@control-panel/api/contract";
@@ -731,9 +731,9 @@ export class LineStream {
 }
 ```
 
-- [ ] **Step 4: Run it — PASS.**
+- [x] **Step 4: Run it — PASS.**
 
-- [ ] **Step 5: Implement `jobs.ts`** (in-memory registry; persistence to the `jobs` table is wired in Task 9):
+- [x] **Step 5: Implement `jobs.ts`** (in-memory registry; persistence to the `jobs` table is wired in Task 9):
 
 ```ts
 import type { Job, StreamEvent } from "@control-panel/api/contract";
@@ -795,7 +795,7 @@ export async function startBackupJob(siteId: string): Promise<{ jobId: string }>
 }
 ```
 
-- [ ] **Step 6: Verify + commit** — `bun run test` (line-stream PASS), `bun run check-types`, `bun run check`.
+- [x] **Step 6: Verify + commit** — `bun run test` (line-stream PASS), `bun run check-types`, `bun run check`.
 
 ```bash
 git add control-panel/server/src/core-bridge/line-stream.ts control-panel/server/src/core-bridge/line-stream.test.ts control-panel/server/src/core-bridge/jobs.ts
