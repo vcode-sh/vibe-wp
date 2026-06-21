@@ -153,7 +153,7 @@ git commit -m "feat(panel): bin/vibe smoke+doctor-runtime --json + parseChecksJs
 **Interfaces:**
 - Produces: `monitor --quiet --json` → `{"status":"ok|warn|fail","failures":n,"warnings":n,"uptimePercent":number,"checks":[{name,ok}]}`; `perf-report --json` → `PerfReport`. `VIBE_OPS.monitorJson` (argv `["monitor","--quiet","--json"]`), `.perfJson`. `parseMonitorJson`, `parsePerfJson`. Contract `PerfReport`.
 
-- [ ] **Step 1: Add `PerfReport` to `contract.ts`** (the few fields the panel needs — Health page TTFB/cache):
+- [x] **Step 1: Add `PerfReport` to `contract.ts`** (the few fields the panel needs — Health page TTFB/cache):
 
 ```ts
 export interface PerfReport {
@@ -164,20 +164,20 @@ export interface PerfReport {
 }
 ```
 
-- [ ] **Step 2: Add `--json` to `bin/monitor`** — it already prints `ok:`/`warn:`/`fail:` lines + a summary and tracks `monitor_failures`/`monitor_warnings`. Add a `--json` flag that suppresses the lines and at the end prints `{"status":…,"failures":N,"warnings":N,"uptimePercent":U,"checks":[…]}` (same `json_str` + array pattern as Task 1). For `uptimePercent`, emit the HTTP-uptime value the monitor already computes if available, else `0`. `--json` implies `--quiet` semantics for line output.
+- [x] **Step 2: Add `--json` to `bin/monitor`** — it already prints `ok:`/`warn:`/`fail:` lines + a summary and tracks `monitor_failures`/`monitor_warnings`. Add a `--json` flag that suppresses the lines and at the end prints `{"status":…,"failures":N,"warnings":N,"uptimePercent":U,"checks":[…]}` (same `json_str` + array pattern as Task 1). For `uptimePercent`, emit the HTTP-uptime value the monitor already computes if available, else `0`. `--json` implies `--quiet` semantics for line output.
 
-- [ ] **Step 3: Add `--json` to `bin/perf-report`** — it builds sections via `section()`/`item()`/`block()`. Add a `--json` flag that, instead of the human layout, captures the specific values the panel needs and prints `{"ttfbMs":N,"cacheHitPercent":N,"opcacheHitPercent":N,"redisHitPercent":N}` (extract from the same measurements the human report already computes — TTFB from the site HTTP timing item, cache hit from the Nginx FastCGI section, opcache from the OPcache section, redis from the Redis section). Default human output unchanged.
+- [x] **Step 3: Add `--json` to `bin/perf-report`** — it builds sections via `section()`/`item()`/`block()`. Add a `--json` flag that, instead of the human layout, captures the specific values the panel needs and prints `{"ttfbMs":N,"cacheHitPercent":N,"opcacheHitPercent":N,"redisHitPercent":N}` (extract from the same measurements the human report already computes — TTFB from the site HTTP timing item, cache hit from the Nginx FastCGI section, opcache from the OPcache section, redis from the Redis section). Default human output unchanged.
 
-- [ ] **Step 4: Verify scripts** — `sh -n` + `shellcheck` on both → clean.
+- [x] **Step 4: Verify scripts** — `sh -n` + `shellcheck` on both → clean.
 
-- [ ] **Step 5: Extend `VIBE_OPS`:**
+- [x] **Step 5: Extend `VIBE_OPS`:**
 
 ```ts
 	monitorJson: { argv: ["monitor", "--quiet", "--json"], stream: false },
 	perfJson: { argv: ["perf-report", "--json"], stream: false },
 ```
 
-- [ ] **Step 6: Write failing tests** for `parseMonitorJson` + `parsePerfJson` (fixtures), then implement in `parse.ts`:
+- [x] **Step 6: Write failing tests** for `parseMonitorJson` + `parsePerfJson` (fixtures), then implement in `parse.ts`:
 
 ```ts
 import type { PerfReport } from "../contract";
@@ -216,7 +216,7 @@ export function parsePerfJson(stdout: string): PerfReport {
 
 (Test each with a valid fixture + a garbage string asserting the safe fallback. Run FAIL → implement → PASS.)
 
-- [ ] **Step 7: Verify + commit** (`check-types`/`check`/`test`):
+- [x] **Step 7: Verify + commit** (`check-types`/`check`/`test`):
 
 ```bash
 git add bin/monitor bin/perf-report control-panel/packages/api/src/core-bridge/exec.ts control-panel/packages/api/src/core-bridge/parse.ts control-panel/packages/api/src/core-bridge/parse.test.ts control-panel/packages/api/src/contract.ts

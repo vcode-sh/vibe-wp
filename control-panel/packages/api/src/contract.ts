@@ -86,6 +86,13 @@ export interface LogLine {
 	whenISO: string;
 }
 
+export interface PerfReport {
+	cacheHitPercent: number;
+	opcacheHitPercent: number;
+	redisHitPercent: number;
+	ttfbMs: number;
+}
+
 export type JobStatus =
 	| "queued"
 	| "running"

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { BackupRecord } from "../contract";
+import type { BackupRecord, PerfReport } from "../contract";
 
 export function parseEnvFile(text: string): Record<string, string> {
 	const out: Record<string, string> = {};
@@ -90,5 +90,53 @@ export function parseChecksJson(stdout: string): {
 		return checksEnvelope.parse(JSON.parse(stdout.trim()));
 	} catch {
 		return { passed: false, checks: [] };
+	}
+}
+
+const monitorEnvelope = z.object({
+	status: z.enum(["ok", "warn", "fail"]),
+	failures: z.number(),
+	warnings: z.number(),
+	uptimePercent: z.number(),
+	checks: z.array(z.object({ name: z.string(), ok: z.boolean() })),
+});
+
+export function parseMonitorJson(stdout: string): {
+	status: "ok" | "warn" | "fail";
+	failures: number;
+	warnings: number;
+	uptimePercent: number;
+	checks: { name: string; ok: boolean }[];
+} {
+	try {
+		return monitorEnvelope.parse(JSON.parse(stdout.trim()));
+	} catch {
+		return {
+			status: "fail",
+			failures: 0,
+			warnings: 0,
+			uptimePercent: 0,
+			checks: [],
+		};
+	}
+}
+
+const perfEnvelope = z.object({
+	ttfbMs: z.number(),
+	cacheHitPercent: z.number(),
+	opcacheHitPercent: z.number(),
+	redisHitPercent: z.number(),
+});
+
+export function parsePerfJson(stdout: string): PerfReport {
+	try {
+		return perfEnvelope.parse(JSON.parse(stdout.trim()));
+	} catch {
+		return {
+			ttfbMs: 0,
+			cacheHitPercent: 0,
+			opcacheHitPercent: 0,
+			redisHitPercent: 0,
+		};
 	}
 }

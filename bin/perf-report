@@ -4,6 +4,13 @@ set -u
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
 
+perf_json=0
+for _arg in "$@"; do
+  case "${_arg}" in
+    --json) perf_json=1 ;;
+  esac
+done
+
 first_headers="$(mktemp)"
 second_headers="$(mktemp)"
 trap 'rm -f "${first_headers}" "${second_headers}"' EXIT INT TERM
@@ -22,23 +29,31 @@ if [ -f "${VIBE_ENV_FILE}" ]; then
 fi
 
 section() {
-  printf '\n## %s\n' "$1"
+  if [ "${perf_json}" = "0" ]; then
+    printf '\n## %s\n' "$1"
+  fi
 }
 
 item() {
-  printf '  %-30s %s\n' "$1" "$2"
+  if [ "${perf_json}" = "0" ]; then
+    printf '  %-30s %s\n' "$1" "$2"
+  fi
 }
 
 block() {
-  if [ -n "$1" ]; then
-    printf '%s\n' "$1" | sed 's/^/  /'
-  else
-    printf '  no output\n'
+  if [ "${perf_json}" = "0" ]; then
+    if [ -n "$1" ]; then
+      printf '%s\n' "$1" | sed 's/^/  /'
+    else
+      printf '  no output\n'
+    fi
   fi
 }
 
 skip() {
-  item "$1" "skipped ($2)"
+  if [ "${perf_json}" = "0" ]; then
+    item "$1" "skipped ($2)"
+  fi
 }
 
 compose_config_error="$(vibe_compose config 2>&1 >/dev/null)"
@@ -105,6 +120,9 @@ if [ "${compose_config_ok}" -eq 1 ]; then
     skip "services" "no Compose services were resolved"
   fi
 fi
+
+opcache_output=""
+redis_output=""
 
 section "PHP OPcache"
 if service_running wordpress; then
@@ -368,9 +386,14 @@ else
   skip "Nginx cache config" "nginx service is not running"
 fi
 
+perf_ttfb_ms=0
+perf_cache_hit=0
 if command -v curl >/dev/null 2>&1; then
-  first_code="$(curl -sS -o /dev/null -D "${first_headers}" -w "%{http_code}" --max-time 10 "${site_url}" 2>/dev/null)"
+  first_result="$(curl -sS -o /dev/null -D "${first_headers}" -w "%{http_code} %{time_starttransfer}" --max-time 10 "${site_url}" 2>/dev/null)"
   if [ "$?" -eq 0 ]; then
+    first_code="${first_result%% *}"
+    first_ttfb="${first_result##* }"
+    perf_ttfb_ms="$(awk -v t="${first_ttfb}" 'BEGIN { printf "%d", t * 1000 }')"
     first_cache="$(grep -i '^X-FastCGI-Cache:' "${first_headers}" | tail -n 1 | cut -d: -f2- | tr -d '\r' | sed 's/^[[:space:]]*//')"
     [ -n "${first_cache}" ] || first_cache="header missing"
     item "first request" "HTTP ${first_code}, X-FastCGI-Cache=${first_cache}"
@@ -382,6 +405,7 @@ if command -v curl >/dev/null 2>&1; then
       item "second request" "HTTP ${second_code}, X-FastCGI-Cache=${second_cache}"
       if [ "${second_cache}" = "HIT" ]; then
         item "HIT check" "ok"
+        perf_cache_hit=100
       else
         item "HIT check" "not HIT"
       fi
@@ -410,4 +434,26 @@ wp_exec_without_object_cache theme list --fields=name,status,version --format=ta
   block "${wp_summary}"
 else
   skip "WordPress baseline" "wordpress service is not running"
+fi
+
+if [ "${perf_json}" = "1" ]; then
+  # Extract opcache hit rate (e.g. "runtime_hit_rate=99.12%").
+  perf_opcache_hit=0
+  _opc_line="$(printf '%s\n' "${opcache_output}" | grep '^runtime_hit_rate=' | tail -n 1)"
+  if [ -n "${_opc_line}" ]; then
+    _opc_val="${_opc_line#runtime_hit_rate=}"
+    _opc_val="${_opc_val%%%*}"
+    perf_opcache_hit="$(awk -v v="${_opc_val}" 'BEGIN { printf "%d", v + 0.5 }')"
+  fi
+
+  # Extract redis hit rate from keyspace_hits and keyspace_misses.
+  perf_redis_hit=0
+  _rhits="$(printf '%s\n' "${redis_output}" | grep '^keyspace_hits=' | tail -n 1 | cut -d= -f2)"
+  _rmiss="$(printf '%s\n' "${redis_output}" | grep '^keyspace_misses=' | tail -n 1 | cut -d= -f2)"
+  if [ -n "${_rhits}" ] && [ -n "${_rmiss}" ]; then
+    perf_redis_hit="$(awk -v h="${_rhits}" -v m="${_rmiss}" 'BEGIN { total = h + m; if (total > 0) printf "%d", (h / total) * 100; else printf "0" }')"
+  fi
+
+  printf '{"ttfbMs":%d,"cacheHitPercent":%d,"opcacheHitPercent":%d,"redisHitPercent":%d}\n' \
+    "${perf_ttfb_ms}" "${perf_cache_hit}" "${perf_opcache_hit}" "${perf_redis_hit}"
 fi

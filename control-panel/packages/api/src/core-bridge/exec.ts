@@ -8,6 +8,8 @@ export const VIBE_OPS = {
 	backup: { argv: ["backup"], stream: true },
 	smokeJson: { argv: ["smoke", "--json"], stream: false },
 	doctorJson: { argv: ["doctor-runtime", "--json"], stream: false },
+	monitorJson: { argv: ["monitor", "--quiet", "--json"], stream: false },
+	perfJson: { argv: ["perf-report", "--json"], stream: false },
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

@@ -19,6 +19,8 @@ describe("buildVibeArgv", () => {
 			"backup",
 			"backups",
 			"doctorJson",
+			"monitorJson",
+			"perfJson",
 			"smoke",
 			"smokeJson",
 		]);

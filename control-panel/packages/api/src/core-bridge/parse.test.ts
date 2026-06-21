@@ -5,6 +5,8 @@ import {
 	parseBackups,
 	parseChecksJson,
 	parseEnvFile,
+	parseMonitorJson,
+	parsePerfJson,
 	parseSmoke,
 } from "./parse";
 
@@ -66,5 +68,50 @@ describe("parseChecksJson", () => {
 	});
 	it("returns a safe empty result on garbage", () => {
 		expect(parseChecksJson("not json")).toEqual({ passed: false, checks: [] });
+	});
+});
+
+describe("parseMonitorJson", () => {
+	it("parses a valid monitor --json envelope", () => {
+		const r = parseMonitorJson(
+			'{"status":"warn","failures":0,"warnings":1,"uptimePercent":99.5,"checks":[{"name":"HTTP uptime","ok":true},{"name":"Disk space","ok":false}]}'
+		);
+		expect(r.status).toBe("warn");
+		expect(r.failures).toBe(0);
+		expect(r.warnings).toBe(1);
+		expect(r.uptimePercent).toBe(99.5);
+		expect(r.checks).toEqual([
+			{ name: "HTTP uptime", ok: true },
+			{ name: "Disk space", ok: false },
+		]);
+	});
+	it("returns safe fallback on garbage input", () => {
+		expect(parseMonitorJson("not json")).toEqual({
+			status: "fail",
+			failures: 0,
+			warnings: 0,
+			uptimePercent: 0,
+			checks: [],
+		});
+	});
+});
+
+describe("parsePerfJson", () => {
+	it("parses a valid perf-report --json envelope", () => {
+		const r = parsePerfJson(
+			'{"ttfbMs":142,"cacheHitPercent":87,"opcacheHitPercent":99,"redisHitPercent":95}'
+		);
+		expect(r.ttfbMs).toBe(142);
+		expect(r.cacheHitPercent).toBe(87);
+		expect(r.opcacheHitPercent).toBe(99);
+		expect(r.redisHitPercent).toBe(95);
+	});
+	it("returns safe fallback on garbage input", () => {
+		expect(parsePerfJson("not json")).toEqual({
+			ttfbMs: 0,
+			cacheHitPercent: 0,
+			opcacheHitPercent: 0,
+			redisHitPercent: 0,
+		});
 	});
 });

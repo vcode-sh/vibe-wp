@@ -7,10 +7,16 @@ VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/monitor.sh"
 
 monitor_quiet=0
+monitor_json=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --quiet)
+      monitor_quiet=1
+      shift
+      ;;
+    --json)
+      monitor_json=1
       monitor_quiet=1
       shift
       ;;
@@ -56,6 +62,46 @@ done
 
 vibe_require_env_file
 
+# JSON check tracking (used when --json is set).
+_json_check_count=0
+_json_names=""
+_json_oks=""
+_json_http_ok=0
+
+monitor_json_str() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
+
+monitor_json_record() {
+  _label="$1"
+  _okval="$2"
+  _json_check_count=$((_json_check_count + 1))
+  if [ -z "${_json_names}" ]; then
+    _json_names="${_label}"
+    _json_oks="${_okval}"
+  else
+    _json_names="${_json_names}	${_label}"
+    _json_oks="${_json_oks}	${_okval}"
+  fi
+}
+
+if [ "${monitor_json}" = "1" ]; then
+  # Override result helpers to accumulate checks for JSON output.
+  monitor_ok() {
+    monitor_json_record "$*" "1"
+  }
+  monitor_warn() {
+    monitor_warnings=$((monitor_warnings + 1))
+    monitor_report="${monitor_report}warn: $*\n"
+    monitor_json_record "$*" "0"
+  }
+  monitor_fail() {
+    monitor_failures=$((monitor_failures + 1))
+    monitor_report="${monitor_report}fail: $*\n"
+    monitor_json_record "$*" "0"
+  }
+fi
+
 # Run the checks. Each updates monitor_warnings/monitor_failures/monitor_report.
 monitor_check_http
 monitor_check_disk
@@ -95,6 +141,43 @@ if [ "${should_alert}" = "1" ]; then
   monitor_alert_telegram "${status}" "${report_body}"
   monitor_alert_webhook "${status}" "${summary}" "${report_body}"
   monitor_alert_email "${status}" "${subject}" "${report_body}"
+fi
+
+if [ "${monitor_json}" = "1" ]; then
+  # uptimePercent: 100 if HTTP check passed (first check), else 0.
+  _uptime_pct=0
+  if [ -n "${_json_oks}" ]; then
+    _first_ok="${_json_oks%%	*}"
+    if [ "${_first_ok}" = "1" ]; then
+      _uptime_pct=100
+    fi
+  fi
+  printf '{"status":"%s","failures":%d,"warnings":%d,"uptimePercent":%d,"checks":[' \
+    "${status}" "${monitor_failures}" "${monitor_warnings}" "${_uptime_pct}"
+  _ji=0
+  _jn_rest="${_json_names}"
+  _jo_rest="${_json_oks}"
+  while [ "${_ji}" -lt "${_json_check_count}" ]; do
+    _jn="${_jn_rest%%	*}"
+    _jo="${_jo_rest%%	*}"
+    if [ "${_jn_rest}" = "${_jn}" ]; then
+      _jn_rest=""
+      _jo_rest=""
+    else
+      _jn_rest="${_jn_rest#*	}"
+      _jo_rest="${_jo_rest#*	}"
+    fi
+    if [ "${_ji}" -gt 0 ]; then
+      printf ','
+    fi
+    _jok_val="false"
+    if [ "${_jo}" = "1" ]; then
+      _jok_val="true"
+    fi
+    printf '{"name":%s,"ok":%s}' "$(monitor_json_str "${_jn}")" "${_jok_val}"
+    _ji=$((_ji + 1))
+  done
+  printf ']}\n'
 fi
 
 if [ "${monitor_failures}" -gt 0 ]; then
