@@ -44,8 +44,8 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
             <Field
               focused={focusIndex === 2}
               grow
-              hint="how many to keep"
-              label="Keep last N backups"
+              hint="older ones are deleted"
+              label="How many backups to keep"
               onInput={(value) => update("backupRetention", value.replace(/[^0-9]/g, ""))}
               value={state.backupRetention}
             />
@@ -86,7 +86,7 @@ function R2Fields({
     <box flexDirection="column" gap={1}>
       <Field
         focused={focusIndex === 4}
-        hint="Cloudflare account ID (the R2 S3 endpoint host)"
+        hint="from your Cloudflare dashboard"
         label="R2 account ID"
         onInput={(value) => update("r2AccountId", value)}
         value={state.r2AccountId}

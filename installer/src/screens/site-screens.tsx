@@ -12,6 +12,7 @@ import {
   stripProtocol
 } from "../core/site-profile";
 import type { ExistingSite, HostFacts, InstallMode } from "../core/types";
+import { primaryFor, secondaryFor, siteActions } from "./site-actions";
 
 const SITE_MODES = new Set<InstallMode>([
   "manage-existing",
@@ -124,40 +125,13 @@ export function SitesScreen({ state, update, focusIndex, next }: ScreenProps) {
           />
         </Section>
       )}
-      <ActionRow onPrimary={next} primary="Open" secondary={secondaryFor(state.mode)} />
+      <ActionRow
+        onPrimary={next}
+        primary={primaryFor(state.mode)}
+        secondary={secondaryFor(state.mode)}
+      />
     </box>
   );
-}
-
-function siteActions(
-  site: ExistingSite
-): Array<{ name: string; description: string; value: string }> {
-  return [
-    {
-      name: "Manage",
-      description: "Health, backups, cache, restart, staging, restore.",
-      value: "manage-existing"
-    },
-    {
-      name: "Update",
-      description: "Refresh the checkout and restart in place.",
-      value: "update-existing"
-    },
-    ...(site.hasStaging
-      ? []
-      : [
-          {
-            name: "Add staging",
-            description: "Attach a private staging copy.",
-            value: "staging-only"
-          }
-        ]),
-    {
-      name: "Remove",
-      description: "Safety backup, then stop. Files kept (use --purge to delete).",
-      value: "remove-existing"
-    }
-  ];
 }
 
 function selectSite(update: ScreenProps["update"], site: ExistingSite): void {
@@ -199,20 +173,4 @@ function ServerLine({ host }: { host: HostFacts }) {
       {mark(Boolean(host.caddy))}
     </text>
   );
-}
-
-function secondaryFor(mode: InstallMode): string {
-  if (mode === "manage-existing") {
-    return "Open the site's control panel";
-  }
-  if (mode === "remove-existing") {
-    return "Safety backup first, then stop";
-  }
-  if (mode === "update-existing") {
-    return "Refresh and restart in place";
-  }
-  if (mode === "staging-only") {
-    return "Attach a staging copy";
-  }
-  return "Start a guided install";
 }

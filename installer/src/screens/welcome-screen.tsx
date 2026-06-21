@@ -7,7 +7,7 @@ import { useGlyphs } from "../components/glyph-context";
 import { ActionRow } from "../components/primitives";
 
 const FEATURES = [
-  "Nginx FastCGI cache",
+  "Nginx page cache",
   "Redis object cache",
   "Auto HTTPS",
   "Staging",

@@ -61,16 +61,17 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
 export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      <Section title="Checkout location">
+      <Section title="Install location">
         <Field
           focused={focusIndex === 0}
-          label="Install directory"
+          label="Install folder"
           onInput={(value) => update("installDir", value)}
           value={state.installDir}
         />
         <Field
           focused={focusIndex === 1}
-          label="Git ref"
+          hint="branch or tag — leave as-is unless told otherwise"
+          label="Version to deploy"
           onInput={(value) => update("ref", value)}
           value={state.ref}
         />

@@ -150,7 +150,7 @@ export function DashboardScreen({ state, plan }: ScreenProps) {
     <box flexDirection="column" flexGrow={1} gap={1}>
       <box alignItems="center" flexDirection="row" gap={space.md}>
         <text fg={color(running ? "success" : "warning")}>
-          {running ? glyphs.ok : glyphs.warn} {running ? "running" : "stopped"}
+          {running ? glyphs.ok : glyphs.pending} {running ? "running" : "stopped"}
         </text>
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
           {site}
