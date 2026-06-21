@@ -21,7 +21,7 @@ function SettingsPage() {
 	return (
 		<>
 			<TopBar crumbs={["Settings"]} />
-			<div className="mx-auto grid w-full max-w-3xl gap-4 p-6">
+			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					subtitle="Panel preferences and alert channels."
 					title="Settings"

@@ -15,7 +15,7 @@ export function TopBar({ crumbs }: { crumbs: string[] }) {
 	return (
 		<header className="flex h-14 shrink-0 items-center gap-2 border-border border-b px-4">
 			<SidebarTrigger className="-ml-1" />
-			<Separator className="mr-1 h-4" orientation="vertical" />
+			<Separator className="mx-1" orientation="vertical" />
 			<Breadcrumb>
 				<BreadcrumbList>
 					{crumbs.map((c, i) => (
