@@ -1,3 +1,4 @@
+import { redact } from "@control-panel/api/core-bridge/redact";
 import { appRouter } from "@control-panel/api/routers/index";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIReferencePlugin } from "@orpc/openapi/plugins";
@@ -6,7 +7,14 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 
 function logRpcError(error: unknown) {
-	console.error(error);
+	if (error instanceof Error) {
+		console.error(
+			redact(error.message),
+			error.stack ? redact(error.stack) : undefined
+		);
+	} else {
+		console.error(error);
+	}
 }
 
 export function createOpenApiHandler() {

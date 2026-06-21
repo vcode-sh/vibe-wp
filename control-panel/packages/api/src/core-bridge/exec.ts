@@ -10,6 +10,9 @@ export const VIBE_OPS = {
 
 export type VibeOp = keyof typeof VIBE_OPS;
 
+/** Default wall-clock limit for streaming operations (30 minutes). */
+export const STREAM_TIMEOUT_MS = 30 * 60 * 1000;
+
 export function buildVibeArgv(
 	siteDir: string,
 	env: VibeEnv,
@@ -44,31 +47,42 @@ export async function runVibe(
 	return { stdout: redact(stdout), stderr: redact(stderr), code };
 }
 
-export function streamVibe(siteDir: string, env: VibeEnv, op: VibeOp) {
+export function streamVibe(
+	siteDir: string,
+	env: VibeEnv,
+	op: VibeOp,
+	opts: { timeoutMs?: number } = {}
+) {
 	const proc = Bun.spawn(buildVibeArgv(siteDir, env, op), {
 		cwd: siteDir,
 		stdout: "pipe",
 		stderr: "pipe",
 	});
+	const deadline = opts.timeoutMs ?? STREAM_TIMEOUT_MS;
+	const timer = setTimeout(() => proc.kill(), deadline);
 	async function* lines(): AsyncIterable<string> {
-		const reader = proc.stdout.getReader();
-		const decoder = new TextDecoder();
-		let buffer = "";
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) {
-				break;
+		try {
+			const reader = proc.stdout.getReader();
+			const decoder = new TextDecoder();
+			let buffer = "";
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) {
+					break;
+				}
+				buffer += decoder.decode(value, { stream: true });
+				let nl = buffer.indexOf("\n");
+				while (nl !== -1) {
+					yield redact(buffer.slice(0, nl));
+					buffer = buffer.slice(nl + 1);
+					nl = buffer.indexOf("\n");
+				}
 			}
-			buffer += decoder.decode(value, { stream: true });
-			let nl = buffer.indexOf("\n");
-			while (nl !== -1) {
-				yield redact(buffer.slice(0, nl));
-				buffer = buffer.slice(nl + 1);
-				nl = buffer.indexOf("\n");
+			if (buffer.length > 0) {
+				yield redact(buffer);
 			}
-		}
-		if (buffer.length > 0) {
-			yield redact(buffer);
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 	return { proc, lines: lines() };

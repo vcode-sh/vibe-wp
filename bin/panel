@@ -115,9 +115,10 @@ WantedBy=multi-user.target"
     stty echo
     echo
   fi
-  curl -fsS -X POST "http://localhost:$PORT/api/auth/sign-up/email" \
-    -H 'Content-Type: application/json' \
-    --data "$(printf '{"email":"%s","password":"%s","name":"Owner"}' "$ADMIN_EMAIL" "$ADMIN_PASSWORD")" >/dev/null \
+  printf '{"email":"%s","password":"%s","name":"Owner"}' "$ADMIN_EMAIL" "$ADMIN_PASSWORD" \
+    | curl -fsS -X POST "http://localhost:$PORT/api/auth/sign-up/email" \
+      -H 'Content-Type: application/json' \
+      --data @- >/dev/null \
     && echo "panel: owner account created"
   echo "Done. Open https://$DOMAIN and sign in."
 }

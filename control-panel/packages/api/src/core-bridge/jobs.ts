@@ -1,6 +1,6 @@
 import type { Job, StreamEvent } from "../contract";
 
-import { streamVibe } from "./exec";
+import { STREAM_TIMEOUT_MS, streamVibe } from "./exec";
 import { persistJobFinish, persistJobStart } from "./jobs-db";
 import { LineStream } from "./line-stream";
 import { findSite } from "./sites";
@@ -17,7 +17,9 @@ async function runJob(
 	stream: LineStream,
 	installDir: string
 ): Promise<void> {
-	const { proc, lines } = streamVibe(installDir, "prod", "backup");
+	const { proc, lines } = streamVibe(installDir, "prod", "backup", {
+		timeoutMs: STREAM_TIMEOUT_MS,
+	});
 	for await (const line of lines) {
 		stream.push(line);
 	}
