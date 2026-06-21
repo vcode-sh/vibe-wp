@@ -72,10 +72,11 @@ install_panel() {
   # DB migrate
   ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push )
 
-  # systemd service (Bun runtime, dedicated user)
-  id vibe-panel >/dev/null 2>&1 || $SUDO useradd --system --home "$PANEL_DIR" --shell /usr/sbin/nologin vibe-panel || true
-  $SUDO usermod -aG docker vibe-panel 2>/dev/null || true
-  $SUDO chown -R vibe-panel:vibe-panel "$PANEL_DIR"
+  # systemd service (Bun runtime). The MVP runs as root for full host access
+  # to site operations (backup writes, docker), matching the existing
+  # vibe-wp-backup/monitor timers. A dedicated least-privilege user + a
+  # sudoers allowlist for the site bin/vibe entrypoints is a fan-out hardening
+  # item; the exec-layer command allowlist remains the primary control.
   $SUDO chmod -R a+rX "$PANEL_DIR/app/web/dist" 2>/dev/null || true
 
   service="[Unit]
@@ -83,7 +84,6 @@ Description=Vibe WP control panel
 After=network.target docker.service
 [Service]
 Type=simple
-User=vibe-panel
 WorkingDirectory=$PANEL_DIR/app/server
 Environment=PORT=$PORT
 ExecStart=$BUN run src/index.ts
