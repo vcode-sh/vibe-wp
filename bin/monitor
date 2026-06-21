@@ -72,6 +72,7 @@ monitor_json_str() {
   printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"
 }
 
+# shellcheck disable=SC2329
 monitor_json_record() {
   _label="$1"
   _okval="$2"
@@ -87,14 +88,17 @@ monitor_json_record() {
 
 if [ "${monitor_json}" = "1" ]; then
   # Override result helpers to accumulate checks for JSON output.
+  # shellcheck disable=SC2329
   monitor_ok() {
     monitor_json_record "$*" "1"
   }
+  # shellcheck disable=SC2329
   monitor_warn() {
     monitor_warnings=$((monitor_warnings + 1))
     monitor_report="${monitor_report}warn: $*\n"
     monitor_json_record "$*" "0"
   }
+  # shellcheck disable=SC2329
   monitor_fail() {
     monitor_failures=$((monitor_failures + 1))
     monitor_report="${monitor_report}fail: $*\n"
@@ -121,7 +125,9 @@ else
 fi
 
 summary="monitor[${VIBE_ENV}] ${status}: ${monitor_failures} failure(s), ${monitor_warnings} warning(s) for ${site}"
-printf '%s\n' "${summary}"
+if [ "${monitor_json}" != "1" ]; then
+  printf '%s\n' "${summary}"
+fi
 
 # Decide whether to alert.
 alert_on_warn="$(vibe_env_value VIBE_MONITOR_ALERT_ON_WARN)"
