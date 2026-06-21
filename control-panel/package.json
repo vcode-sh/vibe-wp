@@ -42,7 +42,8 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "check": "ultracite check",
-    "fix": "ultracite fix"
+    "fix": "ultracite fix",
+    "test": "turbo test"
   },
   "dependencies": {
     "@control-panel/env": "workspace:*",

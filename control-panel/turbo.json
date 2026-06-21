@@ -33,6 +33,9 @@
     },
     "db:local": {
       "cache": false
+    },
+    "test": {
+      "cache": false
     }
   }
 }
