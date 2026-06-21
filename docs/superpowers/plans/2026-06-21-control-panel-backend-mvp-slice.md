@@ -1186,7 +1186,7 @@ git commit -m "feat(panel): sites/backups/operations routers over the exec layer
 **Interfaces:**
 - Consumes: `orpc` (the TanStack utils from `web/src/lib/orpc/client.ts`), the `client` for the stream.
 
-- [ ] **Step 1: Flip `queries.ts`** — replace the fixture factories with oRPC `queryOptions` (keep the function names + signatures; consuming `useQuery(xQuery(...))` call sites are unchanged):
+- [x] **Step 1: Flip `queries.ts`** — replace the fixture factories with oRPC `queryOptions` (keep the function names + signatures; consuming `useQuery(xQuery(...))` call sites are unchanged):
 
 ```ts
 import { orpc } from "@/lib/orpc/client";
@@ -1200,7 +1200,7 @@ export const backupsQuery = (siteId: string) =>
 
 > Keep `serverInfoQuery`, `healthQuery`, `logsQuery`, `stagingQuery` on fixtures for now (their procedures arrive in the fan-out) — they continue to import from `./fixtures`. Leave those four untouched.
 
-- [ ] **Step 2: Wire `OperationRunner` to the live stream** — change its props from `lines: string[]` to `jobId: string | null`, and consume the SSE iterator via the oRPC client:
+- [x] **Step 2: Wire `OperationRunner` to the live stream** — change its props from `lines: string[]` to `jobId: string | null`, and consume the SSE iterator via the oRPC client:
 
 ```tsx
 import { client } from "@/lib/orpc/client";
@@ -1229,7 +1229,7 @@ useEffect(() => {
 ```
 (Keep the existing `Dialog` + `Progress` + `ScrollArea` markup; `setDone`/`setLines` replace the timer-driven state.)
 
-- [ ] **Step 3: Start the job from `backups.tsx`** — the "Back up now" button calls the mutation then opens the runner with the returned `jobId`:
+- [x] **Step 3: Start the job from `backups.tsx`** — the "Back up now" button calls the mutation then opens the runner with the returned `jobId`:
 
 ```tsx
 const runBackup = useMutation(orpc.backupsRun.mutationOptions());
@@ -1240,9 +1240,9 @@ setRunnerOpen(true);
 // <OperationRunner jobId={jobId} open={runnerOpen} onOpenChange={setRunnerOpen} title={`Backing up ${siteId}`} />
 ```
 
-- [ ] **Step 4: Verify** — `bun run check-types`, `bun run check`. (Live behavior is proven in Task 14.)
+- [x] **Step 4: Verify** — `bun run check-types`, `bun run check`. (Live behavior is proven in Task 14.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add control-panel/web/src/data/queries.ts control-panel/web/src/components/patterns/operation-runner.tsx control-panel/web/src/routes/_auth/sites/\$siteId/backups.tsx

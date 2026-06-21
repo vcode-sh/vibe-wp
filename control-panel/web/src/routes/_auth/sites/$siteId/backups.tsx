@@ -6,7 +6,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@control-panel/ui/components/table";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/data/derive";
 import { backupsQuery } from "@/data/queries";
 import type { BackupRecord } from "@/data/types";
+import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/backups")({
 	component: BackupsPage,
@@ -32,6 +33,19 @@ function BackupsPage() {
 	const now = new Date();
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
 	const [runnerOpen, setRunnerOpen] = useState(false);
+	const [jobId, setJobId] = useState<string | null>(null);
+
+	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
+
+	async function handleBackupNow() {
+		try {
+			const result = await runBackup.mutateAsync({ siteId });
+			setJobId(result.jobId);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start backup.");
+		}
+	}
 
 	return (
 		<>
@@ -39,7 +53,9 @@ function BackupsPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button onClick={() => setRunnerOpen(true)}>Back up now</Button>
+						<Button disabled={runBackup.isPending} onClick={handleBackupNow}>
+							Back up now
+						</Button>
 					}
 					subtitle="Local and off-site copies, retention and restore."
 					title="Backups"
@@ -129,12 +145,7 @@ function BackupsPage() {
 			/>
 
 			<OperationRunner
-				lines={[
-					"Creating database dump…",
-					"Archiving wp-content…",
-					"Uploading to off-site (R2)…",
-					"Verifying archive…",
-				]}
+				jobId={jobId}
 				onOpenChange={setRunnerOpen}
 				open={runnerOpen}
 				title={`Backing up ${siteId}`}
