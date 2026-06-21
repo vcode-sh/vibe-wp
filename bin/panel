@@ -55,7 +55,7 @@ install_panel() {
   $SUDO install -d -m 0755 "$PANEL_DIR" "$PANEL_DIR/data"
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
   printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
-  ( cd "$REPO_DIR/control-panel" && "$BUN" install --production=false && "$BUN" run build )
+  ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build )
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
 
   # Env
