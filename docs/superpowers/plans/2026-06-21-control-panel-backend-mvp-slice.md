@@ -418,7 +418,7 @@ git commit -m "feat(panel): exec layer (allowlist + runVibe/streamVibe)"
 - Consumes: `runVibe` (Task 3).
 - Produces: `parseEnvFile(text)`, `hostFromUrl(url)`, `parseSmoke(stdout)`, `parseBackups(stdout)`, and `detectSites(): Promise<DetectedSite[]>`, `findSite(siteId): Promise<DetectedSite | null>` where `DetectedSite = { id; slug; installDir; domain; hasStaging }`.
 
-- [ ] **Step 1: Write the failing test** `parse.test.ts`:
+- [x] **Step 1: Write the failing test** `parse.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -467,9 +467,9 @@ describe("parseBackups", () => {
 });
 ```
 
-- [ ] **Step 2: Run it — FAIL.**
+- [x] **Step 2: Run it — FAIL.**
 
-- [ ] **Step 3: Implement `parse.ts`:**
+- [x] **Step 3: Implement `parse.ts`:**
 
 ```ts
 import type { BackupRecord } from "@control-panel/api/contract";
@@ -545,11 +545,11 @@ export function parseBackups(stdout: string): BackupRecord[] {
 }
 ```
 
-- [ ] **Step 4: Run it — PASS.**
+- [x] **Step 4: Run it — PASS.**
 
-- [ ] **Step 5: Add `PANEL_SITES_ROOTS` to `packages/env/src/server.ts`** — in the `server` schema add `PANEL_SITES_ROOTS: z.string().default("/opt:/srv")` (colon-separated roots to scan).
+- [x] **Step 5: Add `PANEL_SITES_ROOTS` to `packages/env/src/server.ts`** — in the `server` schema add `PANEL_SITES_ROOTS: z.string().default("/opt:/srv")` (colon-separated roots to scan).
 
-- [ ] **Step 6: Implement `sites.ts`** (uses the detection logic from `installer/src/core/host.ts`, in-process):
+- [x] **Step 6: Implement `sites.ts`** (uses the detection logic from `installer/src/core/host.ts`, in-process):
 
 ```ts
 import { env } from "@control-panel/env/server";
@@ -614,9 +614,9 @@ export async function findSite(siteId: string): Promise<DetectedSite | null> {
 }
 ```
 
-- [ ] **Step 7: Verify** — `bun run test` (parsers PASS), `bun run check-types`, `bun run check`.
+- [x] **Step 7: Verify** — `bun run test` (parsers PASS), `bun run check-types`, `bun run check`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add control-panel/server/src/core-bridge/parse.ts control-panel/server/src/core-bridge/parse.test.ts control-panel/server/src/core-bridge/sites.ts control-panel/packages/env/src/server.ts
