@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback } from "@control-panel/ui/components/avatar";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
+	DropdownMenuGroup,
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
@@ -45,30 +46,34 @@ export function SiteSwitcher({ activeSiteId }: { activeSiteId?: string }) {
 				<ChevronsUpDown className="ml-auto size-4 opacity-70" />
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="start" className="w-56">
-				<DropdownMenuLabel>Sites</DropdownMenuLabel>
-				{sites.data?.map((s) => (
-					<DropdownMenuItem
-						key={s.id}
-						onClick={() =>
-							navigate({
-								to: "/sites/$siteId/overview",
-								params: { siteId: s.id },
-							})
-						}
-					>
-						{s.name}
-						<span className="ml-auto text-muted-foreground text-xs">
-							{s.domain}
-						</span>
-					</DropdownMenuItem>
-				))}
+				<DropdownMenuGroup>
+					<DropdownMenuLabel>Sites</DropdownMenuLabel>
+					{sites.data?.map((s) => (
+						<DropdownMenuItem
+							key={s.id}
+							onClick={() =>
+								navigate({
+									to: "/sites/$siteId/overview",
+									params: { siteId: s.id },
+								})
+							}
+						>
+							{s.name}
+							<span className="ml-auto text-muted-foreground text-xs">
+								{s.domain}
+							</span>
+						</DropdownMenuItem>
+					))}
+				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem onClick={() => navigate({ to: "/sites" })}>
-					All sites
-				</DropdownMenuItem>
-				<DropdownMenuItem onClick={() => navigate({ to: "/sites" })}>
-					<Plus className="size-4" /> New site
-				</DropdownMenuItem>
+				<DropdownMenuGroup>
+					<DropdownMenuItem onClick={() => navigate({ to: "/sites" })}>
+						All sites
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => navigate({ to: "/sites" })}>
+						<Plus className="size-4" /> New site
+					</DropdownMenuItem>
+				</DropdownMenuGroup>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
