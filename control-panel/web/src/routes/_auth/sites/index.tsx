@@ -84,6 +84,17 @@ function SitesPage() {
 						</Link>
 					))}
 				</div>
+				{sites.data && sites.data.length === 0 ? (
+					<div className="rounded-lg border border-border border-dashed p-10 text-center">
+						<p className="font-medium">No sites yet</p>
+						<p className="mt-1 text-muted-foreground text-sm">
+							Create your first Vibe WP site to get started.
+						</p>
+						<Button className="mt-4">
+							<Plus className="size-4" /> New site
+						</Button>
+					</div>
+				) : null}
 			</main>
 		</>
 	);

@@ -1,3 +1,4 @@
+import { Button } from "@control-panel/ui/components/button";
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -23,6 +24,18 @@ function OverviewPage() {
 		<>
 			<TopBar crumbs={[siteId, "Overview"]} />
 			<main className="mx-auto grid w-full max-w-6xl gap-3 p-6">
+				{overview.isError ? (
+					<div className="rounded-lg border border-destructive/40 p-6 text-sm">
+						<p className="font-medium">Couldn't load this site.</p>
+						<Button
+							className="mt-3"
+							onClick={() => overview.refetch()}
+							variant="outline"
+						>
+							Try again
+						</Button>
+					</div>
+				) : null}
 				{overview.isLoading || !overview.data ? (
 					<Skeleton className="h-24 w-full" />
 				) : (
