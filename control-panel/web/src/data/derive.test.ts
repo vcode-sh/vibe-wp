@@ -29,6 +29,12 @@ describe("relativeTime", () => {
 	it("clamps the future to just now", () => {
 		expect(relativeTime("2026-06-21T12:00:30Z", now)).toBe("just now");
 	});
+	it("returns never for empty string", () => {
+		expect(relativeTime("", now)).toBe("never");
+	});
+	it("returns never for epoch / zero timestamp", () => {
+		expect(relativeTime(new Date(0).toISOString(), now)).toBe("never");
+	});
 });
 
 describe("overallVerdict", () => {

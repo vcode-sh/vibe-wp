@@ -5,7 +5,14 @@ const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
 export function relativeTime(iso: string, now: Date): string {
-	const diff = now.getTime() - new Date(iso).getTime();
+	if (!iso) {
+		return "never";
+	}
+	const t = new Date(iso).getTime();
+	if (!Number.isFinite(t) || t <= 0) {
+		return "never";
+	}
+	const diff = now.getTime() - t;
 	if (diff < MINUTE) {
 		return "just now";
 	}

@@ -533,7 +533,7 @@ git commit -m "feat(panel): logsRecent snapshot"
 **Interfaces:**
 - Consumes: `orpc` (TanStack utils) — `orpc.serverInfo`, `orpc.healthReport`, `orpc.stagingInfo`, `orpc.logsRecent`, `orpc.siteStatus`.
 
-- [ ] **Step 1: `relativeTime` → "never"** in `derive.ts`: when `iso` is empty or parses to epoch (`<= 0`), return `"never"`:
+- [x] **Step 1: `relativeTime` → "never"** in `derive.ts`: when `iso` is empty or parses to epoch (`<= 0`), return `"never"`:
 
 ```ts
 export function relativeTime(iso: string, now: Date): string {
@@ -549,7 +549,7 @@ export function relativeTime(iso: string, now: Date): string {
 ```
 (Update the existing `relativeTime.test.ts` with a `relativeTime("", now) === "never"` case.)
 
-- [ ] **Step 2: Flip the read queries** in `queries.ts` (keep names/signatures; consumers unchanged):
+- [x] **Step 2: Flip the read queries** in `queries.ts` (keep names/signatures; consumers unchanged):
 
 ```ts
 export const serverInfoQuery = () => orpc.serverInfo.queryOptions();
@@ -564,7 +564,7 @@ export const siteStatusQuery = (siteId: string) =>
 ```
 (Remove the now-dead fixture imports for these. `overviewQuery`/`backupsQuery`/`sitesQuery` stay as wired in the MVP.)
 
-- [ ] **Step 3: Lazy status dot** in `sites/index.tsx` — the card no longer reads `s.status`; it calls `useQuery(siteStatusQuery(s.id))` and renders a skeleton dot until it resolves. Extract the card into a `<SiteCard site={s} />` subcomponent (keeps `index.tsx` ≤220 lines) that does:
+- [x] **Step 3: Lazy status dot** in `sites/index.tsx` — the card no longer reads `s.status`; it calls `useQuery(siteStatusQuery(s.id))` and renders a skeleton dot until it resolves. Extract the card into a `<SiteCard site={s} />` subcomponent (keeps `index.tsx` ≤220 lines) that does:
 
 ```tsx
 const status = useQuery(siteStatusQuery(site.id));
@@ -572,9 +572,9 @@ const dot = status.data ? verdictTone(status.data.status).dot : "bg-muted animat
 // render <span className={`size-2 rounded-full ${dot}`} />
 ```
 
-- [ ] **Step 4: Re-export `PerfReport`** in `web/src/data/types.ts` (add to the `export type { … }` list).
+- [x] **Step 4: Re-export `PerfReport`** in `web/src/data/types.ts` (add to the `export type { … }` list).
 
-- [ ] **Step 5: Verify** — `bun run check-types`, `bun run check`, `bun run test`. **Step 6: Commit:**
+- [x] **Step 5: Verify** — `bun run check-types`, `bun run check`, `bun run test`. **Step 6: Commit:**
 
 ```bash
 git add control-panel/web/src/data/queries.ts control-panel/web/src/data/types.ts control-panel/web/src/data/derive.ts control-panel/web/src/data/derive.test.ts control-panel/web/src/routes/_auth/sites/index.tsx control-panel/web/src/components

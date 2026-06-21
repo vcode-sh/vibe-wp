@@ -7,6 +7,7 @@ export type {
 	LogLine,
 	MetricTile,
 	NeedItem,
+	PerfReport,
 	ServerInfo,
 	SiteOverview,
 	SiteSummary,
