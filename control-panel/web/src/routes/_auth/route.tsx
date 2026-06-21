@@ -5,6 +5,7 @@ import {
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { CommandMenu } from "@/components/command-menu";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth")({
@@ -23,6 +24,7 @@ function AuthLayout() {
 		<SidebarProvider>
 			<AppSidebar />
 			<SidebarInset>
+				<CommandMenu />
 				<Outlet />
 			</SidebarInset>
 		</SidebarProvider>
