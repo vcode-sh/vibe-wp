@@ -63,7 +63,6 @@ export function createAuth() {
 		},
 		rateLimit: {
 			enabled: true,
-			storage: "database",
 			customRules: { "/sign-in/email": { window: 10, max: 5 } },
 		},
 		advanced: {

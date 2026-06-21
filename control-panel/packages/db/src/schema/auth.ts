@@ -10,6 +10,9 @@ export const user = sqliteTable("user", {
 		.notNull(),
 	image: text("image"),
 	role: text("role").notNull().default("viewer"),
+	banned: integer("banned", { mode: "boolean" }),
+	banReason: text("ban_reason"),
+	banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
 	createdAt: integer("created_at", { mode: "timestamp_ms" })
 		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 		.notNull(),
@@ -33,6 +36,7 @@ export const session = sqliteTable(
 			.notNull(),
 		ipAddress: text("ip_address"),
 		userAgent: text("user_agent"),
+		impersonatedBy: text("impersonated_by"),
 		userId: text("user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),

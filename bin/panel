@@ -56,6 +56,7 @@ install_panel() {
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
   printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
   ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build )
+  $SUDO rm -rf "$PANEL_DIR/app"
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
 
   # Env
@@ -93,7 +94,8 @@ WantedBy=multi-user.target"
 
   printf '%s\n' "$service" | $SUDO tee /etc/systemd/system/$UNIT.service >/dev/null
   $SUDO systemctl daemon-reload
-  $SUDO systemctl enable --now $UNIT.service
+  $SUDO systemctl enable "$UNIT.service" >/dev/null 2>&1 || true
+  $SUDO systemctl restart "$UNIT.service"
 
   # Caddy snippet
   $SUDO install -d -m 0755 /etc/caddy/sites-enabled
