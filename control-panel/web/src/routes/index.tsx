@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-
-import { OverviewPage } from "@/features/overview/overview-page";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
-	component: OverviewPage,
+	beforeLoad: () => {
+		throw redirect({ to: "/sites" });
+	},
 });
