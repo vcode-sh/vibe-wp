@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import type { BackupRecord } from "../contract";
 
 export function parseEnvFile(text: string): Record<string, string> {
@@ -73,4 +75,20 @@ export function parseBackups(stdout: string): BackupRecord[] {
 		});
 	}
 	return records.sort((a, b) => (a.whenISO < b.whenISO ? 1 : -1));
+}
+
+const checksEnvelope = z.object({
+	passed: z.boolean(),
+	checks: z.array(z.object({ name: z.string(), ok: z.boolean() })),
+});
+
+export function parseChecksJson(stdout: string): {
+	passed: boolean;
+	checks: { name: string; ok: boolean }[];
+} {
+	try {
+		return checksEnvelope.parse(JSON.parse(stdout.trim()));
+	} catch {
+		return { passed: false, checks: [] };
+	}
 }

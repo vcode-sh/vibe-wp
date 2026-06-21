@@ -6,6 +6,8 @@ export const VIBE_OPS = {
 	smoke: { argv: ["smoke"], stream: false },
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
+	smokeJson: { argv: ["smoke", "--json"], stream: false },
+	doctorJson: { argv: ["doctor-runtime", "--json"], stream: false },
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

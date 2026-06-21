@@ -4,15 +4,51 @@ set -eu
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
 
+JSON=0
+for _arg in "$@"; do
+  case "${_arg}" in
+    --json) JSON=1 ;;
+  esac
+done
+
 failures=0
+_check_count=0
+_names=""
+_oks=""
+
+json_str() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
 
 fail() {
-  echo "failed: $*" >&2
+  if [ "${JSON}" = 0 ]; then
+    echo "failed: $*" >&2
+  fi
   failures=$((failures + 1))
+  _check_count=$((_check_count + 1))
+  _label="$*"
+  if [ -z "${_names}" ]; then
+    _names="${_label}"
+    _oks="0"
+  else
+    _names="${_names}	${_label}"
+    _oks="${_oks}	0"
+  fi
 }
 
 ok() {
-  echo "ok: $*"
+  if [ "${JSON}" = 0 ]; then
+    echo "ok: $*"
+  fi
+  _check_count=$((_check_count + 1))
+  _label="$*"
+  if [ -z "${_names}" ]; then
+    _names="${_label}"
+    _oks="1"
+  else
+    _names="${_names}	${_label}"
+    _oks="${_oks}	1"
+  fi
 }
 
 site_url="${WP_HOME:-http://localhost:${HTTP_PORT:-8080}}"
@@ -86,9 +122,45 @@ fi
 
 rm -f /tmp/vibe-wp-smoke-upload-path /tmp/vibe-wp-smoke-upload-error
 
+if [ "${JSON}" = 1 ]; then
+  _passed="true"
+  if [ "${failures}" -ne 0 ]; then
+    _passed="false"
+  fi
+  printf '{"passed":%s,"checks":[' "${_passed}"
+  _i=0
+  _n_rest="${_names}"
+  _o_rest="${_oks}"
+  while [ "${_i}" -lt "${_check_count}" ]; do
+    _n="${_n_rest%%	*}"
+    _o="${_o_rest%%	*}"
+    if [ "${_n_rest}" = "${_n}" ]; then
+      _n_rest=""
+      _o_rest=""
+    else
+      _n_rest="${_n_rest#*	}"
+      _o_rest="${_o_rest#*	}"
+    fi
+    if [ "${_i}" -gt 0 ]; then
+      printf ','
+    fi
+    _ok_val="false"
+    if [ "${_o}" = "1" ]; then
+      _ok_val="true"
+    fi
+    printf '{"name":%s,"ok":%s}' "$(json_str "${_n}")" "${_ok_val}"
+    _i=$((_i + 1))
+  done
+  printf ']\n}\n'
+fi
+
 if [ "${failures}" -ne 0 ]; then
-  echo "smoke test found ${failures} issue(s)." >&2
+  if [ "${JSON}" = 0 ]; then
+    echo "smoke test found ${failures} issue(s)." >&2
+  fi
   exit 1
 fi
 
-echo "smoke test passed."
+if [ "${JSON}" = 0 ]; then
+  echo "smoke test passed."
+fi

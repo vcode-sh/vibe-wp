@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hostFromUrl, parseBackups, parseEnvFile, parseSmoke } from "./parse";
+import {
+	hostFromUrl,
+	parseBackups,
+	parseChecksJson,
+	parseEnvFile,
+	parseSmoke,
+} from "./parse";
 
 describe("parseEnvFile", () => {
 	it("reads KEY=VALUE lines, ignoring comments and quotes", () => {
@@ -44,5 +50,21 @@ describe("parseBackups", () => {
 		expect(second).toBeDefined();
 		expect((first?.whenISO ?? "") > (second?.whenISO ?? "")).toBe(true);
 		expect(first?.location).toBe("local");
+	});
+});
+
+describe("parseChecksJson", () => {
+	it("parses the --json checks envelope", () => {
+		const r = parseChecksJson(
+			'{"passed":false,"checks":[{"name":"HTTP 200","ok":true},{"name":"TLS","ok":false}]}'
+		);
+		expect(r.passed).toBe(false);
+		expect(r.checks).toEqual([
+			{ name: "HTTP 200", ok: true },
+			{ name: "TLS", ok: false },
+		]);
+	});
+	it("returns a safe empty result on garbage", () => {
+		expect(parseChecksJson("not json")).toEqual({ passed: false, checks: [] });
 	});
 });

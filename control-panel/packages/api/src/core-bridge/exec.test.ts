@@ -18,7 +18,9 @@ describe("buildVibeArgv", () => {
 		expect(Object.keys(VIBE_OPS).sort()).toEqual([
 			"backup",
 			"backups",
+			"doctorJson",
 			"smoke",
+			"smokeJson",
 		]);
 	});
 });

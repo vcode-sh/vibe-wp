@@ -66,7 +66,7 @@ TDD the **pure parsers** (`smoke`/`doctor`/`monitor`/`perf` JSON → typed) and 
 **Interfaces:**
 - Produces: `bin/vibe <env> smoke --json` / `doctor-runtime --json` emit `{"passed":bool,"checks":[{"name":str,"ok":bool}]}`. `VIBE_OPS.smokeJson` / `.doctorJson`. `parseChecksJson(stdout): { passed: boolean; checks: { name: string; ok: boolean }[] }`.
 
-- [ ] **Step 1: Add `--json` to `bin/smoke`** — read the script; it accumulates `ok:`/`failed:` results via helper calls and exits non-zero on failure, and it invokes `bin/doctor-runtime` as a sub-check. Add a `--json` flag (default off): when set, suppress the human `ok:`/`failed:` lines, accumulate each check into shell arrays `name[]`/`ok[]` (1/0), call `doctor-runtime` **without** `--json` and record its pass/fail as a single check named `"runtime doctor"` from its exit code, and at the end print one JSON object:
+- [x] **Step 1: Add `--json` to `bin/smoke`** — read the script; it accumulates `ok:`/`failed:` results via helper calls and exits non-zero on failure, and it invokes `bin/doctor-runtime` as a sub-check. Add a `--json` flag (default off): when set, suppress the human `ok:`/`failed:` lines, accumulate each check into shell arrays `name[]`/`ok[]` (1/0), call `doctor-runtime` **without** `--json` and record its pass/fail as a single check named `"runtime doctor"` from its exit code, and at the end print one JSON object:
 
 ```sh
 # --json emitter (append near the end, after checks run):
@@ -82,18 +82,18 @@ fi
 ```
 where `json_str()` is a small helper that escapes `"` and `\`. Keep the default (no `--json`) path byte-identical to today (the installer + the existing `parseSmoke` still rely on it).
 
-- [ ] **Step 2: Add the same `--json` flag to `bin/doctor-runtime`** — identical pattern (it has no nested sub-script), emitting `{"passed":…,"checks":[…]}`.
+- [x] **Step 2: Add the same `--json` flag to `bin/doctor-runtime`** — identical pattern (it has no nested sub-script), emitting `{"passed":…,"checks":[…]}`.
 
-- [ ] **Step 3: Verify the scripts parse** — `sh -n bin/smoke && sh -n bin/doctor-runtime && shellcheck -s sh bin/smoke bin/doctor-runtime` → clean. (Live JSON output is proven at the VPS gate.)
+- [x] **Step 3: Verify the scripts parse** — `sh -n bin/smoke && sh -n bin/doctor-runtime && shellcheck -s sh bin/smoke bin/doctor-runtime` → clean. (Live JSON output is proven at the VPS gate.)
 
-- [ ] **Step 4: Extend the exec allowlist** — in `exec.ts`, add to `VIBE_OPS`:
+- [x] **Step 4: Extend the exec allowlist** — in `exec.ts`, add to `VIBE_OPS`:
 
 ```ts
 	smokeJson: { argv: ["smoke", "--json"], stream: false },
 	doctorJson: { argv: ["doctor-runtime", "--json"], stream: false },
 ```
 
-- [ ] **Step 5: Write the failing parser test** in `parse.test.ts`:
+- [x] **Step 5: Write the failing parser test** in `parse.test.ts`:
 
 ```ts
 import { parseChecksJson } from "./parse";
@@ -113,9 +113,9 @@ describe("parseChecksJson", () => {
 });
 ```
 
-- [ ] **Step 6: Run it — FAIL.** `cd control-panel && bunx vitest run packages/api/src/core-bridge/parse.test.ts -t parseChecksJson`.
+- [x] **Step 6: Run it — FAIL.** `cd control-panel && bunx vitest run packages/api/src/core-bridge/parse.test.ts -t parseChecksJson`.
 
-- [ ] **Step 7: Implement `parseChecksJson`** in `parse.ts`:
+- [x] **Step 7: Implement `parseChecksJson`** in `parse.ts`:
 
 ```ts
 import { z } from "zod";
@@ -134,7 +134,7 @@ export function parseChecksJson(stdout: string): { passed: boolean; checks: { na
 }
 ```
 
-- [ ] **Step 8: Run it — PASS.** **Step 9: Verify** `bun run check-types`/`check`. **Step 10: Commit:**
+- [x] **Step 8: Run it — PASS.** **Step 9: Verify** `bun run check-types`/`check`. **Step 10: Commit:**
 
 ```bash
 git add bin/smoke bin/doctor-runtime control-panel/packages/api/src/core-bridge/exec.ts control-panel/packages/api/src/core-bridge/parse.ts control-panel/packages/api/src/core-bridge/parse.test.ts
