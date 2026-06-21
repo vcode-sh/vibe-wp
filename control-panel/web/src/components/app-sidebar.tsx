@@ -49,7 +49,7 @@ export function AppSidebar() {
 	const matchRoute = useMatchRoute();
 
 	return (
-		<Sidebar collapsible="icon">
+		<Sidebar collapsible="icon" variant="inset">
 			<SidebarHeader>
 				<SidebarMenu>
 					<SidebarMenuItem>
