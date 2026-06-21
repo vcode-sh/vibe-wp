@@ -54,6 +54,17 @@ describe("parseBackups", () => {
 		expect((first?.whenISO ?? "") > (second?.whenISO ?? "")).toBe(true);
 		expect(first?.location).toBe("local");
 	});
+
+	it("parses the real compact YYYYMMDDTHHMMSSZ dir format", () => {
+		const r = parseBackups("/var/backups/vibe-wp/acme/prod/20260621T200601Z\n");
+		expect(r[0]?.whenISO).toBe("2026-06-21T20:06:01Z");
+	});
+
+	it("leaves whenISO empty (→ 'never') when no timestamp is present", () => {
+		expect(
+			parseBackups("/var/backups/vibe-wp/acme/prod/latest\n")[0]?.whenISO
+		).toBe("");
+	});
 });
 
 describe("parseChecksJson", () => {

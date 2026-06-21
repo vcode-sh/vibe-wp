@@ -16,12 +16,9 @@ export async function hostExec(
 
 export const VIBE_OPS = {
 	smoke: { argv: ["smoke"], stream: false },
+	doctorRuntime: { argv: ["doctor-runtime"], stream: false },
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
-	smokeJson: { argv: ["smoke", "--json"], stream: false },
-	doctorJson: { argv: ["doctor-runtime", "--json"], stream: false },
-	monitorJson: { argv: ["monitor", "--quiet", "--json"], stream: false },
-	perfJson: { argv: ["perf-report", "--json"], stream: false },
 	logsRecent: { argv: ["logs-recent"], stream: false },
 } as const;
 

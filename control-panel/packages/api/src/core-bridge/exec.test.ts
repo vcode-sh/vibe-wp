@@ -14,16 +14,13 @@ describe("buildVibeArgv", () => {
 		// @ts-expect-error — intentionally invalid op
 		expect(() => buildVibeArgv("/opt/acme", "prod", "rm -rf")).toThrow();
 	});
-	it("only exposes read/backup ops in the MVP allowlist", () => {
+	it("only exposes the allowlisted read/backup ops", () => {
 		expect(Object.keys(VIBE_OPS).sort()).toEqual([
 			"backup",
 			"backups",
-			"doctorJson",
+			"doctorRuntime",
 			"logsRecent",
-			"monitorJson",
-			"perfJson",
 			"smoke",
-			"smokeJson",
 		]);
 	});
 });

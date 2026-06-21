@@ -3,7 +3,7 @@ import { ORPCError } from "@orpc/server";
 
 import type { ServerInfo } from "../contract";
 import { hostExec, runVibe } from "../core-bridge/exec";
-import { parseChecksJson } from "../core-bridge/parse";
+import { parseSmoke } from "../core-bridge/parse";
 import { detectSites } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
 
@@ -23,13 +23,10 @@ export const serverRouter = {
 		const host = (await hostExec(["hostname", "-f"])).trim();
 		const statuses = await Promise.all(
 			sites.map(async (s) => {
-				const { stdout, code } = await runVibe(
-					s.installDir,
-					"prod",
-					"smokeJson",
-					{ timeoutMs: 90_000 }
-				);
-				return code === 0 && parseChecksJson(stdout).passed;
+				const { stdout, code } = await runVibe(s.installDir, "prod", "smoke", {
+					timeoutMs: 90_000,
+				});
+				return code === 0 && parseSmoke(stdout).passed;
 			})
 		);
 		return {
@@ -46,8 +43,8 @@ export const serverRouter = {
 		if (!site) {
 			throw new ORPCError("NOT_FOUND");
 		}
-		return parseChecksJson(
-			(await runVibe(site.installDir, "prod", "doctorJson")).stdout
+		return parseSmoke(
+			(await runVibe(site.installDir, "prod", "doctorRuntime")).stdout
 		);
 	}),
 };

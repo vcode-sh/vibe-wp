@@ -3,11 +3,7 @@ import { z } from "zod";
 
 import type { HealthReport, MetricTile, Verdict } from "../contract";
 import { runVibe } from "../core-bridge/exec";
-import {
-	parseChecksJson,
-	parseMonitorJson,
-	parsePerfJson,
-} from "../core-bridge/parse";
+import { parseSmoke } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
 
@@ -39,31 +35,22 @@ export const healthRouter = {
 			if (!site) {
 				throw new ORPCError("NOT_FOUND");
 			}
-			const smoke = parseChecksJson(
+			const smoke = parseSmoke(
 				(
-					await runVibe(site.installDir, "prod", "smokeJson", {
+					await runVibe(site.installDir, "prod", "smoke", {
 						timeoutMs: 90_000,
 					})
 				).stdout
-			);
-			const perf = parsePerfJson(
-				(
-					await runVibe(site.installDir, "prod", "perfJson", {
-						timeoutMs: 120_000,
-					})
-				).stdout
-			);
-			const mon = parseMonitorJson(
-				(await runVibe(site.installDir, "prod", "monitorJson")).stdout
 			);
 			return {
 				tiles: smoke.checks
 					.slice(0, 4)
 					.map((c) => tile(c.name, c.name, c.ok, c.name)),
-				ttfbMs: perf.ttfbMs,
-				cacheHitPercent: perf.cacheHitPercent,
+				// ttfb/cache/uptime require parsing perf-report/monitor text — follow-up.
+				ttfbMs: 0,
+				cacheHitPercent: 0,
 				tlsDays: 0,
-				uptimePercent: mon.uptimePercent,
+				uptimePercent: 0,
 				alertChannels: [],
 			};
 		}),

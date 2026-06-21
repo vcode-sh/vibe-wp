@@ -50,9 +50,22 @@ export function parseSmoke(stdout: string): {
 	return { passed: checks.length > 0 && checks.every((c) => c.ok), checks };
 }
 
-const TS_IN_PATH = /(\d{4}-\d{2}-\d{2}[T_]\d{2}[-:]\d{2}[-:]\d{2})/;
 const TRAILING_SLASH = /\/$/;
-const TS_DASH_SEP = /T(\d{2})-(\d{2})-(\d{2})/;
+// Real backup dirs are compact `YYYYMMDDTHHMMSSZ`; also accept dashed forms.
+const TS_COMPACT = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/;
+const TS_DASHED = /(\d{4}-\d{2}-\d{2})[T_](\d{2})[-:](\d{2})[-:](\d{2})/;
+
+function isoFromPath(path: string): string {
+	const c = TS_COMPACT.exec(path);
+	if (c) {
+		return `${c[1]}-${c[2]}-${c[3]}T${c[4]}:${c[5]}:${c[6]}Z`;
+	}
+	const d = TS_DASHED.exec(path);
+	if (d) {
+		return `${d[1]}T${d[2]}:${d[3]}:${d[4]}Z`;
+	}
+	return "";
+}
 
 export function parseBackups(stdout: string): BackupRecord[] {
 	const records: BackupRecord[] = [];
@@ -61,8 +74,6 @@ export function parseBackups(stdout: string): BackupRecord[] {
 		if (!path) {
 			continue;
 		}
-		const stamp = TS_IN_PATH.exec(path)?.[1] ?? "";
-		const iso = stamp.replace("_", "T").replace(TS_DASH_SEP, "T$1:$2:$3");
 		records.push({
 			id: path,
 			location:
@@ -71,7 +82,7 @@ export function parseBackups(stdout: string): BackupRecord[] {
 					: "local",
 			sizeMB: 0,
 			verified: true,
-			whenISO: iso ? `${iso}Z` : new Date(0).toISOString(),
+			whenISO: isoFromPath(path),
 		});
 	}
 	return records.sort((a, b) => (a.whenISO < b.whenISO ? 1 : -1));

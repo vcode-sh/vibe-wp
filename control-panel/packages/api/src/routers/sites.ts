@@ -3,11 +3,7 @@ import { z } from "zod";
 
 import type { SiteOverview, SiteSummary, Verdict } from "../contract";
 import { runVibe } from "../core-bridge/exec";
-import {
-	parseBackups,
-	parseChecksJson,
-	parseSmoke,
-} from "../core-bridge/parse";
+import { parseBackups, parseSmoke } from "../core-bridge/parse";
 import { detectSites, findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
 
@@ -35,15 +31,10 @@ export const sitesRouter = {
 			if (!site) {
 				throw new ORPCError("NOT_FOUND");
 			}
-			const { stdout, code } = await runVibe(
-				site.installDir,
-				"prod",
-				"smokeJson",
-				{
-					timeoutMs: 90_000,
-				}
-			);
-			const passed = code === 0 && parseChecksJson(stdout).passed;
+			const { stdout, code } = await runVibe(site.installDir, "prod", "smoke", {
+				timeoutMs: 90_000,
+			});
+			const passed = code === 0 && parseSmoke(stdout).passed;
 			return { status: passed ? "good" : "act" };
 		}),
 
