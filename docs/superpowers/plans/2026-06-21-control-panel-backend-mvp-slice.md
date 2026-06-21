@@ -1261,7 +1261,7 @@ git commit -m "feat(panel): flip sites/overview/backups to oRPC + live backup st
 **Interfaces:**
 - Produces: `bin/panel install --domain <sub> --admin-email <e> [--port N] [--admin-password P]`, `bin/panel status`, `bin/panel uninstall [--purge]`.
 
-- [ ] **Step 1: Create `bin/panel`** (POSIX sh; mirrors `installer/src/core/backup.ts` systemd + `caddyfile.ts`/`task-runner.ts` Caddy patterns):
+- [x] **Step 1: Create `bin/panel`** (POSIX sh; mirrors `installer/src/core/backup.ts` systemd + `caddyfile.ts`/`task-runner.ts` Caddy patterns):
 
 ```sh
 #!/bin/sh
@@ -1381,9 +1381,9 @@ case "$cmd" in
 esac
 ```
 
-- [ ] **Step 2: Make executable + lint** — `chmod +x bin/panel`; if the repo has a shell linter (`shellcheck`), run `shellcheck bin/panel` and fix warnings. Confirm `bin/panel` (no args) prints usage and exits non-zero.
+- [x] **Step 2: Make executable + lint** — `chmod +x bin/panel`; if the repo has a shell linter (`shellcheck`), run `shellcheck bin/panel` and fix warnings. Confirm `bin/panel` (no args) prints usage and exits non-zero.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add bin/panel

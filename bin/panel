@@ -1,0 +1,148 @@
+#!/bin/sh
+set -eu
+
+PANEL_DIR=/opt/vibe-wp-panel
+REPO_DIR="$(CDPATH='' cd "$(dirname "$0")/.." && pwd)"
+UNIT=vibe-wp-panel
+PORT=4000
+
+if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
+
+usage() {
+  echo "Usage: bin/panel <install|status|uninstall> [--domain d --admin-email e --port N --admin-password P --purge]"
+  exit 1
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] || usage
+shift || true
+
+DOMAIN=""
+ADMIN_EMAIL=""
+ADMIN_PASSWORD=""
+PURGE=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --domain)         DOMAIN="$2";         shift 2 ;;
+    --admin-email)    ADMIN_EMAIL="$2";    shift 2 ;;
+    --admin-password) ADMIN_PASSWORD="$2"; shift 2 ;;
+    --port)           PORT="$2";           shift 2 ;;
+    --purge)          PURGE=1;             shift ;;
+    *) usage ;;
+  esac
+done
+
+install_panel() {
+  [ -n "$DOMAIN" ] || { printf 'Subdomain for the panel: '; read -r DOMAIN; }
+  [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
+
+  # Bun preflight
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "Installing Bun..."
+    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
+  fi
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+
+  # DNS preflight
+  ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
+  resolved="$(getent ahosts "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)"
+  if [ -n "$ip" ] && [ -n "$resolved" ] && [ "$resolved" != "$ip" ]; then
+    echo "WARN: $DOMAIN resolves to '$resolved', server is '$ip'. Add an A record."
+  fi
+
+  # Build
+  $SUDO install -d -m 0755 "$PANEL_DIR" "$PANEL_DIR/data"
+  ( cd "$REPO_DIR/control-panel" && "$BUN" install --production=false && "$BUN" run build )
+  $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
+
+  # Env
+  SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
+  printf '%s\n' \
+    "DATABASE_URL=file:$PANEL_DIR/data/panel.db" \
+    "BETTER_AUTH_SECRET=$SECRET" \
+    "BETTER_AUTH_URL=https://$DOMAIN" \
+    "CORS_ORIGIN=https://$DOMAIN" \
+    "NODE_ENV=production" \
+    "PANEL_SITES_ROOTS=/opt:/srv" \
+    | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null
+
+  # DB migrate
+  ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push )
+
+  # systemd service (Bun runtime, dedicated user)
+  id vibe-panel >/dev/null 2>&1 || $SUDO useradd --system --home "$PANEL_DIR" --shell /usr/sbin/nologin vibe-panel || true
+  $SUDO usermod -aG docker vibe-panel 2>/dev/null || true
+  $SUDO chown -R vibe-panel:vibe-panel "$PANEL_DIR"
+
+  service="[Unit]
+Description=Vibe WP control panel
+After=network.target docker.service
+[Service]
+Type=simple
+User=vibe-panel
+WorkingDirectory=$PANEL_DIR/app/server
+Environment=PORT=$PORT
+ExecStart=$BUN run src/index.ts
+Restart=always
+[Install]
+WantedBy=multi-user.target"
+
+  printf '%s\n' "$service" | $SUDO tee /etc/systemd/system/$UNIT.service >/dev/null
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl enable --now $UNIT.service
+
+  # Caddy snippet
+  $SUDO install -d -m 0755 /etc/caddy/sites-enabled
+  if [ ! -f /etc/caddy/Caddyfile ]; then
+    printf '%s\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee /etc/caddy/Caddyfile >/dev/null
+  fi
+  if ! grep -q 'sites-enabled/\*.caddy' /etc/caddy/Caddyfile; then
+    printf '\n%s\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null
+  fi
+  printf '%s\n' "$DOMAIN {
+	reverse_proxy localhost:$PORT
+}" | $SUDO tee /etc/caddy/sites-enabled/vibe-wp-panel.caddy >/dev/null
+  $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
+
+  # Smoke + owner bootstrap (first user becomes admin via the DB hook; password never echoed)
+  sleep 2
+  curl -fsS "http://localhost:$PORT/" >/dev/null && echo "panel: service up"
+  if [ -z "$ADMIN_PASSWORD" ]; then
+    printf 'Owner password (min 8): '
+    stty -echo
+    read -r ADMIN_PASSWORD
+    stty echo
+    echo
+  fi
+  curl -fsS -X POST "http://localhost:$PORT/api/auth/sign-up/email" \
+    -H 'Content-Type: application/json' \
+    --data "$(printf '{"email":"%s","password":"%s","name":"Owner"}' "$ADMIN_EMAIL" "$ADMIN_PASSWORD")" >/dev/null \
+    && echo "panel: owner account created"
+  echo "Done. Open https://$DOMAIN and sign in."
+}
+
+status_panel() {
+  systemctl status $UNIT.service --no-pager || true
+}
+
+uninstall_panel() {
+  $SUDO systemctl disable --now $UNIT.service 2>/dev/null || true
+  $SUDO rm -f /etc/systemd/system/$UNIT.service /etc/caddy/sites-enabled/vibe-wp-panel.caddy
+  $SUDO systemctl daemon-reload
+  if command -v caddy >/dev/null 2>&1; then
+    $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy || true
+  fi
+  if [ "$PURGE" = 1 ]; then
+    $SUDO rm -rf "$PANEL_DIR"
+    echo "panel: purged"
+  fi
+  echo "panel: uninstalled"
+}
+
+case "$cmd" in
+  install)   install_panel ;;
+  status)    status_panel ;;
+  uninstall) uninstall_panel ;;
+  *)         usage ;;
+esac
