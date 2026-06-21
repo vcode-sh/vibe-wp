@@ -237,7 +237,7 @@ git commit -m "feat(panel): shared contract types in packages/api"
 **Interfaces:**
 - Produces: `redact(text: string): string`.
 
-- [ ] **Step 1: Write the failing test** `redact.test.ts`:
+- [x] **Step 1: Write the failing test** `redact.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -259,9 +259,9 @@ describe("redact", () => {
 });
 ```
 
-- [ ] **Step 2: Run it — FAIL.** `cd control-panel && bunx vitest run server/src/core-bridge/redact.test.ts` → "Cannot find module './redact'".
+- [x] **Step 2: Run it — FAIL.** `cd control-panel && bunx vitest run server/src/core-bridge/redact.test.ts` → "Cannot find module './redact'".
 
-- [ ] **Step 3: Implement `redact.ts`:**
+- [x] **Step 3: Implement `redact.ts`:**
 
 ```ts
 const SECRET_KEY = /\b([A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|SALT|KEY|PASS|PWD|AUTH)[A-Z0-9_]*)(\s*[=:]\s*)('[^']*'|"[^"]*"|\S+)/gi;
@@ -271,9 +271,9 @@ export function redact(text: string): string {
 }
 ```
 
-- [ ] **Step 4: Run it — PASS.**
+- [x] **Step 4: Run it — PASS.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add control-panel/server/src/core-bridge/redact.ts control-panel/server/src/core-bridge/redact.test.ts
