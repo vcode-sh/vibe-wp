@@ -20,13 +20,13 @@
     "@control-panel/env": "workspace:*",
     "@libsql/client": "0.15.15",
     "dotenv": "catalog:",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "libsql": "0.5.22",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@control-panel/config": "workspace:*",
-    "drizzle-kit": "^0.31.8",
+    "drizzle-kit": "^0.31.10",
     "typescript": "catalog:"
   }
 }
