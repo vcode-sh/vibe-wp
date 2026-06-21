@@ -2,6 +2,18 @@ import { redact } from "./redact";
 
 export type VibeEnv = "local" | "stage" | "prod" | "external";
 
+export async function hostExec(
+	argv: string[],
+	opts: { timeoutMs?: number } = {}
+): Promise<string> {
+	const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+	const timer = setTimeout(() => proc.kill(), opts.timeoutMs ?? 10_000);
+	const out = await new Response(proc.stdout).text();
+	await proc.exited;
+	clearTimeout(timer);
+	return redact(out);
+}
+
 export const VIBE_OPS = {
 	smoke: { argv: ["smoke"], stream: false },
 	backups: { argv: ["backups"], stream: false },

@@ -297,9 +297,9 @@ git commit -m "feat(panel): lazy siteStatus + identity-only sitesList"
 **Interfaces:**
 - Produces: `serverInfo() → ServerInfo`, `serverDoctor() → { passed; checks }`.
 
-- [ ] **Step 1: Add `PANEL_VPS_LABEL`** (optional) to `packages/env/src/server.ts`: `PANEL_VPS_LABEL: z.string().optional()`.
+- [x] **Step 1: Add `PANEL_VPS_LABEL`** (optional) to `packages/env/src/server.ts`: `PANEL_VPS_LABEL: z.string().optional()`.
 
-- [ ] **Step 2: Add a `hostExec` helper** in `exec.ts` for non-`bin/vibe` host reads (df, hostname) — still argv + redaction + timeout, no allowlist needed since the argv is fixed in code:
+- [x] **Step 2: Add a `hostExec` helper** in `exec.ts` for non-`bin/vibe` host reads (df, hostname) — still argv + redaction + timeout, no allowlist needed since the argv is fixed in code:
 
 ```ts
 export async function hostExec(argv: string[], opts: { timeoutMs?: number } = {}): Promise<string> {
@@ -312,7 +312,7 @@ export async function hostExec(argv: string[], opts: { timeoutMs?: number } = {}
 }
 ```
 
-- [ ] **Step 3: Create `routers/server.ts`:**
+- [x] **Step 3: Create `routers/server.ts`:**
 
 ```ts
 import { ORPCError } from "@orpc/server";
@@ -363,7 +363,7 @@ export const serverRouter = {
 };
 ```
 
-- [ ] **Step 4: Spread into `routers/index.ts`** (`...serverRouter` + the later `sitesRouter`/etc.). **Step 5: Verify + commit:**
+- [x] **Step 4: Spread into `routers/index.ts`** (`...serverRouter` + the later `sitesRouter`/etc.). **Step 5: Verify + commit:**
 
 ```bash
 git add control-panel/packages/api/src/routers/server.ts control-panel/packages/api/src/routers/index.ts control-panel/packages/env/src/server.ts control-panel/packages/api/src/core-bridge/exec.ts

@@ -12,6 +12,7 @@ export const env = createEnv({
 			.enum(["development", "production", "test"])
 			.default("development"),
 		PANEL_SITES_ROOTS: z.string().default("/opt:/srv"),
+		PANEL_VPS_LABEL: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

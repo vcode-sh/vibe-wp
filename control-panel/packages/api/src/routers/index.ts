@@ -4,6 +4,7 @@ import { backupsRouter } from "./backups";
 import { controlOverviewRouter } from "./control-overview";
 import { healthRouter } from "./health";
 import { operationsRouter } from "./operations";
+import { serverRouter } from "./server";
 import { sitesRouter } from "./sites";
 
 export const appRouter = {
@@ -12,6 +13,7 @@ export const appRouter = {
 	...sitesRouter,
 	...backupsRouter,
 	...operationsRouter,
+	...serverRouter,
 };
 
 export type AppRouter = typeof appRouter;
