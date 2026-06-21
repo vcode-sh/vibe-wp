@@ -21,7 +21,7 @@ function SettingsPage() {
 	return (
 		<>
 			<TopBar crumbs={["Settings"]} />
-			<main className="mx-auto grid w-full max-w-3xl gap-4 p-6">
+			<div className="mx-auto grid w-full max-w-3xl gap-4 p-6">
 				<PageHeader
 					subtitle="Panel preferences and alert channels."
 					title="Settings"
@@ -51,7 +51,7 @@ function SettingsPage() {
 						<Button className="justify-self-start">Save</Button>
 					</CardContent>
 				</Card>
-			</main>
+			</div>
 		</>
 	);
 }

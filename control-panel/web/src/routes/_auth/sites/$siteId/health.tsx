@@ -5,11 +5,11 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@control-panel/ui/components/card";
-import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
+import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { VerdictTile } from "@/components/patterns/verdict-tile";
 import { TopBar } from "@/components/top-bar";
 import { healthQuery } from "@/data/queries";
@@ -25,7 +25,7 @@ function HealthPage() {
 	return (
 		<>
 			<TopBar crumbs={[siteId, "Health"]} />
-			<main className="mx-auto grid w-full max-w-6xl gap-4 p-6">
+			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
 						<>
@@ -45,39 +45,45 @@ function HealthPage() {
 					subtitle="Uptime, performance and alerts for this site."
 					title="Health"
 				/>
-				{health.isLoading || !health.data ? (
-					<Skeleton className="h-24 w-full" />
-				) : (
-					<>
-						<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-							{health.data.tiles.map((tile) => (
-								<VerdictTile key={tile.key} tile={tile} />
-							))}
-						</div>
-						<div className="grid gap-4 sm:grid-cols-2">
-							<Card>
-								<CardHeader>
-									<CardTitle className="text-sm">Performance</CardTitle>
-								</CardHeader>
-								<CardContent className="grid gap-1 text-sm">
-									<div>TTFB: {health.data.ttfbMs}ms</div>
-									<div>Cache hit: {health.data.cacheHitPercent}%</div>
-									<div>Uptime: {health.data.uptimePercent}%</div>
-									<div>TLS valid: {health.data.tlsDays} days</div>
-								</CardContent>
-							</Card>
-							<Card>
-								<CardHeader>
-									<CardTitle className="text-sm">Alerts</CardTitle>
-								</CardHeader>
-								<CardContent className="text-sm">
-									Channels: {health.data.alertChannels.join(" · ")}
-								</CardContent>
-							</Card>
-						</div>
-					</>
-				)}
-			</main>
+				<QueryBoundary
+					errorMessage="Couldn't load this site's health."
+					hasData={Boolean(health.data)}
+					isError={health.isError}
+					isLoading={health.isLoading}
+					onRetry={() => health.refetch()}
+				>
+					{health.data ? (
+						<>
+							<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+								{health.data.tiles.map((tile) => (
+									<VerdictTile key={tile.key} tile={tile} />
+								))}
+							</div>
+							<div className="grid gap-4 sm:grid-cols-2">
+								<Card>
+									<CardHeader>
+										<CardTitle className="text-sm">Performance</CardTitle>
+									</CardHeader>
+									<CardContent className="grid gap-1 text-sm">
+										<div>TTFB: {health.data.ttfbMs}ms</div>
+										<div>Cache hit: {health.data.cacheHitPercent}%</div>
+										<div>Uptime: {health.data.uptimePercent}%</div>
+										<div>TLS valid: {health.data.tlsDays} days</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader>
+										<CardTitle className="text-sm">Alerts</CardTitle>
+									</CardHeader>
+									<CardContent className="text-sm">
+										Channels: {health.data.alertChannels.join(" · ")}
+									</CardContent>
+								</Card>
+							</div>
+						</>
+					) : null}
+				</QueryBoundary>
+			</div>
 		</>
 	);
 }

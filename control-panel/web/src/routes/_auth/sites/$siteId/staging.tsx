@@ -6,12 +6,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@control-panel/ui/components/card";
-import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
+import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { TopBar } from "@/components/top-bar";
 import { stagingQuery } from "@/data/queries";
@@ -71,21 +71,28 @@ function StagingPage() {
 	return (
 		<>
 			<TopBar crumbs={[siteId, "Staging"]} />
-			<main className="mx-auto grid w-full max-w-6xl gap-4 p-6">
+			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					subtitle="A safe copy of your live site to try changes first."
 					title="Staging"
 				/>
-				{staging.isLoading || !staging.data ? (
-					<Skeleton className="h-32 w-full" />
-				) : (
-					<StagingCard
-						noindex={staging.data.noindex}
-						onPublish={() => setPublishing(true)}
-						url={staging.data.present ? staging.data.url : null}
-					/>
-				)}
-			</main>
+				<QueryBoundary
+					errorMessage="Couldn't load the staging status."
+					hasData={Boolean(staging.data)}
+					isError={staging.isError}
+					isLoading={staging.isLoading}
+					onRetry={() => staging.refetch()}
+					skeletonClassName="h-32 w-full"
+				>
+					{staging.data ? (
+						<StagingCard
+							noindex={staging.data.present ? staging.data.noindex : false}
+							onPublish={() => setPublishing(true)}
+							url={staging.data.present ? staging.data.url : null}
+						/>
+					) : null}
+				</QueryBoundary>
+			</div>
 
 			<SafetyConfirm
 				confirmLabel="Publish to live"

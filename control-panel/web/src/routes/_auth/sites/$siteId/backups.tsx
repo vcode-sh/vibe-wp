@@ -1,6 +1,5 @@
 import { Badge } from "@control-panel/ui/components/badge";
 import { Button } from "@control-panel/ui/components/button";
-import { Skeleton } from "@control-panel/ui/components/skeleton";
 import {
 	Table,
 	TableBody,
@@ -11,10 +10,12 @@ import {
 } from "@control-panel/ui/components/table";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
+import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { TopBar } from "@/components/top-bar";
 import { relativeTime } from "@/data/derive";
@@ -35,7 +36,7 @@ function BackupsPage() {
 	return (
 		<>
 			<TopBar crumbs={[siteId, "Backups"]} />
-			<main className="mx-auto grid w-full max-w-6xl gap-4 p-6">
+			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
 						<Button onClick={() => setRunnerOpen(true)}>Back up now</Button>
@@ -43,45 +44,72 @@ function BackupsPage() {
 					subtitle="Local and off-site copies, retention and restore."
 					title="Backups"
 				/>
-				{backups.isLoading || !backups.data ? (
-					<Skeleton className="h-40 w-full" />
-				) : (
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>When</TableHead>
-								<TableHead>Size</TableHead>
-								<TableHead>Location</TableHead>
-								<TableHead>Verified</TableHead>
-								<TableHead />
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{backups.data.map((b) => (
-								<TableRow key={b.id}>
-									<TableCell>{relativeTime(b.whenISO, now)}</TableCell>
-									<TableCell>{b.sizeMB} MB</TableCell>
-									<TableCell>
-										<Badge variant="outline">
-											{b.location === "offsite" ? "off-site" : "local"}
-										</Badge>
-									</TableCell>
-									<TableCell>{b.verified ? "✓" : "—"}</TableCell>
-									<TableCell className="text-right">
-										<Button
-											onClick={() => setRestoring(b)}
-											size="sm"
-											variant="ghost"
-										>
-											Restore…
-										</Button>
-									</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				)}
-			</main>
+				<QueryBoundary
+					errorMessage="Couldn't load the backups."
+					hasData={Boolean(backups.data)}
+					isError={backups.isError}
+					isLoading={backups.isLoading}
+					onRetry={() => backups.refetch()}
+					skeletonClassName="h-40 w-full"
+				>
+					{backups.data ? (
+						<>
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead>When</TableHead>
+										<TableHead>Size</TableHead>
+										<TableHead>Location</TableHead>
+										<TableHead>Verified</TableHead>
+										<TableHead>
+											<span className="sr-only">Actions</span>
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{backups.data.map((b) => (
+										<TableRow key={b.id}>
+											<TableCell>{relativeTime(b.whenISO, now)}</TableCell>
+											<TableCell>{b.sizeMB} MB</TableCell>
+											<TableCell>
+												<Badge variant="outline">
+													{b.location === "offsite" ? "off-site" : "local"}
+												</Badge>
+											</TableCell>
+											<TableCell>
+												{b.verified ? (
+													<span className="flex items-center gap-1 text-success">
+														<CheckCircle2 className="size-3.5" />
+														<span className="sr-only">Verified</span>
+													</span>
+												) : (
+													<span className="text-muted-foreground">
+														—<span className="sr-only">Not verified</span>
+													</span>
+												)}
+											</TableCell>
+											<TableCell className="text-right">
+												<Button
+													onClick={() => setRestoring(b)}
+													size="sm"
+													variant="ghost"
+												>
+													Restore…
+												</Button>
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+							{backups.data.length === 0 ? (
+								<div className="rounded-lg border border-border border-dashed p-8 text-center text-muted-foreground text-sm">
+									No backups yet. Use 'Back up now' to create the first one.
+								</div>
+							) : null}
+						</>
+					) : null}
+				</QueryBoundary>
+			</div>
 
 			<SafetyConfirm
 				confirmLabel="Restore this backup"
@@ -109,7 +137,7 @@ function BackupsPage() {
 				]}
 				onOpenChange={setRunnerOpen}
 				open={runnerOpen}
-				title="Backing up acme-blog"
+				title={`Backing up ${siteId}`}
 			/>
 		</>
 	);

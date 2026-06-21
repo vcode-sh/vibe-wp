@@ -25,7 +25,7 @@ function ServerPage() {
 	return (
 		<>
 			<TopBar crumbs={["Server & security"]} />
-			<main className="mx-auto grid w-full max-w-6xl gap-4 p-6">
+			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
 						<Button onClick={() => toast.success("Hardening server (mock)…")}>
@@ -70,7 +70,7 @@ function ServerPage() {
 						</Button>
 					</CardContent>
 				</Card>
-			</main>
+			</div>
 
 			<SafetyConfirm
 				confirmLabel="Stop the site"
