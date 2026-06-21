@@ -292,7 +292,7 @@ git commit -m "feat(panel): output redaction"
 - Consumes: `redact` (Task 2).
 - Produces: `VIBE_OPS` (allowlist), `buildVibeArgv(siteDir, env, op): string[]`, `runVibe(siteDir, env, op, opts?): Promise<{ stdout; stderr; code }>`, `streamVibe(siteDir, env, op): { proc; lines: AsyncIterable<string> }`. `VibeOp = keyof typeof VIBE_OPS`. `VibeEnv = "local"|"stage"|"prod"|"external"`.
 
-- [ ] **Step 1: Write the failing test** `exec.test.ts` (the pure parts — allowlist + argv building):
+- [x] **Step 1: Write the failing test** `exec.test.ts` (the pure parts — allowlist + argv building):
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -317,9 +317,9 @@ describe("buildVibeArgv", () => {
 });
 ```
 
-- [ ] **Step 2: Run it — FAIL.**
+- [x] **Step 2: Run it — FAIL.**
 
-- [ ] **Step 3: Implement `exec.ts`:**
+- [x] **Step 3: Implement `exec.ts`:**
 
 ```ts
 import { redact } from "./redact";
@@ -395,9 +395,9 @@ export function streamVibe(siteDir: string, env: VibeEnv, op: VibeOp) {
 }
 ```
 
-- [ ] **Step 4: Run it — PASS.** (Only the pure functions are unit-tested; `runVibe`/`streamVibe` spawning is covered by the VPS gate.)
+- [x] **Step 4: Run it — PASS.** (Only the pure functions are unit-tested; `runVibe`/`streamVibe` spawning is covered by the VPS gate.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add control-panel/server/src/core-bridge/exec.ts control-panel/server/src/core-bridge/exec.test.ts
