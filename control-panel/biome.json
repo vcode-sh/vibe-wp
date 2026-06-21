@@ -17,6 +17,8 @@
       "!**/.vscode",
       "!**/.cursor",
       "!**/.claude",
+      "!packages/ui/src/components",
+      "!web/src/hooks/use-mobile.ts",
       "!**/routeTree.gen.ts",
       "!**/src-tauri",
       "!**/.nuxt",

@@ -3,7 +3,7 @@
   "type": "module",
   "exports": {
     ".": {
-      "default": "./src/index.ts"
+      "default": "./src/routers/index.ts"
     },
     "./*": {
       "default": "./src/*.ts"
