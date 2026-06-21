@@ -87,7 +87,7 @@ export default function SignInForm({
 									value={field.state.value}
 								/>
 								{field.state.meta.errors.map((error) => (
-									<p className="text-red-500" key={error?.message}>
+									<p className="text-destructive" key={error?.message}>
 										{error?.message}
 									</p>
 								))}
@@ -110,7 +110,7 @@ export default function SignInForm({
 									value={field.state.value}
 								/>
 								{field.state.meta.errors.map((error) => (
-									<p className="text-red-500" key={error?.message}>
+									<p className="text-destructive" key={error?.message}>
 										{error?.message}
 									</p>
 								))}
