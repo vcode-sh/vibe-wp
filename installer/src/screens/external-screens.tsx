@@ -3,7 +3,7 @@ import { color } from "../app/theme";
 import { ActionRow, Field } from "../components/primitives";
 import { checkExtDbHost, checkExtHost } from "../core/field-checks";
 
-export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function ExternalDbScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <text fg={color("muted")}>
@@ -15,6 +15,7 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
         focused={focusIndex === 0}
         hint="host or host:port"
         label="Database host"
+        onFocus={() => setFocusIndex(0)}
         onInput={(value) => update("extDbHost", value)}
         value={state.extDbHost}
       />
@@ -23,6 +24,7 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
           focused={focusIndex === 1}
           grow
           label="Database name"
+          onFocus={() => setFocusIndex(1)}
           onInput={(value) => update("extDbName", value)}
           value={state.extDbName}
         />
@@ -30,6 +32,7 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
           focused={focusIndex === 2}
           grow
           label="Database user"
+          onFocus={() => setFocusIndex(2)}
           onInput={(value) => update("extDbUser", value)}
           value={state.extDbUser}
         />
@@ -37,6 +40,7 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
       <Field
         focused={focusIndex === 3}
         label="Database password"
+        onFocus={() => setFocusIndex(3)}
         onInput={(value) => update("extDbPassword", value)}
         secret
         value={state.extDbPassword}
@@ -46,6 +50,7 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
           focused={focusIndex === 4}
           grow
           label="Charset"
+          onFocus={() => setFocusIndex(4)}
           onInput={(value) => update("extDbCharset", value)}
           value={state.extDbCharset}
         />
@@ -53,6 +58,7 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
           focused={focusIndex === 5}
           grow
           label="Table prefix"
+          onFocus={() => setFocusIndex(5)}
           onInput={(value) => update("extDbTablePrefix", value)}
           value={state.extDbTablePrefix}
         />
@@ -66,7 +72,13 @@ export function ExternalDbScreen({ state, update, focusIndex, next }: ScreenProp
   );
 }
 
-export function ExternalRedisScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function ExternalRedisScreen({
+  state,
+  update,
+  focusIndex,
+  setFocusIndex,
+  next
+}: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <text fg={color("muted")}>
@@ -76,6 +88,7 @@ export function ExternalRedisScreen({ state, update, focusIndex, next }: ScreenP
         feedback={checkExtHost(state.extRedisHost)}
         focused={focusIndex === 0}
         label="Redis host"
+        onFocus={() => setFocusIndex(0)}
         onInput={(value) => update("extRedisHost", value)}
         value={state.extRedisHost}
       />
@@ -84,6 +97,7 @@ export function ExternalRedisScreen({ state, update, focusIndex, next }: ScreenP
           focused={focusIndex === 1}
           grow
           label="Redis port"
+          onFocus={() => setFocusIndex(1)}
           onInput={(value) => update("extRedisPort", value)}
           value={state.extRedisPort}
         />
@@ -91,6 +105,7 @@ export function ExternalRedisScreen({ state, update, focusIndex, next }: ScreenP
           focused={focusIndex === 2}
           grow
           label="Database index"
+          onFocus={() => setFocusIndex(2)}
           onInput={(value) => update("extRedisDatabase", value)}
           value={state.extRedisDatabase}
         />
@@ -98,6 +113,7 @@ export function ExternalRedisScreen({ state, update, focusIndex, next }: ScreenP
       <Field
         focused={focusIndex === 3}
         label="Redis password"
+        onFocus={() => setFocusIndex(3)}
         onInput={(value) => update("extRedisPassword", value)}
         secret
         value={state.extRedisPassword}
@@ -106,6 +122,7 @@ export function ExternalRedisScreen({ state, update, focusIndex, next }: ScreenP
         focused={focusIndex === 4}
         hint="tcp or tls"
         label="Scheme"
+        onFocus={() => setFocusIndex(4)}
         onInput={(value) => update("extRedisScheme", value)}
         value={state.extRedisScheme}
       />

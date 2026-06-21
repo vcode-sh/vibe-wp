@@ -9,7 +9,7 @@ import type { BackupPolicy, BackupSchedule } from "../core/types";
 
 // Focus order: destination(0), folder(1), retention(2), schedule(3),
 // then R2 account(4), access key(5), secret(6), bucket(7) when R2 is on.
-export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function BackupScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   const showLocal = state.backupPolicy !== "manual";
   const showR2 = state.backupPolicy === "external-later";
 
@@ -37,6 +37,7 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
             focused={focusIndex === 1}
             hint={`Created on install — suggested ${shortPath(suggestedBackupDir(state.siteSlug), 2)}`}
             label="Backup folder"
+            onFocus={() => setFocusIndex(1)}
             onInput={(value) => update("backupDir", value)}
             value={state.backupDir}
           />
@@ -46,6 +47,7 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
               grow
               hint="older ones are deleted"
               label="How many backups to keep"
+              onFocus={() => setFocusIndex(2)}
               onInput={(value) => update("backupRetention", value.replace(/[^0-9]/g, ""))}
               value={state.backupRetention}
             />
@@ -63,7 +65,14 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
           </box>
         </>
       )}
-      {showR2 && <R2Fields focusIndex={focusIndex} state={state} update={update} />}
+      {showR2 && (
+        <R2Fields
+          focusIndex={focusIndex}
+          setFocusIndex={setFocusIndex}
+          state={state}
+          update={update}
+        />
+      )}
       <ActionRow
         onPrimary={next}
         primary="Continue"
@@ -80,14 +89,16 @@ export function BackupScreen({ state, update, focusIndex, next }: ScreenProps) {
 function R2Fields({
   state,
   update,
-  focusIndex
-}: Pick<ScreenProps, "state" | "update" | "focusIndex">) {
+  focusIndex,
+  setFocusIndex
+}: Pick<ScreenProps, "state" | "update" | "focusIndex" | "setFocusIndex">) {
   return (
     <box flexDirection="column" gap={1}>
       <Field
         focused={focusIndex === 4}
         hint="from your Cloudflare dashboard"
         label="R2 account ID"
+        onFocus={() => setFocusIndex(4)}
         onInput={(value) => update("r2AccountId", value)}
         value={state.r2AccountId}
       />
@@ -96,6 +107,7 @@ function R2Fields({
           focused={focusIndex === 5}
           grow
           label="R2 access key ID"
+          onFocus={() => setFocusIndex(5)}
           onInput={(value) => update("r2AccessKeyId", value)}
           value={state.r2AccessKeyId}
         />
@@ -103,6 +115,7 @@ function R2Fields({
           focused={focusIndex === 7}
           grow
           label="R2 bucket"
+          onFocus={() => setFocusIndex(7)}
           onInput={(value) => update("r2Bucket", value)}
           value={state.r2Bucket}
         />
@@ -110,6 +123,7 @@ function R2Fields({
       <Field
         focused={focusIndex === 6}
         label="R2 secret access key"
+        onFocus={() => setFocusIndex(6)}
         onInput={(value) => update("r2SecretKey", value)}
         secret
         value={state.r2SecretKey}

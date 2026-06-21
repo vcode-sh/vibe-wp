@@ -14,7 +14,7 @@ import type { PerformancePreset } from "../core/types";
 const MEMORY_FOCUS = 2;
 const FIELD_FOCUS_START = 3;
 
-export function PerformanceScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function PerformanceScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   const values = effectivePerformanceValues(state);
   const memory = sizingMemoryMb(state);
   const clamped = !state.performanceCustom && memory !== null && memory < 1800;
@@ -52,6 +52,7 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
       <ToggleRow
         focused={focusIndex === 1}
         label="Customize individual settings"
+        onFocus={() => setFocusIndex(1)}
         onToggle={toggleCustom}
         value={state.performanceCustom}
       />
@@ -59,6 +60,7 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
         focused={focusIndex === MEMORY_FOCUS}
         hint={memoryHint(state.host.totalMemoryMb)}
         label="Assumed server memory (MB)"
+        onFocus={() => setFocusIndex(MEMORY_FOCUS)}
         onInput={(value) => update("memoryOverrideMb", value.replace(/[^0-9]/g, ""))}
         value={state.memoryOverrideMb}
       />
@@ -69,7 +71,12 @@ export function PerformanceScreen({ state, update, focusIndex, next }: ScreenPro
         </text>
       )}
       {state.performanceCustom ? (
-        <CustomFields focusIndex={focusIndex} onSet={setOverride} values={values} />
+        <CustomFields
+          focusIndex={focusIndex}
+          onSet={setOverride}
+          setFocusIndex={setFocusIndex}
+          values={values}
+        />
       ) : (
         <InfoGrid rows={Object.entries(values).slice(0, 8)} />
       )}
@@ -123,10 +130,12 @@ function MemoryBar({ memory, values }: { memory: number | null; values: Record<s
 function CustomFields({
   values,
   focusIndex,
+  setFocusIndex,
   onSet
 }: {
   values: Record<string, string>;
   focusIndex: number;
+  setFocusIndex: (index: number) => void;
   onSet: (key: string, value: string) => void;
 }) {
   const rows: (typeof PERFORMANCE_FIELDS)[number][][] = [];
@@ -145,6 +154,7 @@ function CustomFields({
                 grow
                 key={field.key}
                 label={field.label}
+                onFocus={() => setFocusIndex(FIELD_FOCUS_START + index)}
                 onInput={(value) => onSet(field.key, value)}
                 value={values[field.key] ?? ""}
               />

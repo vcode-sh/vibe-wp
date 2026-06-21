@@ -4,7 +4,7 @@ import { color } from "../app/theme";
 import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
 
-export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function AiScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <text attributes={TextAttributes.BOLD} fg={color("accent")}>
@@ -17,6 +17,7 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
       <Field
         focused={focusIndex === 0}
         label="OpenAI API key"
+        onFocus={() => setFocusIndex(0)}
         onInput={(value) => update("aiOpenAiKey", value)}
         secret
         value={state.aiOpenAiKey}
@@ -24,6 +25,7 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
       <Field
         focused={focusIndex === 1}
         label="Google API key"
+        onFocus={() => setFocusIndex(1)}
         onInput={(value) => update("aiGoogleKey", value)}
         secret
         value={state.aiGoogleKey}
@@ -31,6 +33,7 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
       <Field
         focused={focusIndex === 2}
         label="Anthropic API key"
+        onFocus={() => setFocusIndex(2)}
         onInput={(value) => update("aiAnthropicKey", value)}
         secret
         value={state.aiAnthropicKey}
@@ -47,7 +50,7 @@ export function AiScreen({ state, update, focusIndex, next }: ScreenProps) {
   );
 }
 
-export function StagingScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function StagingScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <text fg={color("muted")} wrapMode="word">
@@ -57,12 +60,14 @@ export function StagingScreen({ state, update, focusIndex, next }: ScreenProps) 
       <ToggleRow
         focused={focusIndex === 0}
         label="Create a staging copy"
+        onFocus={() => setFocusIndex(0)}
         onToggle={() => update("stagingEnabled", !state.stagingEnabled)}
         value={state.stagingEnabled}
       />
       <Field
         focused={focusIndex === 1}
         label="Staging domain"
+        onFocus={() => setFocusIndex(1)}
         onInput={(value) => update("stagingDomain", value)}
         value={state.stagingDomain}
       />

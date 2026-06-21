@@ -5,7 +5,7 @@ import { ActionRow, Field, ToggleRow } from "../components/primitives";
 import { Section } from "../components/section";
 import { checkEmail } from "../core/field-checks";
 
-export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function SystemScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   const rows: [string, string][] = [
     ["OS", state.host.osName],
     ["Kernel", state.host.kernel],
@@ -34,18 +34,21 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
       <ToggleRow
         focused={focusIndex === 0}
         label="Install Docker if missing"
+        onFocus={() => setFocusIndex(0)}
         onToggle={() => update("installDocker", !state.installDocker)}
         value={state.installDocker}
       />
       <ToggleRow
         focused={focusIndex === 1}
         label="Install Caddy if missing"
+        onFocus={() => setFocusIndex(1)}
         onToggle={() => update("installCaddy", !state.installCaddy)}
         value={state.installCaddy}
       />
       <ToggleRow
         focused={focusIndex === 2}
         label="Secure the server (firewall, fail2ban, auto-updates)"
+        onFocus={() => setFocusIndex(2)}
         onToggle={() => update("hardenServer", !state.hardenServer)}
         value={state.hardenServer}
       />
@@ -58,13 +61,14 @@ export function SystemScreen({ state, update, focusIndex, next }: ScreenProps) {
   );
 }
 
-export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function ModeScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <Section title="Install location">
         <Field
           focused={focusIndex === 0}
           label="Install folder"
+          onFocus={() => setFocusIndex(0)}
           onInput={(value) => update("installDir", value)}
           value={state.installDir}
         />
@@ -72,6 +76,7 @@ export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
           focused={focusIndex === 1}
           hint="branch or tag — leave as-is unless told otherwise"
           label="Version to deploy"
+          onFocus={() => setFocusIndex(1)}
           onInput={(value) => update("ref", value)}
           value={state.ref}
         />
@@ -88,7 +93,7 @@ export function ModeScreen({ state, update, focusIndex, next }: ScreenProps) {
   );
 }
 
-export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function AdminScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
       <text fg={color("muted")} wrapMode="word">
@@ -98,12 +103,14 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
       <Field
         focused={focusIndex === 0}
         label="Site title"
+        onFocus={() => setFocusIndex(0)}
         onInput={(value) => update("siteTitle", value)}
         value={state.siteTitle}
       />
       <Field
         focused={focusIndex === 1}
         label="Admin username"
+        onFocus={() => setFocusIndex(1)}
         onInput={(value) => update("adminUser", value)}
         value={state.adminUser}
       />
@@ -111,6 +118,7 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
         feedback={checkEmail(state.adminEmail)}
         focused={focusIndex === 2}
         label="Admin email"
+        onFocus={() => setFocusIndex(2)}
         onInput={(value) => update("adminEmail", value)}
         value={state.adminEmail}
       />
@@ -118,6 +126,7 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
         focused={focusIndex === 3}
         hint="Auto-generated and strong. Saved to your env file — keep it safe to log in."
         label="Admin password"
+        onFocus={() => setFocusIndex(3)}
         onInput={(value) => update("adminPassword", value)}
         secret
         value={state.adminPassword}
@@ -125,6 +134,7 @@ export function AdminScreen({ state, update, focusIndex, next }: ScreenProps) {
       <Field
         focused={focusIndex === 4}
         label="Locale"
+        onFocus={() => setFocusIndex(4)}
         onInput={(value) => update("locale", value)}
         value={state.locale}
       />

@@ -12,7 +12,7 @@ import {
 
 const DEFAULT_TITLES = new Set(["", "Vibe WP", "My Site"]);
 
-export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
+export function DomainScreen({ state, update, focusIndex, setFocusIndex, next }: ScreenProps) {
   function updateProductionDomain(value: string) {
     update("productionDomain", value);
     const slug = siteSlugFromDomain(value);
@@ -37,24 +37,28 @@ export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
         feedback={checkDomain(state.productionDomain)}
         focused={focusIndex === 0}
         label="Production domain"
+        onFocus={() => setFocusIndex(0)}
         onInput={updateProductionDomain}
         value={state.productionDomain}
       />
       <ToggleRow
         focused={focusIndex === 1}
         label="Also serve www alias"
+        onFocus={() => setFocusIndex(1)}
         onToggle={() => update("wwwAlias", !state.wwwAlias)}
         value={state.wwwAlias}
       />
       <Field
         focused={focusIndex === 2}
         label="Staging domain"
+        onFocus={() => setFocusIndex(2)}
         onInput={(value) => update("stagingDomain", value)}
         value={state.stagingDomain}
       />
       <Field
         focused={focusIndex === 3}
         label="Site slug"
+        onFocus={() => setFocusIndex(3)}
         onInput={(value) => update("siteSlug", value)}
         value={state.siteSlug}
       />
@@ -63,6 +67,7 @@ export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
           focused={focusIndex === 4}
           grow
           label="Production port"
+          onFocus={() => setFocusIndex(4)}
           onInput={(value) => update("productionHttpPort", value)}
           value={state.productionHttpPort}
         />
@@ -70,6 +75,7 @@ export function DomainScreen({ state, update, focusIndex, next }: ScreenProps) {
           focused={focusIndex === 5}
           grow
           label="Staging port"
+          onFocus={() => setFocusIndex(5)}
           onInput={(value) => update("stagingHttpPort", value)}
           value={state.stagingHttpPort}
         />

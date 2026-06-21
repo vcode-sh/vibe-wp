@@ -17,6 +17,7 @@ export function Field({
   value,
   focused,
   onInput,
+  onFocus,
   secret = false,
   hint,
   feedback,
@@ -29,6 +30,8 @@ export function Field({
   value: string;
   focused: boolean;
   onInput: (value: string) => void;
+  // Click anywhere on the field to focus it (parity with keyboard Tab).
+  onFocus?: () => void;
   secret?: boolean;
 }) {
   const glyphs = useGlyphs();
@@ -46,6 +49,7 @@ export function Field({
       height={hint || feedback ? 3 : 2}
       id={focused ? FOCUS_ID : undefined}
       paddingX={1}
+      {...(onFocus && !focused ? clickProps(onFocus) : {})}
     >
       <box flexDirection="row" gap={space.sm} justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={focused ? color("accent") : color("muted")}>
@@ -117,12 +121,16 @@ export function ToggleRow({
   label,
   value,
   focused,
-  onToggle
+  onToggle,
+  onFocus
 }: {
   label: string;
   value: boolean;
   focused: boolean;
   onToggle: () => void;
+  // Click moves focus here first, then toggles — so the focus ring always
+  // matches the control that just changed.
+  onFocus?: () => void;
 }) {
   // Space toggles (Enter is reserved for "continue" so it never double-fires).
   useKeyboard((key) => {
@@ -142,7 +150,10 @@ export function ToggleRow({
       id={focused ? FOCUS_ID : undefined}
       justifyContent="space-between"
       paddingX={1}
-      {...clickProps(onToggle)}
+      {...clickProps(() => {
+        onFocus?.();
+        onToggle();
+      })}
     >
       <text attributes={focused ? TextAttributes.BOLD : TextAttributes.NONE} fg={color("text")}>
         {label}
