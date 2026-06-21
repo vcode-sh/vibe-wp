@@ -5,11 +5,16 @@
     ".": {
       "default": "./src/routers/index.ts"
     },
+    "./contract": {
+      "default": "./src/contract.ts"
+    },
     "./*": {
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@control-panel/auth": "workspace:*",
     "@control-panel/db": "workspace:*",
@@ -24,6 +29,7 @@
   "devDependencies": {
     "@control-panel/config": "workspace:*",
     "hono": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
   }
 }

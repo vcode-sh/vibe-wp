@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
 const CommandMenu = lazy(() =>
-	import("./command-menu").then((m) => ({ default: m.CommandMenu })),
+	import("./command-menu").then((m) => ({ default: m.CommandMenu }))
 );
 
 /**

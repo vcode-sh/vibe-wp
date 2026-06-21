@@ -79,7 +79,7 @@ Spec: `docs/superpowers/specs/2026-06-21-control-panel-backend-install-design.md
 **Interfaces:**
 - Produces: all UI types from one place — `Verdict`, `SiteSummary`, `MetricTile`, `NeedItem`, `ActivityEntry`, `SiteOverview`, `ServerInfo`, `BackupRecord`, `HealthReport`, `StagingInfo`, `LogLine`, plus `JobStatus`, `Job`, `StreamEvent`.
 
-- [ ] **Step 1: Create `packages/api/src/contract.ts`** — copy the 11 types verbatim from `web/src/data/types.ts` (so they are byte-identical), then add the job/stream types:
+- [x] **Step 1: Create `packages/api/src/contract.ts`** — copy the 11 types verbatim from `web/src/data/types.ts` (so they are byte-identical), then add the job/stream types:
 
 ```ts
 export type Verdict = "good" | "watch" | "act";
@@ -194,9 +194,9 @@ export interface StreamEvent {
 }
 ```
 
-- [ ] **Step 2: Export `./contract`** — in `packages/api/package.json`, add to the `exports` map (mirroring the existing `./routers/*` entry): `"./contract": "./src/contract.ts"`.
+- [x] **Step 2: Export `./contract`** — in `packages/api/package.json`, add to the `exports` map (mirroring the existing `./routers/*` entry): `"./contract": "./src/contract.ts"`.
 
-- [ ] **Step 3: Re-export from web** — replace the entire body of `web/src/data/types.ts` with:
+- [x] **Step 3: Re-export from web** — replace the entire body of `web/src/data/types.ts` with:
 
 ```ts
 export type {
@@ -217,9 +217,9 @@ export type {
 } from "@control-panel/api/contract";
 ```
 
-- [ ] **Step 4: Verify** — `bun run check-types` PASS (web fixtures/components still resolve the same names through the re-export). `bun run check` PASS.
+- [x] **Step 4: Verify** — `bun run check-types` PASS (web fixtures/components still resolve the same names through the re-export). `bun run check` PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add control-panel/packages/api/src/contract.ts control-panel/packages/api/package.json control-panel/web/src/data/types.ts

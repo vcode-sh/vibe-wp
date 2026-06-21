@@ -85,7 +85,8 @@ const vendorGroups = [
 	{
 		name: "base-ui",
 		priority: 50,
-		test: (id: string) => startsWithAny("@base-ui/", "@floating-ui/")(packageName(id)),
+		test: (id: string) =>
+			startsWithAny("@base-ui/", "@floating-ui/")(packageName(id)),
 	},
 ];
 

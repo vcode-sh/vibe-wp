@@ -11,10 +11,10 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { sitesQuery } from "@/data/queries";
 
-type CommandMenuProps = {
-	open: boolean;
+interface CommandMenuProps {
 	onOpenChange: (open: boolean) => void;
-};
+	open: boolean;
+}
 
 /**
  * Heavy body of the command palette (pulls in cmdk + its Radix dialog stack).
