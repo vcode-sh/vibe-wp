@@ -1,6 +1,7 @@
 import type { Job, StreamEvent } from "../contract";
 
 import { streamVibe } from "./exec";
+import { persistJobFinish, persistJobStart } from "./jobs-db";
 import { LineStream } from "./line-stream";
 import { findSite } from "./sites";
 
@@ -25,6 +26,7 @@ async function runJob(
 	job.status = code === 0 ? "succeeded" : "failed";
 	job.finishedAt = new Date().toISOString();
 	stream.end(job.status);
+	await persistJobFinish(job.id, job.status, code);
 }
 
 export function getJob(jobId: string): Job | null {
@@ -58,10 +60,12 @@ export async function startBackupJob(
 		exitCode: null,
 	};
 	registry.set(jobId, { job, stream });
-	runJob(job, stream, site.installDir).catch(() => {
+	await persistJobStart(jobId, "backup", siteId);
+	runJob(job, stream, site.installDir).catch(async () => {
 		job.status = "failed";
 		job.finishedAt = new Date().toISOString();
 		stream.end("failed");
+		await persistJobFinish(jobId, "failed", null);
 	});
 	return { jobId };
 }

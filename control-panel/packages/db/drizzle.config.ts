@@ -20,7 +20,7 @@ function resolveDatabaseUrl(databaseUrl = "") {
 }
 
 export default defineConfig({
-	schema: "./src/schema/auth.ts",
+	schema: "./src/schema/*.ts",
 	out: "./src/migrations",
 	dialect: "turso",
 	dbCredentials: {

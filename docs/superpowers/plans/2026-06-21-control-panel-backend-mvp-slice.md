@@ -817,13 +817,13 @@ git commit -m "feat(panel): line-stream + job registry (backup)"
 **Interfaces:**
 - Produces: `user.role` column; `jobs`, `auditLog` tables registered in the db schema.
 
-- [ ] **Step 1: Add `role` to `user`** in `schema/auth.ts` — after the `image` column add:
+- [x] **Step 1: Add `role` to `user`** in `schema/auth.ts` — after the `image` column add:
 
 ```ts
 	role: text("role").notNull().default("viewer"),
 ```
 
-- [ ] **Step 2: Create `schema/jobs.ts`:**
+- [x] **Step 2: Create `schema/jobs.ts`:**
 
 ```ts
 import { sql } from "drizzle-orm";
@@ -851,13 +851,13 @@ export const auditLog = sqliteTable("audit_log", {
 });
 ```
 
-- [ ] **Step 3: Register in `db/src/index.ts`** — import `{ jobs, auditLog }` from `./schema/jobs` and add them to the `schema` object passed to `drizzle({ client, schema })`.
+- [x] **Step 3: Register in `db/src/index.ts`** — import `{ jobs, auditLog }` from `./schema/jobs` and add them to the `schema` object passed to `drizzle({ client, schema })`.
 
-- [ ] **Step 4: Glob the schema** in `drizzle.config.ts` — change `schema: "./src/schema/auth.ts"` to `schema: "./src/schema/*.ts"`.
+- [x] **Step 4: Glob the schema** in `drizzle.config.ts` — change `schema: "./src/schema/auth.ts"` to `schema: "./src/schema/*.ts"`.
 
-- [ ] **Step 5: Apply** — from `control-panel/`: `bun run db:push` → expect "changes applied" (adds the `role` column + two tables to `local.db`).
+- [x] **Step 5: Apply** — from `control-panel/`: `bun run db:push` → expect "changes applied" (adds the `role` column + two tables to `local.db`).
 
-- [ ] **Step 6: Verify + commit** — `bun run check-types` PASS.
+- [x] **Step 6: Verify + commit** — `bun run check-types` PASS.
 
 ```bash
 git add control-panel/packages/db/src/schema/auth.ts control-panel/packages/db/src/schema/jobs.ts control-panel/packages/db/src/index.ts control-panel/packages/db/drizzle.config.ts
