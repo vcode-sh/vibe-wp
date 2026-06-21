@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { BackupRecord, PerfReport } from "../contract";
+import type { BackupRecord, LogLine, PerfReport } from "../contract";
 
 export function parseEnvFile(text: string): Record<string, string> {
 	const out: Record<string, string> = {};
@@ -139,4 +139,21 @@ export function parsePerfJson(stdout: string): PerfReport {
 			redisHitPercent: 0,
 		};
 	}
+}
+
+export function parseLogLines(
+	stdout: string,
+	source: LogLine["source"]
+): LogLine[] {
+	return stdout
+		.split("\n")
+		.map((l) => l.trim())
+		.filter(Boolean)
+		.slice(-200)
+		.map((text, i) => ({
+			id: String(i),
+			source,
+			text,
+			whenISO: new Date(0).toISOString(),
+		}));
 }

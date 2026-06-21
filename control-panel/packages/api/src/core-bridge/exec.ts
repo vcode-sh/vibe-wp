@@ -22,6 +22,7 @@ export const VIBE_OPS = {
 	doctorJson: { argv: ["doctor-runtime", "--json"], stream: false },
 	monitorJson: { argv: ["monitor", "--quiet", "--json"], stream: false },
 	perfJson: { argv: ["perf-report", "--json"], stream: false },
+	logsRecent: { argv: ["logs-recent"], stream: false },
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

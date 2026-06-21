@@ -469,9 +469,9 @@ git commit -m "feat(panel): real healthReport + stagingInfo"
 **Interfaces:**
 - Produces: `logsRecent({ siteId, source }) → LogLine[]`. `VIBE_OPS.logsRecent` (argv `["logs-recent"]`). `parseLogLines(stdout, source)`.
 
-- [ ] **Step 1: Add `logsRecent` op** to `VIBE_OPS`: `logsRecent: { argv: ["logs-recent"], stream: false }`.
+- [x] **Step 1: Add `logsRecent` op** to `VIBE_OPS`: `logsRecent: { argv: ["logs-recent"], stream: false }`.
 
-- [ ] **Step 2: TDD `parseLogLines`** in `parse.ts` (docker compose log lines → `LogLine[]`; assign `source` by the requested filter, `id` by index, `whenISO`/`text` best-effort from the line):
+- [x] **Step 2: TDD `parseLogLines`** in `parse.ts` (docker compose log lines → `LogLine[]`; assign `source` by the requested filter, `id` by index, `whenISO`/`text` best-effort from the line):
 
 ```ts
 import type { LogLine } from "../contract";
@@ -487,7 +487,7 @@ export function parseLogLines(stdout: string, source: LogLine["source"]): LogLin
 ```
 (Test: 3 lines → 3 `LogLine`s with the given source; empty → `[]`.)
 
-- [ ] **Step 3: Create `routers/logs.ts`:**
+- [x] **Step 3: Create `routers/logs.ts`:**
 
 ```ts
 import { z } from "zod";
@@ -511,7 +511,7 @@ export const logsRouter = {
 };
 ```
 
-- [ ] **Step 4: Spread into `routers/index.ts`. Step 5: Verify + commit** (`check-types`/`check`/`test`):
+- [x] **Step 4: Spread into `routers/index.ts`. Step 5: Verify + commit** (`check-types`/`check`/`test`):
 
 ```bash
 git add control-panel/packages/api/src/routers/logs.ts control-panel/packages/api/src/routers/index.ts control-panel/packages/api/src/core-bridge/exec.ts control-panel/packages/api/src/core-bridge/parse.ts control-panel/packages/api/src/core-bridge/parse.test.ts

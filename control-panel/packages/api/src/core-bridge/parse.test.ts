@@ -5,6 +5,7 @@ import {
 	parseBackups,
 	parseChecksJson,
 	parseEnvFile,
+	parseLogLines,
 	parseMonitorJson,
 	parsePerfJson,
 	parseSmoke,
@@ -113,5 +114,20 @@ describe("parsePerfJson", () => {
 			opcacheHitPercent: 0,
 			redisHitPercent: 0,
 		});
+	});
+});
+
+describe("parseLogLines", () => {
+	it("splits stdout into LogLine entries with the given source", () => {
+		const lines = parseLogLines("line one\nline two\nline three\n", "nginx");
+		expect(lines).toHaveLength(3);
+		expect(lines[0]?.source).toBe("nginx");
+		expect(lines[0]?.text).toBe("line one");
+		expect(lines[1]?.text).toBe("line two");
+		expect(lines[2]?.text).toBe("line three");
+		expect(lines[0]?.id).toBe("0");
+	});
+	it("returns an empty array for empty stdout", () => {
+		expect(parseLogLines("", "php")).toEqual([]);
 	});
 });
