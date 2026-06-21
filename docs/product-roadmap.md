@@ -201,6 +201,17 @@ follow-ups: `sites.list` smoke latency (~16s; make lazy/cached), the empty-backu
 fallback, the remaining `serverInfo`/`health`/`logs`/`staging` query flips, and the
 dedicated-user + sudoers service hardening.
 
+**Plan A — "reads real everywhere" (2026-06-21, branch `control-panel-backend-install`):**
+All read surfaces of the panel now serve real host data instead of fixtures. `bin/smoke`,
+`bin/doctor-runtime`, `bin/monitor`, and `bin/perf-report` gained `--json` modes; the exec
+layer extended with `smokeJson`/`doctorJson`/`monitorJson`/`perfJson`/`logsRecent` ops;
+typed parsers (`parseChecksJson`, `parseMonitorJson`, `parsePerfJson`, `parseLogLines`) and a
+`PerfReport` contract are in place; `sitesList` is identity-only (instant) with lazy
+`siteStatus` per card; `serverInfo`, `serverDoctor`, `healthReport`, `stagingInfo`, and
+`logsRecent` oRPC procedures are wired; the web query factories are flipped to oRPC; and the
+backup-date display returns "never" for epoch/empty. Implementation complete (T1–T7 all done);
+**pending VPS re-validation on `panel.vcode.sh`** (Task 8 of the plan).
+
 ### Phase 5 — Desktop app (LocalWP / Studio competitor) (NOT started)
 Tauri app: spin up local sites, blueprints, and **push/pull sync to production** built on
 the existing `refresh-from-prod` / `promote-files-to-prod` primitives. Biggest lift —
