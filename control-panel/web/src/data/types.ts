@@ -75,15 +75,13 @@ export interface HealthReport {
 	uptimePercent: number;
 }
 
-export interface StagingInfo {
-	noindex: boolean;
-	present: boolean;
-	url: string | null;
-}
+export type StagingInfo =
+	| { present: true; url: string; noindex: boolean }
+	| { present: false; url: null };
 
 export interface LogLine {
 	id: string;
 	source: "nginx" | "php" | "wp";
 	text: string;
-	ts: string;
+	whenISO: string;
 }

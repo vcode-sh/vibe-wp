@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import Loader from "@/components/loader";
+import { Loader } from "@/components/loader";
 import { orpc } from "@/lib/orpc/client";
 import { queryClient } from "@/lib/orpc/query-client";
 import { routeTree } from "@/routeTree.gen";

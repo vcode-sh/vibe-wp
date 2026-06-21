@@ -42,94 +42,96 @@ export const serverInfo: ServerInfo = {
 	allHealthy: true,
 };
 
-const overviews: Record<string, SiteOverview> = {
-	"acme-blog": {
-		siteId: "acme-blog",
-		headline: "acme-blog is healthy.",
-		status: "good",
-		subline: "checked just now · backed up 2h ago · TLS good for 89 days",
-		needs: [
-			{
-				id: "wp-update",
-				icon: "update",
-				title: "WordPress 7.0.1 is available",
-				detail:
-					"A small security update. ~20 seconds, and we take a fresh backup first.",
-				actionLabel: "Update now",
-				reversible: true,
-			},
-		],
-		tiles: [
-			{
-				key: "health",
-				label: "Health",
-				verdict: "good",
-				value: "Healthy",
-				detail: "HTTP 200 · Redis connected",
-				help: "All checks return OK and the object cache is connected.",
-			},
-			{
-				key: "speed",
-				label: "Speed",
-				verdict: "good",
-				value: "Fast",
-				detail: "TTFB 210ms · cache warm",
-				help: "Under ~400ms time-to-first-byte is fast for WordPress.",
-			},
-			{
-				key: "cache",
-				label: "Cache",
-				verdict: "good",
-				value: "Warm",
-				detail: "94% hit rate",
-				help: "A high hit rate means most requests skip PHP.",
-			},
-			{
-				key: "disk",
-				label: "Disk",
-				verdict: "good",
-				value: "Plenty",
-				detail: "41% of 80 GB used",
-				help: "Under ~80% leaves room for backups and growth.",
-			},
-		],
-		safety: {
-			backupText: "Backed up 2h ago · off-site ✓",
-			backupDetail: "Next: tonight 03:00 · keeps 7",
-			securityText: "Server secured",
-			securityDetail: "Firewall on · auto-updates on",
+const acmeOverview: SiteOverview = {
+	siteId: "acme-blog",
+	headline: "acme-blog is healthy.",
+	status: "good",
+	subline: "checked just now · backed up 2h ago · TLS good for 89 days",
+	needs: [
+		{
+			id: "wp-update",
+			icon: "update",
+			title: "WordPress 7.0.1 is available",
+			detail:
+				"A small security update. ~20 seconds, and we take a fresh backup first.",
+			actionLabel: "Update now",
+			reversible: true,
 		},
-		activity: [
-			{
-				id: "a1",
-				whenISO: "2026-06-21T10:00:00Z",
-				kind: "backup",
-				text: "Backed up automatically (off-site ✓)",
-				good: true,
-			},
-			{
-				id: "a2",
-				whenISO: "2026-06-21T04:00:00Z",
-				kind: "health",
-				text: "Health check passed — all green",
-				good: true,
-			},
-			{
-				id: "a3",
-				whenISO: "2026-06-20T15:00:00Z",
-				kind: "cache",
-				text: "You cleared the cache",
-				good: false,
-			},
-			{
-				id: "a4",
-				whenISO: "2026-06-18T09:00:00Z",
-				kind: "update",
-				text: "Plugin “WooCommerce” updated to 9.4",
-				good: false,
-			},
-		],
+	],
+	tiles: [
+		{
+			key: "health",
+			label: "Health",
+			verdict: "good",
+			value: "Healthy",
+			detail: "HTTP 200 · Redis connected",
+			help: "All checks return OK and the object cache is connected.",
+		},
+		{
+			key: "speed",
+			label: "Speed",
+			verdict: "good",
+			value: "Fast",
+			detail: "TTFB 210ms · cache warm",
+			help: "Under ~400ms time-to-first-byte is fast for WordPress.",
+		},
+		{
+			key: "cache",
+			label: "Cache",
+			verdict: "good",
+			value: "Warm",
+			detail: "94% hit rate",
+			help: "A high hit rate means most requests skip PHP.",
+		},
+		{
+			key: "disk",
+			label: "Disk",
+			verdict: "good",
+			value: "Plenty",
+			detail: "41% of 80 GB used",
+			help: "Under ~80% leaves room for backups and growth.",
+		},
+	],
+	safety: {
+		backupText: "Backed up 2h ago · off-site ✓",
+		backupDetail: "Next: tonight 03:00 · keeps 7",
+		securityText: "Server secured",
+		securityDetail: "Firewall on · auto-updates on",
 	},
+	activity: [
+		{
+			id: "a1",
+			whenISO: "2026-06-21T10:00:00Z",
+			kind: "backup",
+			text: "Backed up automatically (off-site ✓)",
+			good: true,
+		},
+		{
+			id: "a2",
+			whenISO: "2026-06-21T04:00:00Z",
+			kind: "health",
+			text: "Health check passed — all green",
+			good: true,
+		},
+		{
+			id: "a3",
+			whenISO: "2026-06-20T15:00:00Z",
+			kind: "cache",
+			text: "You cleared the cache",
+			good: false,
+		},
+		{
+			id: "a4",
+			whenISO: "2026-06-18T09:00:00Z",
+			kind: "update",
+			text: "Plugin “WooCommerce” updated to 9.4",
+			good: false,
+		},
+	],
+};
+
+const overviews: Record<string, SiteOverview> = {
+	"acme-blog": acmeOverview,
 };
 
 export function overviewFor(siteId: string): SiteOverview {
@@ -137,13 +139,12 @@ export function overviewFor(siteId: string): SiteOverview {
 	if (found) {
 		return found;
 	}
-	const base = overviews["acme-blog"];
-	return { ...base, siteId, headline: `${siteId} is healthy.` };
+	return { ...acmeOverview, siteId, headline: `${siteId} is healthy.` };
 }
 
 export function healthFor(_siteId: string): HealthReport {
 	return {
-		tiles: overviews["acme-blog"].tiles,
+		tiles: acmeOverview.tiles,
 		ttfbMs: 210,
 		cacheHitPercent: 94,
 		tlsDays: 89,
@@ -180,14 +181,29 @@ export function backupsFor(_siteId: string): BackupRecord[] {
 
 export function logsFor(_siteId: string): LogLine[] {
 	return [
-		{ id: "l1", ts: "10:42:01", source: "nginx", text: "GET / 200 12ms" },
-		{ id: "l2", ts: "10:42:03", source: "php", text: "Cron: ran 2 due events" },
-		{ id: "l3", ts: "10:42:09", source: "wp", text: "Object cache: hit" },
+		{
+			id: "l1",
+			whenISO: "2026-06-21T10:42:01Z",
+			source: "nginx",
+			text: "GET / 200 12ms",
+		},
+		{
+			id: "l2",
+			whenISO: "2026-06-21T10:42:03Z",
+			source: "php",
+			text: "Cron: ran 2 due events",
+		},
+		{
+			id: "l3",
+			whenISO: "2026-06-21T10:42:09Z",
+			source: "wp",
+			text: "Object cache: hit",
+		},
 	];
 }
 
 export function stagingFor(siteId: string): StagingInfo {
 	return siteId === "acme-blog"
 		? { present: true, url: "staging.acme.com", noindex: true }
-		: { present: false, url: null, noindex: true };
+		: { present: false, url: null };
 }
