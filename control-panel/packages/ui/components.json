@@ -18,7 +18,8 @@
     "lib": "@control-panel/ui/lib",
     "ui": "@control-panel/ui/components"
   },
-  "menuColor": "default",
+  "menuColor": "default-translucent",
   "menuAccent": "subtle",
-  "registries": {}
+  "registries": {},
+  "rtl": false
 }

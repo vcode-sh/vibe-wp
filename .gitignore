@@ -41,6 +41,8 @@ secrets/*
 *.log
 tmp/
 
+.superpowers/
+
 node_modules/
 dist/
 coverage/
