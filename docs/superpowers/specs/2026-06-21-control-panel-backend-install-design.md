@@ -73,7 +73,9 @@ Use the better-auth **`admin` plugin + access control** — not a hand-rolled ro
 
 - **Roles via `createAccessControl`** (`better-auth/plugins/access`): define `admin` / `operator` / `viewer` with statements (e.g. `site: ["read","operate","manage"]`, `server: ["read","manage"]`, `team: ["manage"]`); pass `adminPlugin({ ac, roles: { admin, operator, viewer }, adminRoles: ["admin"] })`. oRPC middleware maps the Section-5 tiers to `auth.api.userHasPermission(...)`, so `◦`/`⁂` become real guards.
 - **Team without email**: an admin provisions teammates with **`admin.createUser({ email, password, role })`** (no org, no email). A token-invite link + optional transactional email may layer on later.
-- **Bootstrap via database hook**: add `role` as a `user.additionalFields` with **`input: false`** (prevents privilege escalation via the signup payload); `databaseHooks.user.create.before` sets `role: "admin"` when `userCount === 0`, else `viewer`. The app serves a one-time **"Create the owner account"** screen while zero admins exist, then normal login. No secret is written to install logs.
+- **Bootstrap** — `role` is a `user.additionalFields` with **`input: false`** (prevents privilege escalation via the signup payload); `databaseHooks.user.create.before` sets `role: "admin"` when `userCount === 0`, else `viewer`. Two ways the first admin is created, both keeping secrets out of logs:
+  - **TUI-driven (primary, see §7a)** — the install flow captures the owner email + password in the operator's SSH session and calls `admin.createUser` once; the password is never persisted or logged. The web is then sign-in-ready immediately.
+  - **Browser first-run (fallback)** — if the operator skips it, the panel serves a one-time **"Create the owner account"** screen while zero admins exist, then normal login.
 - **Rate limiting is built-in**: enable better-auth's rate limiter (prod-default 60s/100) with `rateLimit: { storage: "database", customRules: { "/sign-in/email": { window: 10, max: 5 } } }`.
 - **Sessions/CSRF**: secure httpOnly cookies over Caddy TLS; set `baseURL` + `trustedOrigins` to `https://panel.<domain>` (better-auth's origin check is the CSRF guard).
 - **Audit**: every mutating procedure records `{ userId, action, siteId?, jobId, at }`; backs the Activity timeline + operations history.
@@ -92,6 +94,41 @@ A standalone **`bin/panel <install|update|status|uninstall>`** (peer of `bin/har
 7. **First-run + smoke** — zero-users serves owner-setup; verify HTTP 200 on `panel.<domain>` + service active; print "visit https://panel.<domain> to create the owner account."
 
 **Lifecycle**: `panel update` (pull, rebuild, migrate, restart) · `panel status`/`logs` · `panel uninstall` (remove service + Caddy snippet; keep or `--purge` data).
+
+## 7a. TUI install UX
+
+The panel install is a **host-level** action surfaced on the installer's first screen **server status line** (not per-site). It asks for **one real input — the subdomain** — plus an optional owner login, and reuses the existing Execute (progress + per-task + live-log) screen. The TUI and the web are presented as **two equal surfaces over the same core** ("same brain, your choice").
+
+**Flow:**
+1. **First screen** — the server status line shows panel state with a one-key action:
+   ```
+   Web control panel   ○ not installed                      [ Install → ]
+   ```
+   Once installed it flips to `● live · panel.acme.com   [ Open ] [ Manage ]` (Manage = update / uninstall).
+2. **Install screen** — Quick path = two prefilled fields then Enter:
+   ```
+   Where should it live?
+     Subdomain   ┃ panel.acme.com ┃         ← prefilled from detected sites
+     DNS         ✓ panel.acme.com → 1.2.3.4 (this server)
+   Owner login   (so you can sign in right away)
+     Email       ┃ you@acme.com ┃           ← prefilled from a site's WP admin
+     Password    ┃ •••••••••••• ┃
+   [Enter] Install   ·   [Tab] Custom   ·   [Esc] Back
+   ```
+   - **DNS preflight inline** (reuse the installer's check): green ✓, or plain-language "add an A record for panel.acme.com → 1.2.3.4" with a recheck.
+   - **Custom (Tab)** reveals only rarely-touched, already-defaulted knobs: port (auto-picked free), **access = Public subdomain (default) / Localhost-only (SSH tunnel)**, and the service user.
+3. **Execute** — the existing progress screen runs the §7 tasks, ending with "Create owner login" (when provided).
+4. **Done** — states the mutuality and the URL:
+   ```
+   ✓ Your control panel is live
+       https://panel.acme.com        → open in a browser and sign in
+   Manage Vibe WP two ways — same brain: here over SSH, or in the browser
+   (and share access with your team).      [O] Open   [Enter] Back
+   ```
+
+**Key UX rules:** one required input (subdomain), prefilled; true Enter-Enter Quick path with Custom hiding the rest; owner login captured in-TUI so the web is immediately sign-in-ready (secrets never logged, §6); mutuality stated on the done screen and encoded in the persistent status line.
+
+**Headless parity (power users):** the same install runs non-interactively — `bin/panel install --domain panel.acme.com --admin-email you@acme.com` (password prompted or generated) — mirroring the installer's existing `--headless` flags.
 
 ## 8. Security model
 
