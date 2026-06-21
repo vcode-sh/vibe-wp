@@ -58,7 +58,7 @@ if [ -f "${VIBE_ENV_FILE}" ]; then
   site_url="${WP_HOME:-${site_url}}"
 fi
 
-if "${VIBE_BIN_DIR}/doctor-runtime"; then
+if "${VIBE_BIN_DIR}/doctor-runtime" >/dev/null; then
   ok "runtime doctor"
 else
   fail "runtime doctor"
