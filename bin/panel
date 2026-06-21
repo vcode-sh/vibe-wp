@@ -53,6 +53,8 @@ install_panel() {
 
   # Build
   $SUDO install -d -m 0755 "$PANEL_DIR" "$PANEL_DIR/data"
+  # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
+  printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
   ( cd "$REPO_DIR/control-panel" && "$BUN" install --production=false && "$BUN" run build )
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
 
@@ -74,6 +76,7 @@ install_panel() {
   id vibe-panel >/dev/null 2>&1 || $SUDO useradd --system --home "$PANEL_DIR" --shell /usr/sbin/nologin vibe-panel || true
   $SUDO usermod -aG docker vibe-panel 2>/dev/null || true
   $SUDO chown -R vibe-panel:vibe-panel "$PANEL_DIR"
+  $SUDO chmod -R a+rX "$PANEL_DIR/app/web/dist" 2>/dev/null || true
 
   service="[Unit]
 Description=Vibe WP control panel
@@ -101,7 +104,17 @@ WantedBy=multi-user.target"
     printf '\n%s\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null
   fi
   printf '%s\n' "$DOMAIN {
-	reverse_proxy localhost:$PORT
+	handle /rpc/* {
+		reverse_proxy localhost:$PORT
+	}
+	handle /api/* {
+		reverse_proxy localhost:$PORT
+	}
+	handle {
+		root * $PANEL_DIR/app/web/dist
+		try_files {path} /index.html
+		file_server
+	}
 }" | $SUDO tee /etc/caddy/sites-enabled/vibe-wp-panel.caddy >/dev/null
   $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
 
