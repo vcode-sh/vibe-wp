@@ -31,7 +31,11 @@ export class LineStream {
 		let cursor = 0;
 		for (;;) {
 			while (cursor < this.buffer.length) {
-				yield { line: this.buffer[cursor], status: this.status, done: false };
+				yield {
+					line: this.buffer[cursor] ?? "",
+					status: this.status,
+					done: false,
+				};
 				cursor++;
 			}
 			if (this.done) {

@@ -38,7 +38,11 @@ describe("parseBackups", () => {
 			"/srv/acme/backups/local/2026-06-20T03-00-00\n/srv/acme/backups/local/2026-06-21T03-00-00\n"
 		);
 		expect(r).toHaveLength(2);
-		expect(r[0].whenISO > r[1].whenISO).toBe(true);
-		expect(r[0].location).toBe("local");
+		const first = r[0];
+		const second = r[1];
+		expect(first).toBeDefined();
+		expect(second).toBeDefined();
+		expect((first?.whenISO ?? "") > (second?.whenISO ?? "")).toBe(true);
+		expect(first?.location).toBe("local");
 	});
 });

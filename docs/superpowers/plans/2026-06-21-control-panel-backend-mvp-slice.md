@@ -1004,14 +1004,14 @@ git commit -m "feat(panel): operator/admin role-guarded procedures"
 
 > The core-bridge lives in `server/src`. To keep the router import clean, these routers import the core-bridge via a relative path from `packages/api` is NOT possible (separate package); instead the **routers call small server-provided functions re-exported from `@control-panel/api`'s peer**. Simplest correct approach for the MVP: move the core-bridge modules under `packages/api/src/core-bridge/` (so the API package owns them) and have `server` import the routers as today. **Do this:** in Tasks 2–5 the files were created under `server/src/core-bridge/`; relocate them to `packages/api/src/core-bridge/` now (one `git mv` + fix the two `@control-panel/api/contract` imports, which become relative `../contract`). Then routers import `./../core-bridge/...`.
 
-- [ ] **Step 1: Relocate the core-bridge into the api package:**
+- [x] **Step 1: Relocate the core-bridge into the api package:**
 
 ```bash
 git mv control-panel/server/src/core-bridge control-panel/packages/api/src/core-bridge
 ```
 Then in the moved `parse.ts`, `line-stream.ts`, `jobs.ts`, change `@control-panel/api/contract` imports to `../contract`. Run `bun run check-types` → PASS.
 
-- [ ] **Step 2: Create `routers/sites.ts`:**
+- [x] **Step 2: Create `routers/sites.ts`:**
 
 ```ts
 import type { SiteOverview, SiteSummary } from "../contract";
@@ -1082,7 +1082,7 @@ export const sitesRouter = {
 
 > Note: replace the inline `await import("zod")` with a top-level `import { z } from "zod";` and use `z.object(...)` — shown inline only to flag the input schema; the implementer must use the normal top-level import (zod is a workspace dep).
 
-- [ ] **Step 3: Create `routers/backups.ts`:**
+- [x] **Step 3: Create `routers/backups.ts`:**
 
 ```ts
 import { z } from "zod";
@@ -1111,7 +1111,7 @@ export const backupsRouter = {
 };
 ```
 
-- [ ] **Step 4: Create `routers/operations.ts`** (the SSE event iterator):
+- [x] **Step 4: Create `routers/operations.ts`** (the SSE event iterator):
 
 ```ts
 import { eventIterator } from "@orpc/server";
@@ -1149,7 +1149,7 @@ export const operationsRouter = {
 };
 ```
 
-- [ ] **Step 5: Spread into `routers/index.ts`:**
+- [x] **Step 5: Spread into `routers/index.ts`:**
 
 ```ts
 import { backupsRouter } from "./backups";
@@ -1167,7 +1167,7 @@ export const appRouter = {
 };
 ```
 
-- [ ] **Step 6: Verify + commit** — `bun run check-types` (the whole oRPC contract must infer; fix any zod/type mismatch), `bun run check`.
+- [x] **Step 6: Verify + commit** — `bun run check-types` (the whole oRPC contract must infer; fix any zod/type mismatch), `bun run check`.
 
 ```bash
 git add control-panel/packages/api/src/routers control-panel/packages/api/src/core-bridge
