@@ -4,9 +4,14 @@ import type { StepId } from "./steps";
 const choiceStepIds = new Set(["sites", "performance", "backup"]);
 
 export interface AppKeyContext {
-  canGoForward: boolean;
   currentId: StepId;
   destroy: () => void;
+  // True when a text input is focused, so we must not steal printable keys
+  // (like "?") or cursor keys — they belong to the input being edited.
+  editingText: boolean;
+  // True when help fills the screen (compact mode): it acts as a modal, so keys
+  // close it rather than falling through to the form underneath.
+  helpModal: boolean;
   moveFocus: (delta: number) => void;
   next: () => void;
   previous: () => void;
@@ -24,24 +29,31 @@ export function handleAppKey(key: AppKey, context: AppKeyContext) {
     context.destroy();
     return;
   }
-  if (key.name === "escape" || key.name === "left") {
+  // Full-screen help is modal: Esc / F1 / ? dismiss it; everything else is
+  // swallowed so it can't disturb the form hidden behind it.
+  if (context.helpModal) {
+    if (key.name === "escape" || key.name === "f1" || key.name === "?") {
+      context.toggleHelp();
+    }
+    return;
+  }
+  // Esc always goes back; it never conflicts with text editing.
+  if (key.name === "escape") {
     context.previous();
     return;
   }
-  if (key.name === "tab" || shouldMoveFocus(key, context.currentId)) {
-    context.moveFocus(key.name === "up" ? -1 : 1);
-    return;
-  }
-  if (key.name === "right" && context.canGoForward) {
-    context.next();
-    return;
-  }
-  if (key.name === "?") {
+  // F1 is the universal help key (works even while editing a field). "?" is a
+  // convenience that only fires when no text input would otherwise receive it.
+  if (key.name === "f1" || (key.name === "?" && !context.editingText)) {
     context.toggleHelp();
     return;
   }
   if (key.ctrl && key.name === "l") {
     context.toggleLog();
+    return;
+  }
+  if (key.name === "tab" || shouldMoveFocus(key, context.currentId)) {
+    context.moveFocus(key.name === "up" ? -1 : 1);
   }
 }
 

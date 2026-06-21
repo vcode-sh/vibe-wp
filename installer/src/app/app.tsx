@@ -1,9 +1,10 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useMemo, useState } from "react";
-import { Footer, Header, HelpPanel, LogStrip } from "../components/chrome";
+import { Footer, Header, LogStrip } from "../components/chrome";
 import { GlyphProvider } from "../components/glyph-context";
 import { shouldUseAscii } from "../components/glyphs";
+import { HelpPanel } from "../components/help-panel";
 import { Column, ScrollViewport } from "../components/layout";
 import { CompactStepper, StepRail } from "../components/step-rail";
 import { buildInstallPlan } from "../core/install-plan";
@@ -47,6 +48,10 @@ export function App({ initialState, options }: AppProps) {
   const activeIndex = Math.min(stepIndex, flowSteps.length - 1);
   const current = getStep(flowSteps, activeIndex);
   const focusCount = focusCountFor(current, state);
+  const kind = stepKind(current.id);
+  // Field/mixed screens have a focused text input that owns printable keys.
+  const editingText = kind === "fields" || kind === "mixed";
+  const helpModal = compact && showHelp;
   const plan = useMemo(() => buildInstallPlan(state), [state]);
   const redactedPlan = useMemo(() => redactPlan(plan), [plan]);
   const validationErrors = useMemo(() => validateState(state), [state]);
@@ -90,8 +95,9 @@ export function App({ initialState, options }: AppProps) {
 
   useKeyboard((key) =>
     handleAppKey(key, {
-      canGoForward: activeIndex < flowSteps.length - 1,
       currentId: current.id,
+      editingText,
+      helpModal,
       destroy: () => renderer.destroy(),
       moveFocus,
       next,
@@ -134,7 +140,11 @@ export function App({ initialState, options }: AppProps) {
           {!compact && (
             <StepRail activeIndex={activeIndex} onSelectStep={goToStep} steps={flowSteps} />
           )}
-          <MainPanel {...screenProps} />
+          {helpModal ? (
+            <HelpPanel compact current={current} state={state} warnings={plan.warnings} />
+          ) : (
+            <MainPanel {...screenProps} />
+          )}
           {showHelp && !compact && (
             <HelpPanel current={current} state={state} warnings={plan.warnings} />
           )}
@@ -171,7 +181,7 @@ function MainPanel(props: ScreenProps) {
         <text attributes={TextAttributes.BOLD} fg={color("text")}>
           {props.current.title}
         </text>
-        <text fg={color("subtle")}>? context · Ctrl+L logs</text>
+        <text fg={color("subtle")}>F1 help · Ctrl+L logs</text>
       </box>
       <ScrollViewport focusIndex={props.focusIndex}>
         <Column>{renderScreen(props)}</Column>

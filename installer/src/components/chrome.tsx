@@ -1,11 +1,8 @@
 import { TextAttributes } from "@opentui/core";
 import type { StepKind } from "../app/nav-hints";
-import type { Step } from "../app/steps";
 import { color } from "../app/theme";
 import { BORDER, space } from "../app/tokens";
 import { INSTALLER_VERSION } from "../core/defaults";
-import type { InstallerState } from "../core/types";
-import { Credits } from "./credits";
 import { useGlyphs } from "./glyph-context";
 import type { GlyphName } from "./glyphs";
 import { KeyHints } from "./keycap";
@@ -35,73 +32,6 @@ export function Header() {
     </box>
   );
 }
-
-export function HelpPanel({
-  current,
-  state,
-  warnings
-}: {
-  current: Step;
-  state: InstallerState;
-  warnings: string[];
-}) {
-  const glyphs = useGlyphs();
-  return (
-    <box
-      backgroundColor={color("panel")}
-      borderColor={color("border")}
-      borderStyle={BORDER.frame}
-      flexDirection="column"
-      gap={space.sm}
-      padding={1}
-      width={32}
-    >
-      <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-        CONTEXT
-      </text>
-      <text fg={color("text")} wrapMode="word">
-        {current.help}
-      </text>
-      <text fg={color("muted")}>Production</text>
-      <text fg={color("text")} truncate>
-        https://{state.productionDomain}
-      </text>
-      <text fg={color("muted")}>Staging</text>
-      <text fg={state.stagingEnabled ? color("text") : color("subtle")} truncate>
-        {state.stagingEnabled ? `https://${state.stagingDomain}` : "disabled"}
-      </text>
-      <text fg={warnings.length ? color("warning") : color("success")}>
-        {warnings.length ? `${warnings.length} warning(s)` : "No warnings"}
-      </text>
-      {warnings.slice(0, 4).map((warning) => (
-        <text fg={color("warning")} key={warning} wrapMode="word">
-          {glyphs.warn} {warning}
-        </text>
-      ))}
-      <box border={["top"]} borderColor={color("divider")} flexDirection="column" paddingTop={1}>
-        <text attributes={TextAttributes.BOLD} fg={color("accent")}>
-          KEYS
-        </text>
-        {KEY_HELP.map(([k, v]) => (
-          <text fg={color("muted")} key={k} truncate>
-            <text fg={color("text")}>{k}</text> {v}
-          </text>
-        ))}
-      </box>
-      <box border={["top"]} borderColor={color("divider")} flexDirection="column" paddingTop={1}>
-        <Credits layout="column" />
-      </box>
-    </box>
-  );
-}
-
-const KEY_HELP: [string, string][] = [
-  ["arrows / 1-9", "choose an option"],
-  ["Tab", "switch field"],
-  ["Enter", "continue"],
-  ["Esc", "go back"],
-  ["?", "toggle this · Ctrl+L logs"]
-];
 
 export function LogStrip({ lines }: { lines: string[] }) {
   return (
@@ -194,10 +124,13 @@ function footerHints(
   } else if (kind === "mixed") {
     input.push(...tab, { key: "space", label: "toggle" });
   }
+  // On field/mixed screens "?" types into the focused input, so F1 is the help
+  // key there; elsewhere "?" is fine and more discoverable.
+  const helpKey = kind === "fields" || kind === "mixed" ? "F1" : "?";
   const tail: Hint[] = [
     { key: glyphs.enter, label: kind === "done" ? "finish" : "continue" },
     { key: "esc", label: "back" },
-    { key: "?", label: "help" }
+    { key: helpKey, label: "help" }
   ];
   return [...input, ...tail];
 }
