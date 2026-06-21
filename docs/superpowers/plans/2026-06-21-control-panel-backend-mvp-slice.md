@@ -1292,7 +1292,11 @@ done
 install_panel() {
   [ -n "$DOMAIN" ] || { printf 'Subdomain for the panel: '; read -r DOMAIN; }
   [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
-  command -v bun >/dev/null 2>&1 || { echo "Bun is required on the host."; exit 1; }
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "Installing Bun..."
+    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
+  fi
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
 
   # DNS preflight
   ip="$(curl -fsS https://api.ipify.org || true)"
@@ -1330,7 +1334,7 @@ Type=simple
 User=vibe-panel
 WorkingDirectory=$PANEL_DIR/app/server
 Environment=PORT=$PORT
-ExecStart=$(command -v bun) run src/index.ts
+ExecStart=$BUN run src/index.ts
 Restart=always
 [Install]
 WantedBy=multi-user.target"
