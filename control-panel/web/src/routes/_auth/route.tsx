@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
-import { CommandMenu } from "@/components/command-menu";
+import { CommandMenuLauncher } from "@/components/command-menu-launcher";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 
@@ -20,7 +20,7 @@ function AuthLayout() {
 		<SidebarProvider>
 			<AppSidebar />
 			<SidebarInset>
-				<CommandMenu />
+				<CommandMenuLauncher />
 				<Outlet />
 			</SidebarInset>
 		</SidebarProvider>

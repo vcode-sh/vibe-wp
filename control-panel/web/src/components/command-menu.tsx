@@ -8,28 +8,25 @@ import {
 } from "@control-panel/ui/components/command";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 
 import { sitesQuery } from "@/data/queries";
 
-export function CommandMenu() {
-	const [open, setOpen] = useState(false);
+type CommandMenuProps = {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+};
+
+/**
+ * Heavy body of the command palette (pulls in cmdk + its Radix dialog stack).
+ * Lazy-loaded by `CommandMenuLauncher`, so it is controlled rather than owning
+ * its own open state — the launcher keeps the lightweight ⌘K listener.
+ */
+export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
 	const navigate = useNavigate();
 	const sites = useQuery(sitesQuery());
 
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-				e.preventDefault();
-				setOpen((o) => !o);
-			}
-		};
-		document.addEventListener("keydown", onKey);
-		return () => document.removeEventListener("keydown", onKey);
-	}, []);
-
 	return (
-		<CommandDialog onOpenChange={setOpen} open={open}>
+		<CommandDialog onOpenChange={onOpenChange} open={open}>
 			<CommandInput placeholder="Jump to a site or page…" />
 			<CommandList>
 				<CommandEmpty>No results.</CommandEmpty>
@@ -42,7 +39,7 @@ export function CommandMenu() {
 									to: "/sites/$siteId/overview",
 									params: { siteId: s.id },
 								});
-								setOpen(false);
+								onOpenChange(false);
 							}}
 							value={s.name}
 						>
