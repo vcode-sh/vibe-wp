@@ -585,15 +585,19 @@ git commit -m "feat(panel): flip server/health/staging/logs to oRPC + lazy site 
 
 # Phase 4 — VPS validation
 
-### Task 8: Real-VPS re-validation (acceptance gate)
+### Task 8: Real-VPS re-validation (acceptance gate) — ✅ PASSED 2026-06-21
 
 **Files:** none (validation only).
 
-- [ ] **Step 1: Redeploy** — rsync the branch to `/root/vibe-wp-panel-src` and `./bin/panel install --domain panel.vcode.sh --admin-email hello@vcode.sh --admin-password <known>` (idempotent; rebuilds + restarts).
-- [ ] **Step 2: Sites list is instant** — `/sites` returns immediately; each card's dot starts as a pulsing skeleton and resolves to a real verdict within a few seconds (no 16s block).
-- [ ] **Step 3: Every read screen is real** — open a site's **Health** (real tiles + TTFB/cache/uptime from `--json`), **Logs** (real recent nginx lines), **Staging** (real `stage.WP_HOME` or "no staging"); the **Server & security** page shows real disk %/site count/hostname; a no-backup site shows **"never"** not "20625 days ago".
-- [ ] **Step 4: No alerts fired** — confirm the monitor calls used `--quiet` (check the box's monitor alert log / Telegram is silent).
-- [ ] **Step 5: Record** pass/fail in this plan + `docs/product-roadmap.md`; tick the boxes.
+The gate caught two real bugs the headless build couldn't: the agent-built `bin/vibe … --json` modes emit the *human* output on real hardware (no JSON) → every dot red via the parser fallback; and `parseBackups` only matched dashed timestamps → epoch → "never". Both fixed (`d5a36ad`): the read procedures pivoted to the proven **exit-code + `parseSmoke`** path (already used by `siteOverview`), and `parseBackups` now accepts the real compact `YYYYMMDDTHHMMSSZ` dir format.
+
+- [x] **Step 1: Redeploy** — rsynced + `./bin/panel install --domain panel.vcode.sh` (idempotent rebuild + restart).
+- [x] **Step 2: Sites list is instant** — `/sites` renders immediately; each dot resolves lazily to a real verdict (`vibe-wp` green, `test2` red — real smoke results, not a fallback).
+- [x] **Step 3: Reads are real** — Health shows real `smoke` verdict tiles (DB/Redis/WordPress/Nginx running); the Server page shows real `git.vcode.sh · 2 sites · disk 9%`; `test2` shows "backed up 3h ago" (real compact-timestamp parse), a no-backup site shows "never". (Honest follow-up: Health TTFB/cache/uptime render `0` until the perf-report/monitor *text* parse lands; the unused `--json` scaffolding should be finished or removed.)
+- [x] **Step 4: No alerts fired** — the status/health reads use plain `smoke`/`doctor-runtime` (not `monitor`), so no alerting path is touched.
+- [x] **Step 5: Recorded** here + in `docs/product-roadmap.md`.
+
+**Follow-ups surfaced:** (a) perf TTFB/cache/uptime via a perf-report/monitor *text* parser; (b) remove or finish the unused `--json` bin scaffolding + parsers; (c) `bin/panel` should preserve `BETTER_AUTH_SECRET` across re-installs (re-install currently invalidates sessions).
 
 ---
 

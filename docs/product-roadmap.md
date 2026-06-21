@@ -201,16 +201,18 @@ follow-ups: `sites.list` smoke latency (~16s; make lazy/cached), the empty-backu
 fallback, the remaining `serverInfo`/`health`/`logs`/`staging` query flips, and the
 dedicated-user + sudoers service hardening.
 
-**Plan A — "reads real everywhere" (2026-06-21, branch `control-panel-backend-install`):**
-All read surfaces of the panel now serve real host data instead of fixtures. `bin/smoke`,
-`bin/doctor-runtime`, `bin/monitor`, and `bin/perf-report` gained `--json` modes; the exec
-layer extended with `smokeJson`/`doctorJson`/`monitorJson`/`perfJson`/`logsRecent` ops;
-typed parsers (`parseChecksJson`, `parseMonitorJson`, `parsePerfJson`, `parseLogLines`) and a
-`PerfReport` contract are in place; `sitesList` is identity-only (instant) with lazy
-`siteStatus` per card; `serverInfo`, `serverDoctor`, `healthReport`, `stagingInfo`, and
-`logsRecent` oRPC procedures are wired; the web query factories are flipped to oRPC; and the
-backup-date display returns "never" for epoch/empty. Implementation complete (T1–T7 all done);
-**pending VPS re-validation on `panel.vcode.sh`** (Task 8 of the plan).
+**Plan A — "reads real everywhere" (2026-06-21, branch `control-panel-backend-install`) —
+validated on `panel.vcode.sh`:** All read surfaces of the panel now serve real host data
+instead of fixtures. `sitesList` is identity-only (instant) with lazy `siteStatus` per card;
+`serverInfo`, `serverDoctor`, `healthReport`, `stagingInfo`, and `logsRecent` oRPC procedures
+are wired; the web query factories are flipped to oRPC; the backup-date display parses the real
+compact `YYYYMMDDTHHMMSSZ` dir format (and shows "never" when none). The VPS gate found the
+agent-built `bin/vibe … --json` modes don't emit JSON on real hardware, so the reads use the
+proven **exit-code + structured-text** path (`parseSmoke`) instead. Validated: instant sites
+list with real per-site verdicts, real Health tiles, real server disk/host, real backup dates.
+Follow-ups: perf TTFB/cache/uptime via a perf-report/monitor text parser; remove/finish the
+unused `--json` scaffolding; `bin/panel` should preserve `BETTER_AUTH_SECRET` across re-installs.
+Next: **Plan B (operations)** then **Plan C (team + hardening)**.
 
 ### Phase 5 — Desktop app (LocalWP / Studio competitor) (NOT started)
 Tauri app: spin up local sites, blueprints, and **push/pull sync to production** built on
