@@ -20,6 +20,49 @@ the Vibe WP headless core and `bin/vibe` workflows instead of duplicating runtim
 - **Tauri** - Future desktop shell
 - **Turborepo** - Optimized monorepo build system
 
+## Backend wiring (per-VPS)
+
+The control-panel server delegates all real work through a typed **exec layer** rather than re-implementing host logic.
+
+### Exec-layer chokepoint (`packages/api/src/core-bridge/`)
+
+`exec.ts` is the **only** module that spawns host processes. It maintains an explicit op allowlist (`VIBE_OPS`: `smoke`, `backups`, `backup`) and always passes an argv array — never a shell-interpolated string. Every byte of captured output passes through `redact.ts` before it is stored, logged, or sent to a client.
+
+- `runVibe(siteDir, env, op)` — runs one `<siteDir>/bin/vibe <env> <op>` call and returns buffered stdout/stderr (redacted, with a configurable timeout).
+- `streamVibe(siteDir, env, op)` — returns a live `AsyncIterable<string>` of redacted output lines for long-running ops (used by the backup job).
+
+### Sites, backups, and operations over `bin/vibe`
+
+`sites.ts` scans the colon-separated `PANEL_SITES_ROOTS` env var (default `/opt:/srv`) for Vibe WP install directories, reading each site's `env/prod.env` to extract the domain and staging presence.
+
+oRPC procedures in `packages/api/src/routers/` expose this over the typed contract:
+
+| Procedure | Auth | What it does |
+|---|---|---|
+| `sitesList` | viewer | Detect all sites + run `smoke` per site |
+| `siteOverview` | viewer | Run `smoke` for one site, return verdict + tiles |
+| `backupsList` | viewer | Run `backups`, parse paths into `BackupRecord[]` |
+| `backupsRun` | operator | Start an async backup job, return `jobId` |
+| `operationsStream` | viewer | Subscribe to a running job's redacted output via oRPC event iterator (SSE) |
+
+Long-running jobs are managed by `jobs.ts` (in-memory registry backed by a `jobs` DB table); `line-stream.ts` is a broadcast buffer that replays buffered lines to late subscribers then follows live.
+
+### better-auth roles
+
+Three roles are defined via the admin plugin + access control: `viewer` (read sites/server), `operator` (read + run backups/operations), `admin` (full site/server/team management). The first user to register is automatically promoted to `admin` via a DB hook. Sign-in is rate-limited (5 attempts per 10 s window).
+
+### Installing on a VPS (`bin/panel install`)
+
+`bin/panel` is a POSIX sh script at the repo root that deploys the control panel host-natively:
+
+```sh
+./bin/panel install --domain panel.yourdomain.com --admin-email you@example.com
+```
+
+It: installs Bun if absent, builds `control-panel/`, writes `server/.env` with a generated secret, applies the DB schema, creates a `vibe-panel` system user (added to the `docker` group), writes a `vibe-wp-panel.service` systemd unit, drops a Caddy snippet so the panel is served over HTTPS, and bootstraps the owner account. After install, `bin/panel status` and `bin/panel uninstall [--purge]` are available.
+
+Real-VPS end-to-end validation (browser sign-in → live sites → real backup stream via SSE) is pending as of 2026-06-21.
+
 ## Getting Started
 
 First, install the dependencies:

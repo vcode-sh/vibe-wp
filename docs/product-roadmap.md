@@ -167,9 +167,32 @@ plus the CLI flags `--domain` / `--admin-email` / `--mode` / `--staging-domain` 
 pipes a JSON request → JSON response with no TUI, seeding the daemon/IPC mode web +
 desktop will use.
 
-### Phase 4 — Web control panel (NOT started)
+### Phase 4 — Web control panel (per-VPS backend MVP slice implemented — pending real-VPS validation)
 A small control panel served from the VPS (or hosted), reusing the headless core: same
 dashboard, multi-site, team access, remote operations from a browser.
+
+**Backend MVP slice (2026-06-21, branch `control-panel-backend-install`):** The per-VPS
+server backend is wired end-to-end:
+- **Exec-layer chokepoint** (`packages/api/src/core-bridge/exec.ts`): the only code that
+  spawns host processes. Every call goes through an op allowlist (`smoke`/`backups`/`backup`)
+  using an argv array — no shell-interpolated strings. All captured output is redacted by
+  `redact.ts` before storage, logging, or streaming.
+- **Sites + backups + operations over `bin/vibe`**: `detectSites` scans `PANEL_SITES_ROOTS`
+  (`/opt:/srv` by default) for Vibe WP installs; `sitesList`, `siteOverview`,
+  `backupsList`, `backupsRun`, `operationsStream` oRPC procedures serve real data through
+  the exec layer; long-running backup jobs stream redacted output via oRPC event iterators
+  (SSE) to the browser.
+- **better-auth roles**: `admin`/`operator`/`viewer` via the admin plugin + access control;
+  first-registered user automatically becomes `admin`; sign-in rate-limited; `role` column
+  on the `user` table.
+- **`bin/panel install`**: POSIX sh script that builds the control-panel on a VPS, writes
+  the `.env`, applies the DB schema (`db:push`), creates a `vibe-panel` system user, writes
+  a `vibe-wp-panel.service` systemd unit, drops a Caddy snippet for HTTPS, bootstraps the
+  owner account — and exposes `bin/panel status` and `bin/panel uninstall [--purge]`.
+
+Pending: real-VPS end-to-end validation (Task 12 of the implementation plan) — browser
+sign-in, live sites list, real smoke verdict, real backup list, and a streaming backup run
+proving the Caddy → server → exec → `bin/vibe` → SSE → web chain on actual hardware.
 
 ### Phase 5 — Desktop app (LocalWP / Studio competitor) (NOT started)
 Tauri app: spin up local sites, blueprints, and **push/pull sync to production** built on
