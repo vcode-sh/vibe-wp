@@ -1,13 +1,12 @@
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Database, Plus } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
+import { SiteCard } from "@/components/patterns/site-card";
 import { TopBar } from "@/components/top-bar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { relativeTime, verdictTone } from "@/data/derive";
+import { Card, CardContent } from "@/components/ui/card";
 import { serverInfoQuery, sitesQuery } from "@/data/queries";
 import type { ServerInfo, SiteSummary } from "@/data/types";
 
@@ -115,32 +114,7 @@ function SiteGrid({
 	return (
 		<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{sites?.map((s) => (
-				<Link
-					className="group rounded-none focus-visible:outline-none"
-					key={s.id}
-					params={{ siteId: s.id }}
-					to="/sites/$siteId/overview"
-				>
-					<Card className="transition-colors hover:border-primary group-focus-visible:border-primary">
-						<CardHeader>
-							<CardTitle className="flex items-center justify-between">
-								{s.name}
-								<span
-									className={`size-2 rounded-full ${verdictTone(s.status).dot}`}
-								/>
-							</CardTitle>
-							<p className="text-muted-foreground text-xs">{s.domain}</p>
-						</CardHeader>
-						<CardContent className="flex flex-wrap gap-2">
-							<Badge variant="outline">
-								{s.hasStaging ? "prod + staging" : "prod"}
-							</Badge>
-							<Badge variant="outline">
-								backed up {relativeTime(s.lastBackupISO, now)}
-							</Badge>
-						</CardContent>
-					</Card>
-				</Link>
+				<SiteCard key={s.id} now={now} site={s} />
 			))}
 		</div>
 	);

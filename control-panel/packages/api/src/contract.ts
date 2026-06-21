@@ -6,7 +6,7 @@ export interface SiteSummary {
 	id: string;
 	lastBackupISO: string;
 	name: string;
-	status: Verdict;
+	status?: Verdict;
 }
 
 export interface MetricTile {

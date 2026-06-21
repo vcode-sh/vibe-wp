@@ -33,3 +33,6 @@ export const stagingQuery = (siteId: string) =>
 		queryKey: ["site", siteId, "staging"],
 		queryFn: () => settle(stagingFor(siteId)),
 	});
+
+export const siteStatusQuery = (siteId: string) =>
+	orpc.siteStatus.queryOptions({ input: { siteId } });

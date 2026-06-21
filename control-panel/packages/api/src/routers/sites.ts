@@ -1,15 +1,15 @@
+import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import type { SiteOverview, SiteSummary } from "../contract";
+import type { SiteOverview, SiteSummary, Verdict } from "../contract";
 import { runVibe } from "../core-bridge/exec";
-import { parseBackups, parseSmoke } from "../core-bridge/parse";
+import {
+	parseBackups,
+	parseChecksJson,
+	parseSmoke,
+} from "../core-bridge/parse";
 import { detectSites, findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
-
-async function siteStatus(installDir: string): Promise<SiteSummary["status"]> {
-	const { stdout, code } = await runVibe(installDir, "prod", "smoke");
-	return code === 0 && parseSmoke(stdout).passed ? "good" : "act";
-}
 
 export const sitesRouter = {
 	sitesList: protectedProcedure.handler(async (): Promise<SiteSummary[]> => {
@@ -20,14 +20,32 @@ export const sitesRouter = {
 				name: s.slug,
 				domain: s.domain,
 				hasStaging: s.hasStaging,
-				status: await siteStatus(s.installDir),
 				lastBackupISO:
 					parseBackups(
 						(await runVibe(s.installDir, "prod", "backups")).stdout
-					)[0]?.whenISO ?? new Date(0).toISOString(),
+					)[0]?.whenISO ?? "",
 			}))
 		);
 	}),
+
+	siteStatus: protectedProcedure
+		.input(z.object({ siteId: z.string() }))
+		.handler(async ({ input }): Promise<{ status: Verdict }> => {
+			const site = await findSite(input.siteId);
+			if (!site) {
+				throw new ORPCError("NOT_FOUND");
+			}
+			const { stdout, code } = await runVibe(
+				site.installDir,
+				"prod",
+				"smokeJson",
+				{
+					timeoutMs: 90_000,
+				}
+			);
+			const passed = code === 0 && parseChecksJson(stdout).passed;
+			return { status: passed ? "good" : "act" };
+		}),
 
 	siteOverview: protectedProcedure
 		.input(z.object({ siteId: z.string() }))
@@ -38,7 +56,7 @@ export const sitesRouter = {
 			}
 			const { stdout } = await runVibe(site.installDir, "prod", "smoke");
 			const smoke = parseSmoke(stdout);
-			const status = smoke.passed ? "good" : "act";
+			const status = smoke.passed ? "good" : ("act" as Verdict);
 			return {
 				siteId: site.id,
 				status,

@@ -238,9 +238,9 @@ git commit -m "feat(panel): monitor+perf-report --json + PerfReport + parsers"
 - Consumes: `runVibe`, `parseChecksJson` (Task 1), `detectSites`/`findSite`.
 - Produces: `sitesList` returns `SiteSummary[]` with **no** `status` (fast); `siteStatus({ siteId }) → { status: Verdict }`.
 
-- [ ] **Step 1: Make `status` optional** in `contract.ts`: change `SiteSummary` `status: Verdict;` → `status?: Verdict;`.
+- [x] **Step 1: Make `status` optional** in `contract.ts`: change `SiteSummary` `status: Verdict;` → `status?: Verdict;`.
 
-- [ ] **Step 2: Rewrite `sitesList` to identity-only** in `routers/sites.ts` — drop the per-site `smoke`/`backups` calls; return name/domain/hasStaging/lastBackupISO only:
+- [x] **Step 2: Rewrite `sitesList` to identity-only** in `routers/sites.ts` — drop the per-site `smoke`/`backups` calls; return name/domain/hasStaging/lastBackupISO only:
 
 ```ts
 sitesList: protectedProcedure.handler(async (): Promise<SiteSummary[]> => {
@@ -260,7 +260,7 @@ sitesList: protectedProcedure.handler(async (): Promise<SiteSummary[]> => {
 ```
 (`lastBackupISO` is `""` when there is no backup — Task 7 renders "never".)
 
-- [ ] **Step 3: Add `siteStatus`:**
+- [x] **Step 3: Add `siteStatus`:**
 
 ```ts
 siteStatus: protectedProcedure
@@ -277,7 +277,7 @@ siteStatus: protectedProcedure
 ```
 (Import `ORPCError` from `@orpc/server`, `z`, `Verdict`/`SiteSummary` from `../contract`, `parseBackups`/`parseChecksJson` from `../core-bridge/parse`.)
 
-- [ ] **Step 4: Verify + commit** (`check-types`/`check`/`test`). Web `tsc` must still pass with `status?`:
+- [x] **Step 4: Verify + commit** (`check-types`/`check`/`test`). Web `tsc` must still pass with `status?`:
 
 ```bash
 git add control-panel/packages/api/src/contract.ts control-panel/packages/api/src/routers/sites.ts
