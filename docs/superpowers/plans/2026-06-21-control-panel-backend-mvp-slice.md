@@ -874,7 +874,7 @@ git commit -m "feat(panel): user.role + jobs/audit tables"
 **Interfaces:**
 - Produces: roles `admin`/`operator`/`viewer`; first user → `admin`; rate-limited sign-in; `role` on the session user.
 
-- [ ] **Step 1: Rewrite `packages/auth/src/index.ts`** to add the plugin + AC + role field + bootstrap hook + rate limit (keeping the existing adapter/cookie config):
+- [x] **Step 1: Rewrite `packages/auth/src/index.ts`** to add the plugin + AC + role field + bootstrap hook + rate limit (keeping the existing adapter/cookie config):
 
 ```ts
 import { createDb } from "@control-panel/db";
@@ -944,9 +944,9 @@ export function createAuth() {
 export const auth = createAuth();
 ```
 
-- [ ] **Step 2: Migrate rate-limit storage** — `bun run db:push` (better-auth's `rateLimit` table is created by its schema; if `db:push` does not pick it up, the admin plugin tables are managed by better-auth at runtime — confirm sign-in still works in Task 14).
+- [x] **Step 2: Migrate rate-limit storage** — `bun run db:push` (better-auth's `rateLimit` table is created by its schema; if `db:push` does not pick it up, the admin plugin tables are managed by better-auth at runtime — confirm sign-in still works in Task 14).
 
-- [ ] **Step 3: Verify + commit** — `bun run check-types` PASS, `bun run check` PASS.
+- [x] **Step 3: Verify + commit** — `bun run check-types` PASS, `bun run check` PASS.
 
 ```bash
 git add control-panel/packages/auth/src/index.ts
