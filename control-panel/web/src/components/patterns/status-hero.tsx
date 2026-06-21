@@ -27,7 +27,10 @@ export function StatusHero({
 				<h2 className="font-semibold text-xl tracking-tight">{headline}</h2>
 				<p className="mt-1 flex items-center gap-2 text-muted-foreground text-sm">
 					<span className={`inline-flex items-center gap-1 ${tone.text}`}>
-						<span className={`size-1.5 rounded-full ${tone.dot}`} /> live
+						<span
+							className={`size-1.5 rounded-full motion-safe:animate-pulse ${tone.dot}`}
+						/>{" "}
+						live
 					</span>
 					· {subline}
 				</p>
