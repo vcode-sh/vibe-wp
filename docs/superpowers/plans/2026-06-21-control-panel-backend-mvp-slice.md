@@ -1392,21 +1392,21 @@ git commit -m "feat: bin/panel install/status/uninstall (host-native panel deplo
 
 ---
 
-### Task 12: Real-VPS validation (acceptance gate)
+### Task 12: Real-VPS validation (acceptance gate) — ✅ PASSED 2026-06-21
 
 **Files:** none (validation only).
 
-This is the spec's acceptance gate — it proves the chain on real hardware. Use the disposable test VPS (SSH details in local-only agent docs / CLAUDE.md, never tracked).
+Proven end-to-end on the disposable test VPS (`root@git`) at `panel.vcode.sh`. The gate surfaced and fixed several integration issues a headless build can't catch: a Bun-missing host (now auto-installed), Caddy serving the SPA + proxying `/rpc` & `/api` (was proxy-all), the web build origin, the better-auth admin-plugin + rate-limit schema (`banned`/`banReason`/`banExpires`/`impersonatedBy`; memory rate limiter), run-as-root, and install idempotency.
 
-- [ ] **Step 1: Ship the branch to the VPS** — push the branch and `git clone`/`pull` it on the VPS into a working dir (the panel install copies it to `/opt/vibe-wp-panel`).
+- [x] **Step 1: Ship the branch to the VPS** — rsynced the working tree to `/root/vibe-wp-panel-src` (no node_modules/.git/.env); `bin/panel install` copies it to `/opt/vibe-wp-panel/app`.
 
-- [ ] **Step 2: Install** — `./bin/panel install --domain panel.<test-domain> --admin-email you@example.com`. Expected: DNS ✓ (or warn), build OK, `db:push` applied, `vibe-wp-panel.service` active, Caddy reloaded with a valid cert, "service up" + "owner account created", final "Open https://panel… and sign in."
+- [x] **Step 2: Install** — `./bin/panel install --domain panel.vcode.sh --admin-email hello@vcode.sh`: Bun installed, build OK, `db:push` applied, `vibe-wp-panel.service` active, Caddy valid cert + reload, "service up" + "owner account created."
 
-- [ ] **Step 3: Verify the chain in a browser** — visit `https://panel.<test-domain>`, sign in as the owner. Expect: **real sites** listed (the VPS's actual Vibe WP installs), a site **Overview** showing the real smoke verdict, the **Backups** tab listing real backups, and **"Back up now"** streaming live redacted lines to completion via SSE.
+- [x] **Step 3: Verify the chain in a browser** — signed in at `https://panel.vcode.sh`; the panel listed the VPS's **real sites** (`test2.vcode.sh`, `test.vcode.sh`) with live green smoke status, and **"Back up now" streamed a real `bin/vibe backup`** over SSE (MariaDB dump → wp-content archive → R2 off-site upload), creating a fresh backup (`…/20260621T200601Z`).
 
-- [ ] **Step 4: Verify role + redaction** — confirm the owner is `admin` (can run backup); spot-check that no secret values (DB/Redis passwords, salts) appear in the streamed log or any response.
+- [x] **Step 4: Verify role + redaction** — owner is `admin` (first-user bootstrap) and could run the backup; the streamed log showed no secret values (R2 path shown, no credentials/passwords).
 
-- [ ] **Step 5: Record the result** — note pass/fail per step in the PR description / `docs/product-roadmap.md` validation log (matching the project's existing "validated on real hardware" entries). On failure, capture the failing step's output and fix before merge.
+- [x] **Step 5: Record the result** — recorded here + in `docs/product-roadmap.md`. Known follow-ups (fan-out): `sites.list` runs smoke per site (~16s — make lazy/cached); empty-backup date falls back to epoch ("20625 days ago"); `serverInfo` still on fixtures; dedicated-user + sudoers hardening for the service.
 
 ---
 

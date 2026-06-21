@@ -167,7 +167,7 @@ plus the CLI flags `--domain` / `--admin-email` / `--mode` / `--staging-domain` 
 pipes a JSON request → JSON response with no TUI, seeding the daemon/IPC mode web +
 desktop will use.
 
-### Phase 4 — Web control panel (per-VPS backend MVP slice implemented — pending real-VPS validation)
+### Phase 4 — Web control panel (per-VPS backend MVP slice implemented + **validated on a real VPS 2026-06-21**)
 A small control panel served from the VPS (or hosted), reusing the headless core: same
 dashboard, multi-site, team access, remote operations from a browser.
 
@@ -185,14 +185,21 @@ server backend is wired end-to-end:
 - **better-auth roles**: `admin`/`operator`/`viewer` via the admin plugin + access control;
   first-registered user automatically becomes `admin`; sign-in rate-limited; `role` column
   on the `user` table.
-- **`bin/panel install`**: POSIX sh script that builds the control-panel on a VPS, writes
-  the `.env`, applies the DB schema (`db:push`), creates a `vibe-panel` system user, writes
-  a `vibe-wp-panel.service` systemd unit, drops a Caddy snippet for HTTPS, bootstraps the
-  owner account — and exposes `bin/panel status` and `bin/panel uninstall [--purge]`.
+- **`bin/panel install`**: POSIX sh script that installs Bun if missing, builds the
+  control-panel on a VPS, writes the `.env`, applies the DB schema (`db:push`), writes a
+  `vibe-wp-panel.service` systemd unit (runs as root for the MVP — a dedicated-user + sudoers
+  allowlist is a fan-out hardening item), drops a Caddy snippet that serves the built SPA and
+  reverse-proxies `/rpc` & `/api` to the server over HTTPS, bootstraps the owner account —
+  and exposes `bin/panel status` and `bin/panel uninstall [--purge]`.
 
-Pending: real-VPS end-to-end validation (Task 12 of the implementation plan) — browser
-sign-in, live sites list, real smoke verdict, real backup list, and a streaming backup run
-proving the Caddy → server → exec → `bin/vibe` → SSE → web chain on actual hardware.
+**Validated on a real VPS (2026-06-21, `panel.vcode.sh`):** `bin/panel install` deployed it
+end-to-end; browser sign-in as the bootstrapped admin showed the box's real Vibe WP sites
+with live green smoke verdicts, and **"Back up now" streamed a real `bin/vibe backup`**
+(MariaDB dump → wp-content archive → R2 off-site upload, redacted) creating a fresh backup —
+proving the Caddy → server → exec → `bin/vibe` → SSE → web chain on actual hardware. Fan-out
+follow-ups: `sites.list` smoke latency (~16s; make lazy/cached), the empty-backup date
+fallback, the remaining `serverInfo`/`health`/`logs`/`staging` query flips, and the
+dedicated-user + sudoers service hardening.
 
 ### Phase 5 — Desktop app (LocalWP / Studio competitor) (NOT started)
 Tauri app: spin up local sites, blueprints, and **push/pull sync to production** built on
