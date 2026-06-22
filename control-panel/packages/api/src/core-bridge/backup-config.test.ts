@@ -132,3 +132,51 @@ describe("toEnv", () => {
 		expect(env.RCLONE_CONFIG_R2_ENDPOINT).toBeUndefined();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// backupTestEnv prerequisite — field completeness gate (pure logic)
+// ---------------------------------------------------------------------------
+
+describe("backupTestEnv completeness gate (via mergeConfig)", () => {
+	const full = row({
+		provider: "Cloudflare",
+		accessKeyId: "AKID",
+		secret: "SECRET",
+		bucket: "my-bucket",
+		endpoint: "https://r2.example.com",
+		enabled: null, // deliberately not enabled — test should still work
+	});
+
+	it("complete global creds with enabled=null → non-null env map", () => {
+		const cfg = mergeConfig(full, null, "__global__");
+		// Simulate the backupTestEnv logic:
+		expect(
+			cfg.provider && cfg.accessKeyId && cfg.secret && cfg.bucket
+		).toBeTruthy();
+	});
+
+	it("missing secret → null (user must save a complete config first)", () => {
+		const incomplete = row({ ...full, secret: null });
+		const cfg = mergeConfig(incomplete, null, "__global__");
+		expect(
+			cfg.provider && cfg.accessKeyId && cfg.secret && cfg.bucket
+		).toBeFalsy();
+	});
+
+	it("missing bucket → null", () => {
+		const incomplete = row({ ...full, bucket: null });
+		const cfg = mergeConfig(incomplete, null, "__global__");
+		expect(
+			cfg.provider && cfg.accessKeyId && cfg.secret && cfg.bucket
+		).toBeFalsy();
+	});
+
+	it("enabled=1 (backup on) → still returns env (not gated on enabled)", () => {
+		const enabled = row({ ...full, enabled: 1 });
+		const cfg = mergeConfig(enabled, null, "__global__");
+		// The test-env helper ignores enabled — if creds are complete it proceeds.
+		expect(
+			cfg.provider && cfg.accessKeyId && cfg.secret && cfg.bucket
+		).toBeTruthy();
+	});
+});

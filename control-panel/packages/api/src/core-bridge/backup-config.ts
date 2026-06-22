@@ -142,3 +142,37 @@ export async function applyBackupConfigToSite(siteId: string): Promise<void> {
 		);
 	}
 }
+
+/**
+ * Returns the rclone environment variables needed to probe R2 connectivity,
+ * built from the **global** credentials regardless of whether `enabled === 1`.
+ * This lets an admin test credentials before toggling the backup on.
+ *
+ * Returns `null` when required credential fields (provider, accessKeyId,
+ * secret, bucket) are incomplete — the caller should surface a friendly error.
+ */
+export async function backupTestEnv(
+	siteId: string
+): Promise<Record<string, string> | null> {
+	// Always resolve from the global row for a connectivity test — per-site
+	// overrides (bucket, creds) are not yet a use-case for test-connection.
+	const cfg = await resolveBackupConfig(siteId);
+
+	if (!cfg.provider || !cfg.accessKeyId || !cfg.secret || !cfg.bucket) {
+		return null;
+	}
+
+	const env: Record<string, string> = {
+		RCLONE_CONFIG_R2_TYPE: "s3",
+		RCLONE_CONFIG_R2_PROVIDER: cfg.provider,
+		RCLONE_CONFIG_R2_ACCESS_KEY_ID: cfg.accessKeyId,
+		RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: cfg.secret,
+		VIBE_BACKUP_R2_BUCKET: cfg.bucket,
+	};
+
+	if (cfg.endpoint) {
+		env.RCLONE_CONFIG_R2_ENDPOINT = cfg.endpoint;
+	}
+
+	return env;
+}
