@@ -50,23 +50,19 @@ export const logsRouter = {
 				});
 			}
 
+			// Resolve the site BEFORE reserving a slot. findSite spawns a host
+			// process and can reject; reserving first would leak a slot on throw
+			// because the decrement only runs once we enter the try/finally below.
+			const site = await findSite(input.siteId);
+			if (!site) {
+				return;
+			}
+
 			globalActiveStreams += 1;
 			perUserActiveStreams.set(
 				userId,
 				(perUserActiveStreams.get(userId) ?? 0) + 1
 			);
-
-			const site = await findSite(input.siteId);
-			if (!site) {
-				globalActiveStreams -= 1;
-				const prev = perUserActiveStreams.get(userId) ?? 1;
-				if (prev <= 1) {
-					perUserActiveStreams.delete(userId);
-				} else {
-					perUserActiveStreams.set(userId, prev - 1);
-				}
-				return;
-			}
 
 			const { proc, lines } = streamVibe(
 				site.installDir,
@@ -83,7 +79,9 @@ export const logsRouter = {
 				yield { line: "", status: "succeeded", done: true };
 			} finally {
 				// Kill the `logs -f` process group when the client disconnects or the
-				// generator is garbage-collected via .return() on early consumer abort.
+				// generator is finalized via .return() on early consumer abort. This
+				// decrement is paired 1:1 with the single increment above and runs on
+				// normal end, throw, and early disconnect.
 				proc.kill();
 				globalActiveStreams -= 1;
 				const prev = perUserActiveStreams.get(userId) ?? 1;

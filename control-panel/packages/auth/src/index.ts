@@ -50,23 +50,28 @@ export function createAuth() {
 		databaseHooks: {
 			user: {
 				create: {
-					before: async (newUser) => {
+					before: async (newUser, context) => {
 						const existing = await db
 							.select({ id: user.id })
 							.from(user)
 							.limit(1);
-						if (existing.length > 0) {
-							throw new APIError("FORBIDDEN", {
-								message:
-									"Registration is closed. Ask an admin to create your account.",
-							});
+						// First user bootstraps the owner account as admin.
+						if (existing.length === 0) {
+							return { data: { ...newUser, role: "admin" } };
 						}
-						return {
-							data: {
-								...newUser,
-								role: "admin",
-							},
-						};
+						// After bootstrap, only admin-initiated creates are allowed.
+						// `/admin/create-user` already enforces an authenticated admin
+						// caller; any other path (e.g. public `/sign-up/email`) or a
+						// missing context is treated as anonymous and rejected.
+						if (context?.path === "/admin/create-user") {
+							return {
+								data: { ...newUser, role: newUser.role ?? "viewer" },
+							};
+						}
+						throw new APIError("FORBIDDEN", {
+							message:
+								"Registration is closed. Ask an admin to create your account.",
+						});
 					},
 				},
 			},

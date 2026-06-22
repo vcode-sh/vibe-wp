@@ -129,7 +129,6 @@ WantedBy=multi-user.target"
 		file_server
 	}
 }" | $SUDO tee /etc/caddy/sites-enabled/vibe-wp-panel.caddy >/dev/null
-  $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
 
   # Smoke + owner bootstrap (first user becomes admin via the DB hook; password never echoed)
   sleep 2
@@ -146,6 +145,10 @@ WantedBy=multi-user.target"
       -H 'Content-Type: application/json' \
       --data @- >/dev/null \
     && echo "panel: owner account created"
+
+  # Expose the public domain only AFTER the owner exists, so the panel never
+  # serves publicly with zero users (closes a first-install sign-up race window).
+  $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
   echo "Done. Open https://$DOMAIN and sign in."
 }
 
