@@ -24,3 +24,6 @@ export const siteStatusQuery = (siteId: string) =>
 
 export const updatesAvailableQuery = (siteId: string) =>
 	orpc.updatesAvailable.queryOptions({ input: { siteId } });
+
+export const backupConfigQuery = (siteId: string) =>
+	orpc.backupConfigGet.queryOptions({ input: { siteId } });

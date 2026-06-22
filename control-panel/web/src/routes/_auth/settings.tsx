@@ -2,6 +2,8 @@ import { Label } from "@control-panel/ui/components/label";
 import { createFileRoute } from "@tanstack/react-router";
 import { ModeToggle } from "@/components/mode-toggle";
 import { PageHeader } from "@/components/patterns/page-header";
+import { R2GlobalCard } from "@/components/settings/r2-global-card";
+import { R2SiteCard } from "@/components/settings/r2-site-card";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +47,8 @@ function SettingsPage() {
 						<Button className="justify-self-start">Save</Button>
 					</CardContent>
 				</Card>
+				<R2GlobalCard />
+				<R2SiteCard />
 			</div>
 		</>
 	);
