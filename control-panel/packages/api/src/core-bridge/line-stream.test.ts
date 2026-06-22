@@ -36,4 +36,26 @@ describe("LineStream", () => {
 		await consume;
 		expect(seen).toEqual(["x", "y"]);
 	});
+
+	it("emits an idle heartbeat (empty line, not done) while running", async () => {
+		const s = new LineStream(15);
+		const iterator = s.subscribe()[Symbol.asyncIterator]();
+		s.push("hello");
+
+		let ev = await iterator.next();
+		while (!ev.done && ev.value.line === "") {
+			ev = await iterator.next();
+		}
+		expect(ev.value).toMatchObject({ line: "hello", done: false });
+
+		const tick = await iterator.next();
+		expect(tick.value).toMatchObject({ line: "", done: false });
+
+		s.end("succeeded");
+		let last = await iterator.next();
+		while (!last.done && last.value.done === false) {
+			last = await iterator.next();
+		}
+		expect(last.value).toMatchObject({ status: "succeeded", done: true });
+	});
 });

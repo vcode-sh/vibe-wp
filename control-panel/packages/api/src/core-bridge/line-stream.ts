@@ -5,6 +5,11 @@ export class LineStream {
 	private status: JobStatus = "running";
 	private done = false;
 	private readonly wakers: (() => void)[] = [];
+	private readonly heartbeat: ReturnType<typeof setInterval>;
+
+	constructor(heartbeatMs = 4000) {
+		this.heartbeat = setInterval(() => this.wake(), heartbeatMs);
+	}
 
 	push(line: string): void {
 		this.buffer.push(line);
@@ -14,6 +19,7 @@ export class LineStream {
 	end(status: JobStatus): void {
 		this.status = status;
 		this.done = true;
+		clearInterval(this.heartbeat);
 		this.wake();
 	}
 
@@ -42,7 +48,12 @@ export class LineStream {
 				yield { line: "", status: this.status, done: true };
 				return;
 			}
+			// Park first (registers the waker) so synchronous pushes are never lost,
+			// then, if the wake brought no new lines, emit an idle heartbeat tick.
 			await this.wait();
+			if (cursor >= this.buffer.length && !this.done) {
+				yield { line: "", status: this.status, done: false };
+			}
 		}
 	}
 }
