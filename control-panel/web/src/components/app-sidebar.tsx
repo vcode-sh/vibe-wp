@@ -9,9 +9,11 @@ import {
 	Settings,
 	ShieldCheck,
 	SlidersHorizontal,
+	UsersRound,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { SiteSwitcher } from "@/components/site-switcher";
+import { authClient } from "@/lib/auth-client";
 import {
 	Sidebar,
 	SidebarContent,
@@ -50,10 +52,18 @@ const SERVER_LINKS: SiteLink[] = [
 	{ label: "Settings", to: "/settings", icon: Settings },
 ];
 
+const ADMIN_LINK: SiteLink = { label: "Users", to: "/users", icon: UsersRound };
+
 export function AppSidebar() {
 	const params = useParams({ strict: false });
 	const siteId = params.siteId;
 	const matchRoute = useMatchRoute();
+	const { data: session } = authClient.useSession();
+	const isAdmin = session?.user.role === "admin";
+	// Users is admin-only; insert it before Settings for admins.
+	const serverLinks = isAdmin
+		? [...SERVER_LINKS.slice(0, -1), ADMIN_LINK, SERVER_LINKS.at(-1) as SiteLink]
+		: SERVER_LINKS;
 
 	return (
 		<Sidebar collapsible="icon" variant="inset">
@@ -89,7 +99,7 @@ export function AppSidebar() {
 				<SidebarGroup>
 					<SidebarGroupLabel>Server</SidebarGroupLabel>
 					<SidebarMenu>
-						{SERVER_LINKS.map(({ label, to, icon: Icon }) => (
+						{serverLinks.map(({ label, to, icon: Icon }) => (
 							<SidebarMenuItem key={to}>
 								<SidebarMenuButton
 									isActive={Boolean(matchRoute({ to }))}
