@@ -1,11 +1,13 @@
 /**
- * TeamUserRow — one panel user: email, role badge, role select, and a remove
- * action. The current admin's own row is locked: no role change, no remove, so
- * an admin can't demote or delete themselves and lock everyone out.
+ * TeamUserRow — one panel user: role select, ban/unban (reversible), and a
+ * hard-delete (type-to-confirm, labeled irreversible). The current user's own
+ * row is locked to prevent self-lockout.
  */
+
+import { Label } from "@control-panel/ui/components/label";
 import { useMutation } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Ban, ShieldOff, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
 	AlertDialog,
@@ -19,10 +21,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { ROLE_OPTIONS, type Role, RoleSelect } from "./team-roles";
 
 export interface TeamUser {
+	banned: boolean;
+	banReason: string | null;
 	email: string;
 	id: string;
 	name: string;
@@ -52,8 +57,12 @@ export function TeamUserRow({
 	isSelf: boolean;
 	onChanged: () => Promise<void>;
 }) {
-	const [confirmRemove, setConfirmRemove] = useState(false);
+	const [banOpen, setBanOpen] = useState(false);
+	const [deleteOpen, setDeleteOpen] = useState(false);
+	const [banReason, setBanReason] = useState("");
+	const [deleteTyped, setDeleteTyped] = useState("");
 	const [pendingRole, setPendingRole] = useState<Role | null>(null);
+	const deleteInputRef = useRef<HTMLInputElement>(null);
 
 	const setRole = useMutation({
 		mutationFn: async (role: Role) => {
@@ -67,35 +76,91 @@ export function TeamUserRow({
 			toast.success(`Role updated for ${user.email}.`);
 		},
 		onError: (err: Error) => toast.error(err.message),
-		// Clear the optimistic selection once settled: on success the refetched
-		// query data already matches; on error it reverts to the true role.
 		onSettled: () => setPendingRole(null),
+	});
+
+	const ban = useMutation({
+		mutationFn: async () => {
+			const res = await authClient.admin.banUser({
+				userId: user.id,
+				...(banReason.trim() ? { banReason: banReason.trim() } : {}),
+			});
+			if (res.error) {
+				throw new Error(res.error.message ?? "Failed to ban user.");
+			}
+		},
+		onSuccess: async () => {
+			setBanOpen(false);
+			setBanReason("");
+			await onChanged();
+			toast.success(`${user.email} has been banned.`);
+		},
+		onError: (err: Error) => {
+			setBanOpen(false);
+			toast.error(err.message);
+		},
+	});
+
+	const unban = useMutation({
+		mutationFn: async () => {
+			const res = await authClient.admin.unbanUser({ userId: user.id });
+			if (res.error) {
+				throw new Error(res.error.message ?? "Failed to unban user.");
+			}
+		},
+		onSuccess: async () => {
+			await onChanged();
+			toast.success(`${user.email} has been unbanned.`);
+		},
+		onError: (err: Error) => toast.error(err.message),
 	});
 
 	const remove = useMutation({
 		mutationFn: async () => {
 			const res = await authClient.admin.removeUser({ userId: user.id });
 			if (res.error) {
-				throw new Error(res.error.message ?? "Failed to remove user.");
+				throw new Error(res.error.message ?? "Failed to delete user.");
 			}
 		},
 		onSuccess: async () => {
+			setDeleteOpen(false);
+			setDeleteTyped("");
 			await onChanged();
-			toast.success(`Removed ${user.email}.`);
+			toast.success(`${user.email} permanently deleted.`);
 		},
-		onError: (err: Error) => toast.error(err.message),
+		onError: (err: Error) => {
+			setDeleteOpen(false);
+			toast.error(err.message);
+		},
 	});
+
+	const anyPending =
+		setRole.isPending || ban.isPending || unban.isPending || remove.isPending;
+	const deleteConfirmed = deleteTyped.trim() === user.email;
 
 	return (
 		<div className="flex items-center justify-between gap-3 rounded-lg border p-3">
 			<div className="grid min-w-0 gap-0.5">
-				<span className="truncate font-medium text-sm">{user.email}</span>
+				<div className="flex items-center gap-2">
+					<span className="truncate font-medium text-sm">{user.email}</span>
+					{user.banned && (
+						<Badge className="shrink-0 text-xs" variant="destructive">
+							Banned
+						</Badge>
+					)}
+				</div>
 				{user.name ? (
 					<span className="truncate text-muted-foreground text-xs">
 						{user.name}
 					</span>
 				) : null}
+				{user.banned && user.banReason ? (
+					<span className="truncate text-muted-foreground text-xs">
+						Reason: {user.banReason}
+					</span>
+				) : null}
 			</div>
+
 			<div className="flex shrink-0 items-center gap-2">
 				{isSelf ? (
 					<Badge variant={roleVariant(user.role)}>
@@ -104,7 +169,7 @@ export function TeamUserRow({
 				) : (
 					<>
 						<RoleSelect
-							disabled={setRole.isPending}
+							disabled={anyPending}
 							id={`role-${user.id}`}
 							onValueChange={(role) => {
 								setPendingRole(role);
@@ -112,11 +177,35 @@ export function TeamUserRow({
 							}}
 							value={pendingRole ?? (user.role as Role)}
 						/>
+						{user.banned ? (
+							<Button
+								aria-label={`Unban ${user.email}`}
+								disabled={anyPending}
+								onClick={() => unban.mutate()}
+								size="icon"
+								title="Unban user"
+								variant="ghost"
+							>
+								<ShieldOff className="size-4 text-muted-foreground" />
+							</Button>
+						) : (
+							<Button
+								aria-label={`Ban ${user.email}`}
+								disabled={anyPending}
+								onClick={() => setBanOpen(true)}
+								size="icon"
+								title="Ban user"
+								variant="ghost"
+							>
+								<Ban className="size-4 text-amber-500" />
+							</Button>
+						)}
 						<Button
-							aria-label={`Remove ${user.email}`}
-							disabled={remove.isPending}
-							onClick={() => setConfirmRemove(true)}
+							aria-label={`Permanently delete ${user.email}`}
+							disabled={anyPending}
+							onClick={() => setDeleteOpen(true)}
 							size="icon"
+							title="Delete permanently"
 							variant="ghost"
 						>
 							<Trash2 className="size-4 text-destructive" />
@@ -124,25 +213,106 @@ export function TeamUserRow({
 					</>
 				)}
 			</div>
-			<AlertDialog onOpenChange={setConfirmRemove} open={confirmRemove}>
+
+			{/* Ban dialog — reversible, optional reason */}
+			<AlertDialog
+				onOpenChange={(v) => {
+					if (!v) {
+						setBanOpen(false);
+						setBanReason("");
+					}
+				}}
+				open={banOpen}
+			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Remove panel user?</AlertDialogTitle>
+						<AlertDialogTitle>Ban {user.email}?</AlertDialogTitle>
 						<AlertDialogDescription>
-							{user.email} will lose all access to the panel. This permanently
-							deletes their account and cannot be undone.
+							The user will be signed out and blocked from signing in. Their
+							account and audit history are preserved — you can unban them at
+							any time.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					<div className="grid gap-1.5 px-1 pb-1">
+						<Label htmlFor="ban-reason">Reason (optional)</Label>
+						<Input
+							id="ban-reason"
+							onChange={(e) => setBanReason(e.target.value)}
+							placeholder="e.g. Security review"
+							value={banReason}
+						/>
+					</div>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							autoFocus
+						<AlertDialogCancel
 							onClick={() => {
-								setConfirmRemove(false);
+								setBanOpen(false);
+								setBanReason("");
+							}}
+						>
+							Cancel
+						</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={ban.isPending}
+							onClick={() => ban.mutate()}
+						>
+							{ban.isPending ? "Banning…" : "Ban user"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			{/* Delete dialog — irreversible, type-to-confirm */}
+			<AlertDialog
+				onOpenChange={(v) => {
+					if (!v) {
+						setDeleteOpen(false);
+						setDeleteTyped("");
+					}
+				}}
+				open={deleteOpen}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							Permanently delete {user.email}?
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							This is irreversible. The account, sessions, and all audit linkage
+							will be destroyed. Consider banning instead if you may need the
+							audit trail later.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<div className="grid gap-1.5 px-1 pb-1">
+						<Label htmlFor="delete-confirm">
+							Type <strong>{user.email}</strong> to confirm
+						</Label>
+						<Input
+							autoComplete="off"
+							id="delete-confirm"
+							onChange={(e) => setDeleteTyped(e.target.value)}
+							placeholder={user.email}
+							ref={deleteInputRef}
+							value={deleteTyped}
+						/>
+					</div>
+					<AlertDialogFooter>
+						<AlertDialogCancel
+							onClick={() => {
+								setDeleteOpen(false);
+								setDeleteTyped("");
+							}}
+						>
+							Cancel
+						</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+							disabled={!deleteConfirmed || remove.isPending}
+							onClick={() => {
+								setDeleteTyped("");
 								remove.mutate();
 							}}
 						>
-							Remove user
+							{remove.isPending ? "Deleting…" : "Delete permanently"}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

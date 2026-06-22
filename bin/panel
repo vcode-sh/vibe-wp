@@ -9,7 +9,13 @@ PORT=4000
 if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 usage() {
-  echo "Usage: bin/panel <install|status|uninstall> [--domain d --admin-email e --port N --admin-password P --purge]"
+  echo "Usage: bin/panel <install|update|status|logs|uninstall> [options]"
+  echo ""
+  echo "  install    --domain d --admin-email e [--port N] [--admin-password P]"
+  echo "  update     Rebuild + redeploy the panel from the current repo checkout"
+  echo "  status     Show systemd service status"
+  echo "  logs       Tail panel service logs  [-n N] [-f]"
+  echo "  uninstall  [--purge]"
   exit 1
 }
 
@@ -21,6 +27,8 @@ DOMAIN=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 PURGE=0
+LOGS_FOLLOW=0
+LOGS_LINES=200
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,6 +37,8 @@ while [ $# -gt 0 ]; do
     --admin-password) ADMIN_PASSWORD="$2"; shift 2 ;;
     --port)           PORT="$2";           shift 2 ;;
     --purge)          PURGE=1;             shift ;;
+    -f)               LOGS_FOLLOW=1;       shift ;;
+    -n)               LOGS_LINES="$2";     shift 2 ;;
     *) usage ;;
   esac
 done
@@ -65,31 +75,14 @@ install_installer_bin() {
   $SUDO install -m 0755 "$dist" "$PANEL_DIR/bin/vibe-wp-installer"
 }
 
-install_panel() {
-  [ -n "$DOMAIN" ] || { printf 'Subdomain for the panel: '; read -r DOMAIN; }
-  [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
-
-  # Bun preflight
-  if ! command -v bun >/dev/null 2>&1; then
-    echo "Installing Bun..."
-    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
-  fi
-  BUN="$(command -v bun || echo /usr/local/bin/bun)"
-
-  # DNS preflight
-  ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
-  resolved="$(getent ahosts "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)"
-  if [ -n "$ip" ] && [ -n "$resolved" ] && [ "$resolved" != "$ip" ]; then
-    echo "WARN: $DOMAIN resolves to '$resolved', server is '$ip'. Add an A record."
-  fi
-
-  # Preserve existing BETTER_AUTH_SECRET across reinstalls so sessions survive upgrades.
-  # Must be read BEFORE rm -rf "$PANEL_DIR/app" removes the old .env.
-  existing_secret="$($SUDO grep -m1 '^BETTER_AUTH_SECRET=' "$PANEL_DIR/app/server/.env" 2>/dev/null | cut -d= -f2- || true)"
-
-  # Build
+# deploy_panel: build + copy app dir + write env + db:push + restart service.
+# Called by both install_panel (with a freshly-prompted DOMAIN/SECRET) and
+# update_panel (with values sourced from the existing server/.env).
+# Requires: BUN, DOMAIN, SECRET, PORT to be set by the caller.
+deploy_panel() {
   $SUDO install -d -m 0755 "$PANEL_DIR"
   $SUDO install -d -m 0700 "$PANEL_DIR/data"
+
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
   printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
   ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build )
@@ -100,11 +93,6 @@ install_panel() {
   install_installer_bin
 
   # Env (contains BETTER_AUTH_SECRET — keep it root-only, never world-readable)
-  if [ -n "$existing_secret" ]; then
-    SECRET="$existing_secret"
-  else
-    SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
-  fi
   ( umask 077 && printf '%s\n' \
     "DATABASE_URL=file:$PANEL_DIR/data/panel.db" \
     "BETTER_AUTH_SECRET=$SECRET" \
@@ -143,6 +131,36 @@ WantedBy=multi-user.target"
   $SUDO systemctl daemon-reload
   $SUDO systemctl enable "$UNIT.service" >/dev/null 2>&1 || true
   $SUDO systemctl restart "$UNIT.service"
+}
+
+install_panel() {
+  [ -n "$DOMAIN" ] || { printf 'Subdomain for the panel: '; read -r DOMAIN; }
+  [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
+
+  # Bun preflight
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "Installing Bun..."
+    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
+  fi
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+
+  # DNS preflight
+  ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
+  resolved="$(getent ahosts "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)"
+  if [ -n "$ip" ] && [ -n "$resolved" ] && [ "$resolved" != "$ip" ]; then
+    echo "WARN: $DOMAIN resolves to '$resolved', server is '$ip'. Add an A record."
+  fi
+
+  # Preserve existing BETTER_AUTH_SECRET across reinstalls so sessions survive upgrades.
+  # Must be read BEFORE rm -rf "$PANEL_DIR/app" removes the old .env.
+  existing_secret="$($SUDO grep -m1 '^BETTER_AUTH_SECRET=' "$PANEL_DIR/app/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+  if [ -n "$existing_secret" ]; then
+    SECRET="$existing_secret"
+  else
+    SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
+  fi
+
+  deploy_panel
 
   # Caddy snippet
   $SUDO install -d -m 0755 /etc/caddy/sites-enabled
@@ -188,6 +206,45 @@ WantedBy=multi-user.target"
   echo "Done. Open https://$DOMAIN and sign in."
 }
 
+update_panel() {
+  env_file="$PANEL_DIR/app/server/.env"
+  if ! $SUDO test -f "$env_file"; then
+    echo "panel: no existing installation found at $PANEL_DIR — run 'bin/panel install' first." >&2
+    return 1
+  fi
+
+  # Bun preflight (operator may have rebooted since install)
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "Installing Bun..."
+    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
+  fi
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+
+  # Source domain, secret, and port from the existing env — no re-prompting.
+  # BETTER_AUTH_SECRET must be read BEFORE rm -rf "$PANEL_DIR/app" in deploy_panel.
+  DOMAIN="$($SUDO grep -m1 '^BETTER_AUTH_URL=' "$env_file" 2>/dev/null | cut -d= -f2- | sed 's|https://||' || true)"
+  SECRET="$($SUDO grep -m1 '^BETTER_AUTH_SECRET=' "$env_file" 2>/dev/null | cut -d= -f2- || true)"
+  existing_port="$($SUDO grep -m1 '^Environment=PORT=' /etc/systemd/system/$UNIT.service 2>/dev/null | cut -d= -f3 || true)"
+  [ -n "$existing_port" ] && PORT="$existing_port"
+
+  if [ -z "$DOMAIN" ] || [ -z "$SECRET" ]; then
+    echo "panel: could not read DOMAIN or BETTER_AUTH_SECRET from $env_file" >&2
+    return 1
+  fi
+
+  echo "panel: updating (domain=$DOMAIN port=$PORT)..."
+  deploy_panel
+  echo "panel: update complete"
+}
+
+logs_panel() {
+  if [ "$LOGS_FOLLOW" = 1 ]; then
+    journalctl -u "$UNIT.service" -n "$LOGS_LINES" -f
+  else
+    journalctl -u "$UNIT.service" -n "$LOGS_LINES"
+  fi
+}
+
 status_panel() {
   systemctl status $UNIT.service --no-pager || true
 }
@@ -208,7 +265,9 @@ uninstall_panel() {
 
 case "$cmd" in
   install)   install_panel ;;
+  update)    update_panel ;;
   status)    status_panel ;;
+  logs)      logs_panel ;;
   uninstall) uninstall_panel ;;
   *)         usage ;;
 esac

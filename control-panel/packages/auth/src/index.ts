@@ -1,6 +1,7 @@
 import { createDb } from "@control-panel/db";
 import {
 	account,
+	rateLimit,
 	session,
 	user,
 	verification,
@@ -12,7 +13,7 @@ import { APIError } from "better-auth/api";
 import { admin } from "better-auth/plugins";
 import { ac, roles } from "./access";
 
-const authSchema = { account, session, user, verification };
+const authSchema = { account, rateLimit, session, user, verification };
 
 export function createAuth() {
 	const db = createDb();
@@ -59,6 +60,7 @@ export function createAuth() {
 		},
 		rateLimit: {
 			enabled: true,
+			storage: "database",
 			customRules: { "/sign-in/email": { window: 10, max: 5 } },
 		},
 		advanced: {

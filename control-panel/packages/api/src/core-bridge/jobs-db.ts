@@ -1,7 +1,17 @@
 import { db } from "@control-panel/db";
 import { user } from "@control-panel/db/schema/auth";
 import { auditLog, jobs } from "@control-panel/db/schema/jobs";
-import { desc, eq } from "drizzle-orm";
+import {
+	and,
+	desc,
+	eq,
+	inArray,
+	isNull,
+	lt,
+	notInArray,
+	or,
+	sql,
+} from "drizzle-orm";
 
 import type { JobStatus } from "../contract";
 import {
@@ -27,6 +37,93 @@ export async function reconcileOrphanedJobs(): Promise<void> {
 			finishedAt: new Date(),
 		})
 		.where(eq(jobs.status, "running"));
+}
+
+/** Statuses that are permanently settled — safe to prune. */
+const TERMINAL_STATUSES = [
+	"succeeded",
+	"failed",
+	"canceled",
+] as const satisfies JobStatus[];
+
+/**
+ * Retention policy for terminal job history:
+ *   - age window : keep rows newer than PRUNE_AGE_MS (90 days)
+ *   - count cap  : keep at most PRUNE_MAX_ROWS of the most-recent terminal jobs
+ *
+ * Both limits are applied independently; a row is deleted if it violates
+ * either one. Only terminal jobs (succeeded / failed / canceled) are touched —
+ * queued and running rows are never deleted here.
+ *
+ * After pruning jobs the orphaned audit_log rows (whose job_id no longer
+ * refers to an existing job, plus any old job-less audit rows beyond the same
+ * age window) are also removed.
+ *
+ * A periodic timer could be wired later (e.g. setInterval at midnight) but a
+ * single boot-time call is sufficient for the current deployment model.
+ */
+const PRUNE_MAX_ROWS = 1000;
+const PRUNE_AGE_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+export async function pruneHistory(): Promise<void> {
+	const cutoffDate = new Date(Date.now() - PRUNE_AGE_MS);
+
+	// ── 1. Age-based prune: terminal jobs older than 90 days ────────────────
+	await db
+		.delete(jobs)
+		.where(
+			and(
+				inArray(jobs.status, [...TERMINAL_STATUSES]),
+				lt(jobs.startedAt, cutoffDate)
+			)
+		);
+
+	// ── 2. Count-based prune: terminal jobs beyond the most-recent 1000 ─────
+	// Select the IDs of the oldest terminal jobs that exceed the count cap.
+	// Using a subquery with OFFSET is not supported by Drizzle's type layer for
+	// deletes, so we fetch the boundary ID set in JS and delete by id list.
+	const kept = await db
+		.select({ id: jobs.id })
+		.from(jobs)
+		.where(inArray(jobs.status, [...TERMINAL_STATUSES]))
+		.orderBy(desc(jobs.startedAt))
+		.limit(PRUNE_MAX_ROWS);
+
+	const keptIds = kept.map((r) => r.id);
+
+	if (keptIds.length === PRUNE_MAX_ROWS) {
+		// There are at least 1000 rows — anything not in that list is excess.
+		await db
+			.delete(jobs)
+			.where(
+				and(
+					inArray(jobs.status, [...TERMINAL_STATUSES]),
+					notInArray(jobs.id, keptIds)
+				)
+			);
+	}
+
+	// ── 3. Prune orphaned audit_log rows ────────────────────────────────────
+	// Case A: rows that reference a job_id which no longer exists in jobs.
+	// Case B: rows with no job_id that are older than the age window.
+	// We never delete audit rows for active (queued/running) jobs because
+	// reconcileOrphanedJobs() has already run before this function is called,
+	// so the only 'running' rows remaining are genuinely live.
+	const remainingJobIds = await db.select({ id: jobs.id }).from(jobs);
+
+	const liveIds = remainingJobIds.map((r) => r.id);
+
+	await db.delete(auditLog).where(
+		or(
+			// Orphaned: points at a job that was just pruned (or never existed)
+			and(
+				sql`${auditLog.jobId} is not null`,
+				liveIds.length > 0 ? notInArray(auditLog.jobId, liveIds) : sql`1`
+			),
+			// No job link and older than retention window
+			and(isNull(auditLog.jobId), lt(auditLog.at, cutoffDate))
+		)
+	);
 }
 
 export async function persistJobStart(

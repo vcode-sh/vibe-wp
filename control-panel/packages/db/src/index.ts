@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import {
 	account,
 	accountRelations,
+	rateLimit,
 	session,
 	sessionRelations,
 	user,
@@ -18,6 +19,7 @@ import { notifyConfig } from "./schema/notify";
 const schema = {
 	account,
 	accountRelations,
+	rateLimit,
 	session,
 	sessionRelations,
 	user,

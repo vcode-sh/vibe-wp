@@ -25,12 +25,16 @@ function toTeamUser(u: {
 	email: string;
 	name?: string | null;
 	role?: string | null;
+	banned?: boolean | null;
+	banReason?: string | null;
 }): TeamUser {
 	return {
 		id: u.id,
 		email: u.email,
 		name: u.name ?? "",
 		role: u.role ?? "viewer",
+		banned: u.banned === true,
+		banReason: u.banReason ?? null,
 	};
 }
 
