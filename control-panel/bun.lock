@@ -147,6 +147,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@control-panel/api": "workspace:*",
+        "@control-panel/auth": "workspace:*",
         "@control-panel/env": "workspace:*",
         "@control-panel/ui": "workspace:*",
         "@hookform/resolvers": "^5.4.0",

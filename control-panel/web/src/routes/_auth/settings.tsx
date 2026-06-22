@@ -3,15 +3,21 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { PageHeader } from "@/components/patterns/page-header";
 import { NotifyCard } from "@/components/settings/notify-card";
 import { R2GlobalCard } from "@/components/settings/r2-global-card";
+import { TeamCard } from "@/components/settings/team-card";
 import { TopBar } from "@/components/top-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth/settings")({
 	component: SettingsPage,
 });
 
 function SettingsPage() {
+	const { data: session } = authClient.useSession();
+	const currentUser = session?.user;
+	const isAdmin = currentUser?.role === "admin";
+
 	return (
 		<>
 			<TopBar crumbs={["Settings"]} />
@@ -25,6 +31,7 @@ function SettingsPage() {
 						<TabsTrigger value="general">General</TabsTrigger>
 						<TabsTrigger value="notifications">Notifications</TabsTrigger>
 						<TabsTrigger value="backups">Backups</TabsTrigger>
+						{isAdmin ? <TabsTrigger value="team">Team</TabsTrigger> : null}
 					</TabsList>
 
 					<TabsContent className="grid gap-4 pt-4" value="general">
@@ -46,6 +53,12 @@ function SettingsPage() {
 					<TabsContent className="pt-4" value="backups">
 						<R2GlobalCard />
 					</TabsContent>
+
+					{isAdmin && currentUser ? (
+						<TabsContent className="pt-4" value="team">
+							<TeamCard currentUserId={currentUser.id} />
+						</TabsContent>
+					) : null}
 				</Tabs>
 			</div>
 		</>

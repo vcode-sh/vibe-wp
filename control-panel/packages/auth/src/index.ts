@@ -10,28 +10,9 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { admin } from "better-auth/plugins";
-import { createAccessControl } from "better-auth/plugins/access";
-import { adminAc, defaultStatements } from "better-auth/plugins/admin/access";
+import { ac, roles } from "./access";
 
 const authSchema = { account, session, user, verification };
-
-const ac = createAccessControl({
-	...defaultStatements,
-	site: ["read", "operate", "manage"],
-	server: ["read", "manage"],
-	team: ["manage"],
-});
-
-const roles = {
-	viewer: ac.newRole({ site: ["read"], server: ["read"] }),
-	operator: ac.newRole({ site: ["read", "operate"], server: ["read"] }),
-	admin: ac.newRole({
-		...adminAc.statements,
-		site: ["read", "operate", "manage"],
-		server: ["read", "manage"],
-		team: ["manage"],
-	}),
-};
 
 export function createAuth() {
 	const db = createDb();
