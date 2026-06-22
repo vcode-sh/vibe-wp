@@ -56,6 +56,7 @@ backup_upload() {
   name="$(basename "${target}")"
   echo "Uploading to ${base}/${name} ..."
   rclone copy --transfers 4 --checkers 8 --s3-no-check-bucket --s3-chunk-size 32M \
+    --stats 2s --stats-one-line --stats-log-level NOTICE \
     "${target}" "${base}/${name}"
   echo "Verifying remote copy ..."
   rclone check "${target}" "${base}/${name}" --one-way
@@ -113,5 +114,6 @@ backup_fetch_remote() {
   base="$(backup_remote_base)"
   echo "Fetching ${base}/${name} from remote ..."
   mkdir -p "${dest}"
-  rclone copy "${base}/${name}" "${dest}"
+  rclone copy --stats 2s --stats-one-line --stats-log-level NOTICE \
+    "${base}/${name}" "${dest}"
 }
