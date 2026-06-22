@@ -23,6 +23,7 @@ function noop(): Promise<void> {
 interface FakeProc {
 	exited: Promise<number>;
 	kill: () => void;
+	pid: number;
 	resolveExit: (code: number) => void;
 }
 
@@ -31,7 +32,8 @@ function makeProc(): FakeProc {
 	const exited = new Promise<number>((res) => {
 		resolveExit = res;
 	});
-	return { exited, kill: () => resolveExit(1), resolveExit };
+	// pid 0 is never a real process — ensures tests never accidentally call process.kill.
+	return { exited, kill: () => resolveExit(1), pid: 0, resolveExit };
 }
 
 async function* noLines(): AsyncGenerator<string> {

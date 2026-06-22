@@ -105,16 +105,36 @@ export function streamVibe(
 	op: VibeOp,
 	opts: { timeoutMs?: number; args?: string[] } = {}
 ) {
-	const proc = Bun.spawn(buildVibeArgv(siteDir, env, op, opts.args ?? []), {
+	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
+	// On Linux, spawn under setsid so the op gets its own session+group (pgid == pid).
+	// This lets killTree signal the whole op tree with process.kill(-pid) without
+	// touching the panel server's own process group.
+	const onLinux = process.platform === "linux";
+	const child = Bun.spawn(onLinux ? ["setsid", ...argv] : argv, {
 		cwd: siteDir,
 		stdout: "pipe",
 		stderr: "pipe",
 	});
+	const killTree = () => {
+		if (onLinux && child.pid && child.pid > 1) {
+			try {
+				// Negative pid signals the op's process group (pgid == pid after setsid).
+				process.kill(-child.pid, "SIGTERM");
+				return;
+			} catch {
+				// Group already gone — fall through to direct kill.
+			}
+		}
+		child.kill();
+	};
 	const deadline = opts.timeoutMs ?? STREAM_TIMEOUT_MS;
-	const timer = setTimeout(() => proc.kill(), deadline);
+	const timer = setTimeout(killTree, deadline);
+	// Return a facade so callers' proc.kill() always kills the whole group,
+	// while proc.exited still resolves when the direct child exits.
+	const proc = { exited: child.exited, kill: killTree, pid: child.pid };
 	async function* lines(): AsyncIterable<string> {
 		try {
-			const reader = proc.stdout.getReader();
+			const reader = child.stdout.getReader();
 			const decoder = new TextDecoder();
 			let buffer = "";
 			for (;;) {
