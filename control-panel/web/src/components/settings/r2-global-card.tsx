@@ -56,6 +56,20 @@ function R2GlobalForm({ global: row }: { global: MaskedRow }) {
 	const hasSecret = row?.hasSecret === true;
 
 	const save = useMutation(orpc.backupConfigSet.mutationOptions());
+	const test = useMutation(orpc.backupConfigTest.mutationOptions());
+
+	async function handleTest() {
+		try {
+			const result = await test.mutateAsync({ siteId: GLOBAL_SITE_ID });
+			if (result.ok) {
+				toast.success(result.message || "R2 connection OK.");
+			} else {
+				toast.error(result.message || "R2 connection failed.");
+			}
+		} catch {
+			toast.error("Could not run the R2 connection test.");
+		}
+	}
 
 	async function handleSave() {
 		try {
@@ -147,13 +161,18 @@ function R2GlobalForm({ global: row }: { global: MaskedRow }) {
 						value={bucket}
 					/>
 				</div>
-				<Button
-					className="justify-self-start"
-					disabled={save.isPending}
-					onClick={handleSave}
-				>
-					{save.isPending ? "Saving…" : "Save"}
-				</Button>
+				<div className="flex gap-2">
+					<Button disabled={save.isPending} onClick={handleSave}>
+						{save.isPending ? "Saving…" : "Save"}
+					</Button>
+					<Button
+						disabled={test.isPending}
+						onClick={handleTest}
+						variant="outline"
+					>
+						{test.isPending ? "Testing…" : "Test connection"}
+					</Button>
+				</div>
 			</CardContent>
 		</Card>
 	);
