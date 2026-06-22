@@ -53,6 +53,7 @@ export function TeamUserRow({
 	onChanged: () => Promise<void>;
 }) {
 	const [confirmRemove, setConfirmRemove] = useState(false);
+	const [pendingRole, setPendingRole] = useState<Role | null>(null);
 
 	const setRole = useMutation({
 		mutationFn: async (role: Role) => {
@@ -66,6 +67,9 @@ export function TeamUserRow({
 			toast.success(`Role updated for ${user.email}.`);
 		},
 		onError: (err: Error) => toast.error(err.message),
+		// Clear the optimistic selection once settled: on success the refetched
+		// query data already matches; on error it reverts to the true role.
+		onSettled: () => setPendingRole(null),
 	});
 
 	const remove = useMutation({
@@ -102,8 +106,11 @@ export function TeamUserRow({
 						<RoleSelect
 							disabled={setRole.isPending}
 							id={`role-${user.id}`}
-							onValueChange={(role) => setRole.mutate(role)}
-							value={user.role as Role}
+							onValueChange={(role) => {
+								setPendingRole(role);
+								setRole.mutate(role);
+							}}
+							value={pendingRole ?? (user.role as Role)}
 						/>
 						<Button
 							aria-label={`Remove ${user.email}`}
