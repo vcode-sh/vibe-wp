@@ -7,6 +7,17 @@ export type TaskStatus = "pending" | "running" | "done" | "failed" | "skipped";
 
 const TASK_TIMEOUT_MS = 30 * 60 * 1000;
 
+// The currently-running apply command, if any. The headless entry kills this on
+// SIGTERM/SIGINT so a canceled provision propagates the cancel to the in-flight
+// subprocess (e.g. `docker compose up`) instead of orphaning it to keep running
+// on the host after the operator believes the operation stopped.
+let activeProc: { kill: () => void } | null = null;
+
+/** Terminate the in-flight task subprocess (no-op when nothing is running). */
+export function terminateActiveTask(): void {
+  activeProc?.kill();
+}
+
 export interface TaskResult {
   code: number;
   id: string;
@@ -46,6 +57,8 @@ export async function runTask(
     stdout: "pipe",
     stderr: "pipe"
   });
+  // Expose the live child so a cancel signal can reap it (see terminateActiveTask).
+  activeProc = proc;
 
   // Safety net: a stuck command (e.g. one that unexpectedly streams) must never
   // hang the UI forever. 30 minutes is generous enough for real installs.
@@ -61,6 +74,9 @@ export async function runTask(
     proc.exited
   ]);
   clearTimeout(timer);
+  if (activeProc === proc) {
+    activeProc = null;
+  }
 
   if (timedOut) {
     return {
