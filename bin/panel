@@ -33,6 +33,38 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Resolve the host arch to the installer's compiled-binary suffix.
+installer_arch() {
+  m="$(uname -m)"
+  case "$m" in
+    x86_64|amd64) echo "x64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) echo "unsupported arch: $m" >&2; return 1 ;;
+  esac
+}
+
+# Is the committed dist binary missing or older than any installer source file?
+installer_dist_stale() {
+  bin="$1"
+  [ -f "$bin" ] || return 0
+  newer="$(find "$REPO_DIR/installer/src" -type f -newer "$bin" -print -quit 2>/dev/null || true)"
+  [ -n "$newer" ]
+}
+
+# Place the correct-arch installer binary at $PANEL_DIR/bin/vibe-wp-installer.
+# Builds from installer/ when the committed dist binary is missing or stale.
+install_installer_bin() {
+  arch="$(installer_arch)"
+  dist="$REPO_DIR/installer/dist/vibe-wp-installer-linux-$arch"
+  if installer_dist_stale "$dist"; then
+    echo "Building installer binary (linux-$arch)..."
+    ( cd "$REPO_DIR/installer" && "$BUN" install && "$BUN" run "build:linux-$arch" )
+  fi
+  [ -f "$dist" ] || { echo "installer binary not found: $dist" >&2; return 1; }
+  $SUDO install -d -m 0755 "$PANEL_DIR/bin"
+  $SUDO install -m 0755 "$dist" "$PANEL_DIR/bin/vibe-wp-installer"
+}
+
 install_panel() {
   [ -n "$DOMAIN" ] || { printf 'Subdomain for the panel: '; read -r DOMAIN; }
   [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
@@ -64,6 +96,9 @@ install_panel() {
   $SUDO rm -rf "$PANEL_DIR/app"
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
 
+  # Installer binary — the provisioning bridge drives this (PANEL_INSTALLER_BIN).
+  install_installer_bin
+
   # Env (contains BETTER_AUTH_SECRET — keep it root-only, never world-readable)
   if [ -n "$existing_secret" ]; then
     SECRET="$existing_secret"
@@ -77,6 +112,7 @@ install_panel() {
     "CORS_ORIGIN=https://$DOMAIN" \
     "NODE_ENV=production" \
     "PANEL_SITES_ROOTS=/opt:/srv" \
+    "PANEL_INSTALLER_BIN=$PANEL_DIR/bin/vibe-wp-installer" \
     | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null )
   $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
 

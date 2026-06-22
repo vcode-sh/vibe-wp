@@ -1,6 +1,263 @@
 import { describe, expect, it } from "vitest";
 
 import { buildVibeArgv, STREAM_TIMEOUT_MS, VIBE_OPS } from "./exec";
+import {
+	assertArgvSecretFree,
+	type CoreResponse,
+	headlessArgv,
+	type InstallerStateLike,
+	isProvisionMode,
+	MODES,
+	provisionSequence,
+	runHeadlessRequest,
+	type SpawnFn,
+} from "./provision";
+
+const BIN = "/opt/vibe-wp-panel/bin/vibe-wp-installer";
+const SECRET = "sup3r-s3cret-admin-pw";
+const EXIT_1 = /exited 1/;
+const ERR_NOPE = /nope/;
+const ERR_NON_JSON = /non-JSON/;
+const ERR_BAD_MODE = /Disallowed provision mode/;
+
+/** A fake `--headless-json` child: captures argv + stdin, replays scripted JSON. */
+function fakeSpawn(opts: {
+	argvSink: string[][];
+	stdinSink: string[];
+	responses: string[];
+	code?: number;
+	stderr?: string;
+}): SpawnFn {
+	let call = 0;
+	return (argv: string[]) => {
+		opts.argvSink.push(argv);
+		const body = opts.responses[call] ?? opts.responses.at(-1) ?? "{}";
+		call += 1;
+		let written = "";
+		return {
+			stdin: {
+				write: (d: string) => {
+					written += d;
+				},
+				end: () => {
+					opts.stdinSink.push(written);
+				},
+			},
+			stdout: new Response(body).body as ReadableStream<Uint8Array>,
+			stderr: new Response(opts.stderr ?? "")
+				.body as ReadableStream<Uint8Array>,
+			exited: Promise.resolve(opts.code ?? 0),
+			kill: () => undefined,
+		};
+	};
+}
+
+const VALID_STATE: InstallerStateLike = {
+	mode: "new-site",
+	adminPassword: SECRET,
+	productionDomain: "acme.test",
+};
+
+describe("provision headless argv", () => {
+	it("is always exactly [bin, --headless-json]", () => {
+		expect(headlessArgv(BIN)).toEqual([BIN, "--headless-json"]);
+	});
+
+	it("never carries a state value (secrets stay on stdin)", () => {
+		const argv = headlessArgv(BIN);
+		expect(argv.some((t) => t.includes(SECRET))).toBe(false);
+		expect(argv.some((t) => t.includes("acme.test"))).toBe(false);
+	});
+
+	it("assertArgvSecretFree rejects anything but the canonical argv", () => {
+		expect(() => assertArgvSecretFree([BIN, "--headless-json"])).not.toThrow();
+		expect(() =>
+			assertArgvSecretFree([BIN, "--mode", "new-site", "--yes"])
+		).toThrow();
+		expect(() =>
+			assertArgvSecretFree([BIN, "--headless-json", SECRET])
+		).toThrow();
+	});
+});
+
+describe("MODES allowlist", () => {
+	it("accepts the provisioning modes and rejects others", () => {
+		expect(isProvisionMode("new-site")).toBe(true);
+		expect(isProvisionMode("external-services")).toBe(true);
+		expect(isProvisionMode("staging-only")).toBe(true);
+		expect(isProvisionMode("remove-existing")).toBe(true);
+		expect(isProvisionMode("manage-existing")).toBe(false);
+		expect(isProvisionMode("rm -rf")).toBe(false);
+	});
+
+	it("exposes the documented mode list", () => {
+		expect([...MODES]).toEqual([
+			"new-site",
+			"external-services",
+			"staging-only",
+			"remove-existing",
+			"update-existing",
+		]);
+	});
+});
+
+describe("runHeadlessRequest", () => {
+	it("writes the request to STDIN (not argv) and parses the response", async () => {
+		const argvSink: string[][] = [];
+		const stdinSink: string[] = [];
+		const res = await runHeadlessRequest(
+			{ kind: "validate", state: VALID_STATE },
+			{
+				bin: BIN,
+				spawn: fakeSpawn({
+					argvSink,
+					stdinSink,
+					responses: [JSON.stringify({ kind: "validate", errors: [] })],
+				}),
+			}
+		);
+		expect(res).toEqual({ kind: "validate", errors: [] });
+		expect(argvSink[0]).toEqual([BIN, "--headless-json"]);
+		// The secret-bearing state was piped to stdin, never argv.
+		expect(stdinSink[0]).toContain(SECRET);
+		expect(argvSink[0]?.some((t) => t.includes(SECRET))).toBe(false);
+	});
+
+	it("throws on a non-zero exit (stderr redacted)", async () => {
+		await expect(
+			runHeadlessRequest(
+				{ kind: "validate", state: VALID_STATE },
+				{
+					bin: BIN,
+					spawn: fakeSpawn({
+						argvSink: [],
+						stdinSink: [],
+						responses: [""],
+						code: 1,
+						stderr: "boom",
+					}),
+				}
+			)
+		).rejects.toThrow(EXIT_1);
+	});
+
+	it("throws on an {kind:error} response", async () => {
+		await expect(
+			runHeadlessRequest(
+				{ kind: "plan", state: VALID_STATE },
+				{
+					bin: BIN,
+					spawn: fakeSpawn({
+						argvSink: [],
+						stdinSink: [],
+						responses: [JSON.stringify({ kind: "error", message: "nope" })],
+					}),
+				}
+			)
+		).rejects.toThrow(ERR_NOPE);
+	});
+
+	it("throws on non-JSON stdout", async () => {
+		await expect(
+			runHeadlessRequest(
+				{ kind: "detect" },
+				{
+					bin: BIN,
+					spawn: fakeSpawn({
+						argvSink: [],
+						stdinSink: [],
+						responses: ["not json"],
+					}),
+				}
+			)
+		).rejects.toThrow(ERR_NON_JSON);
+	});
+});
+
+describe("provisionSequence", () => {
+	it("rejects a mode outside the allowlist before spawning", async () => {
+		const argvSink: string[][] = [];
+		await expect(
+			provisionSequence(
+				{ mode: "manage-existing" },
+				{
+					apply: true,
+					bin: BIN,
+					spawn: fakeSpawn({ argvSink, stdinSink: [], responses: [] }),
+				}
+			)
+		).rejects.toThrow(ERR_BAD_MODE);
+		expect(argvSink).toHaveLength(0);
+	});
+
+	it("returns validation errors WITHOUT executing", async () => {
+		const argvSink: string[][] = [];
+		const result = await provisionSequence(VALID_STATE, {
+			apply: true,
+			bin: BIN,
+			spawn: fakeSpawn({
+				argvSink,
+				stdinSink: [],
+				responses: [
+					JSON.stringify({ kind: "validate", errors: ["bad domain"] }),
+				],
+			}),
+		});
+		expect(result.ok).toBe(false);
+		expect(result.validationErrors).toEqual(["bad domain"]);
+		expect(result.results).toEqual([]);
+		// Only the validate spawn ran — no plan, no runPlan.
+		expect(argvSink).toHaveLength(1);
+	});
+
+	it("runs validate -> plan -> runPlan and reports task results", async () => {
+		const argvSink: string[][] = [];
+		const responses: CoreResponse[] = [
+			{ kind: "validate", errors: [] },
+			{ kind: "plan", plan: { tasks: [] } },
+			{
+				kind: "runPlan",
+				results: [{ id: "env-prod", status: "done", output: "ok", code: 0 }],
+			},
+		];
+		const result = await provisionSequence(VALID_STATE, {
+			apply: true,
+			bin: BIN,
+			spawn: fakeSpawn({
+				argvSink,
+				stdinSink: [],
+				responses: responses.map((r) => JSON.stringify(r)),
+			}),
+		});
+		expect(result.ok).toBe(true);
+		expect(result.results).toHaveLength(1);
+		expect(argvSink).toHaveLength(3);
+		for (const argv of argvSink) {
+			expect(argv).toEqual([BIN, "--headless-json"]);
+		}
+	});
+
+	it("reports ok:false when a task fails", async () => {
+		const result = await provisionSequence(VALID_STATE, {
+			apply: true,
+			bin: BIN,
+			spawn: fakeSpawn({
+				argvSink: [],
+				stdinSink: [],
+				responses: [
+					JSON.stringify({ kind: "validate", errors: [] }),
+					JSON.stringify({ kind: "plan", plan: {} }),
+					JSON.stringify({
+						kind: "runPlan",
+						results: [{ id: "boot", status: "failed", output: "err", code: 1 }],
+					}),
+				],
+			}),
+		});
+		expect(result.ok).toBe(false);
+		expect(result.results[0]?.status).toBe("failed");
+	});
+});
 
 describe("buildVibeArgv", () => {
 	it("builds an argv for an allowed op", () => {

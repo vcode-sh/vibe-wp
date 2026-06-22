@@ -29,7 +29,7 @@ export interface JobDeps {
  * Lazily resolved real deps — deferred so the DB/env modules are not imported
  * at module load time (which lets tests import jobs.ts without a live DB).
  */
-async function getRealDeps(): Promise<JobDeps> {
+export async function getRealDeps(): Promise<JobDeps> {
 	const [{ findSite }, { persistJobFinish, persistJobStart, writeAudit }] =
 		await Promise.all([import("./sites"), import("./jobs-db")]);
 	return {
@@ -141,40 +141,40 @@ async function drainJob(
 	}
 }
 
-export async function startJob(
-	input: StartJobInput,
-	deps?: JobDeps
+/** Metadata shared by every tracked job, regardless of what it spawns. */
+export interface JobMeta {
+	action: string;
+	kind: string;
+	siteId: string;
+	userId: string;
+}
+
+/**
+ * Shared launch path for ALL tracked jobs: persist + audit FIRST, then register
+ * and drain a pre-built `{ proc, lines }`. Used by streamVibe jobs and one-shot
+ * provision jobs so both share the same durability + cancel + drain guarantees.
+ */
+export async function launchJob(
+	meta: JobMeta,
+	produce: () => ReturnType<typeof streamVibe>,
+	d: JobDeps
 ): Promise<{ jobId: string }> {
-	const d = deps ?? (await getRealDeps());
-	const site = await d.findSite(input.siteId);
-	if (!site) {
-		throw new Error("Unknown site");
-	}
-	if (hasRunningJob(input.siteId, input.kind)) {
-		throw new Error(
-			"An operation of this type is already running for this site."
-		);
-	}
 	const jobId = crypto.randomUUID();
 	const stream = new LineStream();
 	const job: Job = {
 		exitCode: null,
 		finishedAt: null,
 		id: jobId,
-		kind: input.kind,
-		siteId: input.siteId,
+		kind: meta.kind,
+		siteId: meta.siteId,
 		startedAt: new Date().toISOString(),
 		status: "running",
 	};
 	// Persist + audit FIRST — a privileged op must not spawn without a durable record.
-	await d.persistJobStart(jobId, input.kind, input.siteId);
-	await d.writeAudit(input.userId, input.action, input.siteId, jobId);
+	await d.persistJobStart(jobId, meta.kind, meta.siteId);
+	await d.writeAudit(meta.userId, meta.action, meta.siteId, jobId);
 	// Only now spawn + register + drain.
-	const { proc, lines } = d.streamVibe(site.installDir, input.env, input.op, {
-		args: input.args,
-		timeoutMs: STREAM_TIMEOUT_MS,
-		env: input.extraEnv,
-	});
+	const { proc, lines } = produce();
 	registry.set(jobId, { job, proc, stream });
 
 	drainJob(job, stream, proc, lines, jobId, d).catch(async () => {
@@ -196,4 +196,35 @@ export async function startJob(
 	});
 
 	return { jobId };
+}
+
+export async function startJob(
+	input: StartJobInput,
+	deps?: JobDeps
+): Promise<{ jobId: string }> {
+	const d = deps ?? (await getRealDeps());
+	const site = await d.findSite(input.siteId);
+	if (!site) {
+		throw new Error("Unknown site");
+	}
+	if (hasRunningJob(input.siteId, input.kind)) {
+		throw new Error(
+			"An operation of this type is already running for this site."
+		);
+	}
+	return launchJob(
+		{
+			action: input.action,
+			kind: input.kind,
+			siteId: input.siteId,
+			userId: input.userId,
+		},
+		() =>
+			d.streamVibe(site.installDir, input.env, input.op, {
+				args: input.args,
+				timeoutMs: STREAM_TIMEOUT_MS,
+				env: input.extraEnv,
+			}),
+		d
+	);
 }

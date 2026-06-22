@@ -114,23 +114,23 @@ export async function runVibe(
 	return { stdout: redact(stdout), stderr: redact(stderr), code };
 }
 
-export function streamVibe(
-	siteDir: string,
-	env: VibeEnv,
-	op: VibeOp,
-	opts: {
-		timeoutMs?: number;
-		args?: string[];
-		env?: Record<string, string>;
-	} = {}
+/**
+ * Spawn a host process and expose it as a streamed job: a `{ proc, lines }`
+ * shape where `proc.kill()` tears down the whole process tree and `lines` is a
+ * redacted, merged stdout+stderr line iterator. Shared by streamVibe and
+ * streamProvision so both inherit the same setsid kill-tree + timeout + redact
+ * guarantees. Secrets must arrive via `opts.env`, never in `argv`.
+ */
+function spawnStream(
+	argv: string[],
+	opts: { cwd?: string; timeoutMs?: number; env?: Record<string, string> } = {}
 ) {
-	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
 	// On Linux, spawn under setsid so the op gets its own session+group (pgid == pid).
 	// This lets killTree signal the whole op tree with process.kill(-pid) without
 	// touching the panel server's own process group.
 	const onLinux = process.platform === "linux";
 	const child = Bun.spawn(onLinux ? ["setsid", ...argv] : argv, {
-		cwd: siteDir,
+		...(opts.cwd ? { cwd: opts.cwd } : {}),
 		stdout: "pipe",
 		stderr: "pipe",
 		...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
@@ -175,4 +175,22 @@ export function streamVibe(
 		}
 	}
 	return { proc, lines: lines() };
+}
+
+export function streamVibe(
+	siteDir: string,
+	env: VibeEnv,
+	op: VibeOp,
+	opts: {
+		timeoutMs?: number;
+		args?: string[];
+		env?: Record<string, string>;
+	} = {}
+) {
+	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
+	return spawnStream(argv, {
+		cwd: siteDir,
+		timeoutMs: opts.timeoutMs,
+		env: opts.env,
+	});
 }

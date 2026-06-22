@@ -13,6 +13,9 @@ export const env = createEnv({
 			.default("development"),
 		PANEL_SITES_ROOTS: z.string().default("/opt:/srv"),
 		PANEL_VPS_LABEL: z.string().optional(),
+		PANEL_INSTALLER_BIN: z
+			.string()
+			.default("/opt/vibe-wp-panel/bin/vibe-wp-installer"),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
