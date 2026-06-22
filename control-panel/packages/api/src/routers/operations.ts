@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { Job, StreamEvent } from "../contract";
 import { cancelJob, getJob, streamJob } from "../core-bridge/jobs";
+import { writeAudit } from "../core-bridge/jobs-db";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
 const streamEventSchema = z.object({
@@ -33,8 +34,17 @@ export const operationsRouter = {
 
 	operationsCancel: adminProcedure
 		.input(z.object({ jobId: z.string() }))
-		.handler(({ input }): { canceled: true } => {
-			cancelJob(input.jobId);
-			return { canceled: true };
+		.handler(async ({ input, context }): Promise<{ canceled: boolean }> => {
+			const job = getJob(input.jobId);
+			const canceled = cancelJob(input.jobId);
+			if (canceled) {
+				await writeAudit(
+					context.session.user.id,
+					"cancel",
+					job?.siteId ?? null,
+					input.jobId
+				);
+			}
+			return { canceled };
 		}),
 };

@@ -6,15 +6,43 @@ import {
 	type VibeEnv,
 	type VibeOp,
 } from "./exec";
-import { persistJobFinish, persistJobStart, writeAudit } from "./jobs-db";
+import type { persistJobFinish, persistJobStart, writeAudit } from "./jobs-db";
 import { LineStream } from "./line-stream";
-import { findSite } from "./sites";
+import type { DetectedSite } from "./sites";
 
 interface JobEntry {
 	job: Job;
 	proc: { kill: () => void };
 	stream: LineStream;
 }
+
+/** Injection points used by tests — real callers never pass this. */
+export interface JobDeps {
+	findSite: (id: string) => Promise<DetectedSite | null>;
+	persistJobFinish: typeof persistJobFinish;
+	persistJobStart: typeof persistJobStart;
+	streamVibe: typeof streamVibe;
+	writeAudit: typeof writeAudit;
+}
+
+/**
+ * Lazily resolved real deps — deferred so the DB/env modules are not imported
+ * at module load time (which lets tests import jobs.ts without a live DB).
+ */
+async function getRealDeps(): Promise<JobDeps> {
+	const [{ findSite }, { persistJobFinish, persistJobStart, writeAudit }] =
+		await Promise.all([import("./sites"), import("./jobs-db")]);
+	return {
+		findSite,
+		persistJobFinish,
+		persistJobStart,
+		streamVibe,
+		writeAudit,
+	};
+}
+
+/** Tracks jobs for which the terminal DB row has already been written. */
+const finalized = new Set<string>();
 
 const registry = new Map<string, JobEntry>();
 
@@ -40,13 +68,22 @@ export function streamJob(jobId: string): AsyncIterable<StreamEvent> {
 	return entry.stream.subscribe();
 }
 
-export function cancelJob(jobId: string): void {
+/**
+ * Cancels an in-flight job. Returns true if the job was running and the cancel
+ * took effect; returns false if the job is already in a terminal state (the
+ * persisted row remains authoritative in that case).
+ */
+export function cancelJob(jobId: string): boolean {
 	const entry = registry.get(jobId);
 	if (!entry) {
 		throw new Error("Unknown job");
 	}
+	if (entry.job.status !== "running") {
+		return false;
+	}
 	entry.job.status = "canceled";
 	entry.proc.kill();
+	return true;
 }
 
 async function drainJob(
@@ -54,7 +91,8 @@ async function drainJob(
 	stream: LineStream,
 	proc: ReturnType<typeof streamVibe>["proc"],
 	lines: ReturnType<typeof streamVibe>["lines"],
-	jobId: string
+	jobId: string,
+	deps: JobDeps
 ): Promise<void> {
 	for await (const line of lines) {
 		stream.push(line);
@@ -66,13 +104,18 @@ async function drainJob(
 	}
 	job.finishedAt = new Date().toISOString();
 	stream.end(job.status);
-	await persistJobFinish(jobId, job.status, code);
+	if (!finalized.has(jobId)) {
+		finalized.add(jobId);
+		await deps.persistJobFinish(jobId, job.status, code);
+	}
 }
 
 export async function startJob(
-	input: StartJobInput
+	input: StartJobInput,
+	deps?: JobDeps
 ): Promise<{ jobId: string }> {
-	const site = await findSite(input.siteId);
+	const d = deps ?? (await getRealDeps());
+	const site = await d.findSite(input.siteId);
 	if (!site) {
 		throw new Error("Unknown site");
 	}
@@ -87,22 +130,31 @@ export async function startJob(
 		startedAt: new Date().toISOString(),
 		status: "running",
 	};
-	const { proc, lines } = streamVibe(site.installDir, input.env, input.op, {
+	// Persist + audit FIRST — a privileged op must not spawn without a durable record.
+	await d.persistJobStart(jobId, input.kind, input.siteId);
+	await d.writeAudit(input.userId, input.action, input.siteId, jobId);
+	// Only now spawn + register + drain.
+	const { proc, lines } = d.streamVibe(site.installDir, input.env, input.op, {
 		args: input.args,
 		timeoutMs: STREAM_TIMEOUT_MS,
 	});
 	registry.set(jobId, { job, proc, stream });
-	await persistJobStart(jobId, input.kind, input.siteId);
-	await writeAudit(input.userId, input.action, input.siteId, jobId);
 
-	drainJob(job, stream, proc, lines, jobId).catch(async () => {
+	drainJob(job, stream, proc, lines, jobId, d).catch(async () => {
 		// Preserve a cancel even if the drain throws (canceled must stay canceled).
 		if (job.status !== "canceled") {
 			job.status = "failed";
 		}
 		job.finishedAt = new Date().toISOString();
 		stream.end(job.status);
-		await persistJobFinish(jobId, job.status, null);
+		if (!finalized.has(jobId)) {
+			finalized.add(jobId);
+			try {
+				await d.persistJobFinish(jobId, job.status, null);
+			} catch {
+				// Stream is already ended; swallow DB errors to avoid unhandled rejection.
+			}
+		}
 	});
 
 	return { jobId };
