@@ -124,6 +124,25 @@ export interface ProvisionJobRef {
 	jobId: string;
 }
 
+/** One persisted operation, enriched with its audit actor, for the history view. */
+export interface JobHistoryEntry {
+	/** Audit action label, e.g. "backup", "cancel"; null when no audit row exists. */
+	action: string | null;
+	/** User id of the actor; null when unknown. */
+	actorId: string | null;
+	/** Display name of the user who triggered the operation; null when unknown. */
+	actorName: string | null;
+	/** Duration in seconds; null while still running. */
+	durationSeconds: number | null;
+	exitCode: number | null;
+	finishedAt: string | null;
+	id: string;
+	kind: string;
+	siteId: string;
+	startedAt: string;
+	status: JobStatus;
+}
+
 export type PerformancePresetInput =
 	| "conservative"
 	| "balanced"

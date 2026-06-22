@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+set -eu
+# Print the current scheduled-backup cadence, health-monitor state, and WP
+# debug flags for the selected environment, as TAB-separated key/value lines
+# the panel parses:
+#   backup_schedule\t<off|daily|weekly>
+#   monitor\t<on|off>
+#   wp_debug_log\t<0|1>
+#   wp_debug_display\t<0|1>
+#   script_debug\t<0|1>
+#
+# The backup cadence is recovered from the timer unit's OnCalendar so the panel
+# reflects whatever the installer or a prior apply set, without a second store.
+# The debug flags are read from the env file. Read-only: no unit is created,
+# enabled, or removed here. None of these values are secret.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+project="$(vibe_env_value COMPOSE_PROJECT_NAME)"
+slug="${project#vibe-wp-}"
+slug="${slug%-prod}"
+slug="${slug%-stage}"
+if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
+  slug="$(basename -- "${VIBE_ROOT}")"
+fi
+
+backup_unit="vibe-wp-backup-${slug}-${VIBE_ENV}.timer"
+monitor_unit="vibe-wp-monitor-${slug}-${VIBE_ENV}.timer"
+
+backup_schedule="off"
+monitor="off"
+
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl is-enabled "${backup_unit}" >/dev/null 2>&1; then
+    # Recover the cadence from the timer's OnCalendar expression.
+    oncalendar="$(systemctl show -p TimersCalendar --value "${backup_unit}" 2>/dev/null || true)"
+    case "${oncalendar}" in
+      *Sun*) backup_schedule="weekly" ;;
+      *03:30:00*) backup_schedule="daily" ;;
+      "") backup_schedule="off" ;;
+      *) backup_schedule="daily" ;;
+    esac
+  fi
+  if systemctl is-enabled "${monitor_unit}" >/dev/null 2>&1; then
+    monitor="on"
+  fi
+fi
+
+# WP debug flags from the env file (default 0/off when unset). bin/vibe renders
+# these via vibe_wp_env_bool, so a missing/blank value is treated as disabled.
+norm_bool() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) echo 1 ;;
+    *) echo 0 ;;
+  esac
+}
+wp_debug_log="$(norm_bool "$(vibe_env_value WP_DEBUG_LOG)")"
+wp_debug_display="$(norm_bool "$(vibe_env_value WP_DEBUG_DISPLAY)")"
+script_debug="$(norm_bool "$(vibe_env_value SCRIPT_DEBUG)")"
+
+printf 'backup_schedule\t%s\n' "${backup_schedule}"
+printf 'monitor\t%s\n' "${monitor}"
+printf 'wp_debug_log\t%s\n' "${wp_debug_log}"
+printf 'wp_debug_display\t%s\n' "${wp_debug_display}"
+printf 'script_debug\t%s\n' "${script_debug}"

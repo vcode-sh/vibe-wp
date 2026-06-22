@@ -1,0 +1,95 @@
+#!/usr/bin/env sh
+set -eu
+umask 022
+# Install, re-render, or remove the scheduled-backup systemd timer for the
+# selected environment so the panel can change the cadence after install.
+#
+# The installer (installer/src/core/backup.ts) creates a timer unit named
+#   vibe-wp-backup-<slug>-<env>.timer
+# whose OnCalendar drives the unattended `bin/vibe <env> backup` run. This
+# script reproduces that exact unit so the panel and the installer agree, then
+# enables it for daily/weekly, or disables+removes it for "off".
+#
+# The cadence is passed as the single positional argument (off|daily|weekly) —
+# it is not a secret, so argv is appropriate. No secrets are ever printed.
+#
+# Requires root (or passwordless sudo) for /etc/systemd/system writes; the panel
+# service runs as root, matching the installer-created backup/monitor timers.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+cadence="${1:-}"
+case "${cadence}" in
+  off|daily|weekly) ;;
+  *)
+    echo "Usage: ./bin/vibe <env> backup-schedule-apply <off|daily|weekly>" >&2
+    exit 2
+    ;;
+esac
+
+# Resolve the OnCalendar expression for the cadence (mirrors backupOnCalendar()
+# in installer/src/core/backup.ts so the panel and installer schedules match).
+on_calendar=""
+case "${cadence}" in
+  daily)  on_calendar="*-*-* 03:30:00" ;;
+  weekly) on_calendar="Sun *-*-* 03:30:00" ;;
+esac
+
+# The authoritative slug is the production COMPOSE_PROJECT_NAME tail
+# (vibe-wp-<slug>-prod) — the same value the installer named the unit after.
+project="$(vibe_env_value COMPOSE_PROJECT_NAME)"
+slug="${project#vibe-wp-}"
+slug="${slug%-prod}"
+slug="${slug%-stage}"
+if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
+  # Fall back to the install-dir tail when COMPOSE_PROJECT_NAME is unconventional.
+  slug="$(basename -- "${VIBE_ROOT}")"
+fi
+
+unit="vibe-wp-backup-${slug}-${VIBE_ENV}"
+service_path="/etc/systemd/system/${unit}.service"
+timer_path="/etc/systemd/system/${unit}.timer"
+
+if [ "$(id -u)" = 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  echo "systemctl not available; cannot manage backup timer." >&2
+  exit 1
+fi
+
+if [ "${cadence}" = "off" ]; then
+  ${SUDO} systemctl disable --now "${unit}.timer" >/dev/null 2>&1 || true
+  ${SUDO} rm -f "${timer_path}"
+  ${SUDO} systemctl daemon-reload
+  echo "Backup schedule disabled for ${slug} (${VIBE_ENV})."
+  exit 0
+fi
+
+# Render the oneshot service + timer, identical in shape to the installer's, so
+# re-applying from the panel never diverges from the install-time unit.
+service="[Unit]
+Description=Vibe WP backup for ${slug} (${VIBE_ENV})
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=${VIBE_ROOT}
+ExecStart=${VIBE_ROOT}/bin/vibe ${VIBE_ENV} backup"
+
+timer="[Unit]
+Description=Scheduled Vibe WP backup for ${slug} (${VIBE_ENV})
+[Timer]
+OnCalendar=${on_calendar}
+Persistent=true
+[Install]
+WantedBy=timers.target"
+
+printf '%s\n' "${service}" | ${SUDO} tee "${service_path}" >/dev/null
+printf '%s\n' "${timer}" | ${SUDO} tee "${timer_path}" >/dev/null
+${SUDO} systemctl daemon-reload
+${SUDO} systemctl enable --now "${unit}.timer" >/dev/null
+echo "Backup schedule set to ${cadence} for ${slug} (${VIBE_ENV})."

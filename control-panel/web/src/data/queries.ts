@@ -31,7 +31,18 @@ export const backupConfigQuery = (siteId: string) =>
 export const notifyConfigQuery = (siteId: string) =>
 	orpc.notifyConfigGet.queryOptions({ input: { siteId } });
 
+export const siteSettingsQuery = (siteId: string) =>
+	orpc.siteSettingsGet.queryOptions({ input: { siteId } });
+
 export const healthPerfQuery = (siteId: string) =>
 	orpc.healthPerf.queryOptions({ input: { siteId } });
 
 export const securityStatusQuery = () => orpc.securityStatus.queryOptions();
+
+export const devInfoQuery = (siteId: string) =>
+	orpc.devInfo.queryOptions({ input: { siteId } });
+
+export const operationsListQuery = (opts?: {
+	siteId?: string;
+	limit?: number;
+}) => orpc.operationsList.queryOptions({ input: opts ?? {} });

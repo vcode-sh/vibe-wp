@@ -21,10 +21,30 @@ export const VIBE_OPS = {
 	monitor: { argv: ["monitor", "--json", "--no-notify"], stream: false },
 	perfReport: { argv: ["perf-report", "--json"], stream: false },
 	securityStatus: { argv: ["security-status"], stream: false },
+	/** List compose service status as JSON (non-streaming, read-only). */
+	psJson: { argv: ["compose", "ps", "--format", "json"], stream: false },
+	/** Read a single non-secret env key (takes one key-name arg). */
+	env: { argv: ["env"], stream: false, takesArg: true },
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
 	backupLocal: { argv: ["backup", "--local-only"], stream: true },
 	backupConfigApply: { argv: ["backup-config-apply"], stream: false },
+	/** Install/remove the scheduled-backup timer (arg: off|daily|weekly). */
+	backupScheduleApply: {
+		argv: ["backup-schedule-apply"],
+		stream: false,
+		takesArg: true,
+	},
+	/** Install/remove the hourly health-monitor timer (arg: on|off). */
+	monitorScheduleApply: {
+		argv: ["monitor-schedule-apply"],
+		stream: false,
+		takesArg: true,
+	},
+	/** Read the current backup cadence, monitor state, and WP debug flags. */
+	scheduleStatus: { argv: ["schedule-status"], stream: false },
+	/** Persist per-site WP runtime settings (debug flags) into the env file. */
+	siteConfigApply: { argv: ["site-config-apply"], stream: false },
 	backupTest: { argv: ["backup-test"], stream: false },
 	notifyConfigApply: { argv: ["notify-config-apply"], stream: false },
 	notifyTest: { argv: ["notify-test"], stream: false },

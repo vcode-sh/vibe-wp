@@ -213,6 +213,39 @@ export function parseWpUpdateCount(stdout: string): number {
 	}
 }
 
+// docker compose ps --format json emits one JSON object per line (NDJSON).
+// Each object has at minimum Name and State; Health is present only when a
+// healthcheck is configured. We normalise to a simple { name, status } shape.
+const composePsRow = z.object({
+	Name: z.string(),
+	State: z.string(),
+	Health: z.string().optional(),
+});
+
+export interface ContainerStatus {
+	name: string;
+	status: string;
+}
+
+export function parseComposePsJson(stdout: string): ContainerStatus[] {
+	const rows: ContainerStatus[] = [];
+	for (const raw of stdout.split("\n")) {
+		const line = raw.trim();
+		if (!line || line.startsWith("[")) {
+			// Skip empty lines and any stray JSON-array wrapper.
+			continue;
+		}
+		try {
+			const row = composePsRow.parse(JSON.parse(line));
+			const health = row.Health && row.Health !== "" ? ` (${row.Health})` : "";
+			rows.push({ name: row.Name, status: `${row.State}${health}` });
+		} catch {
+			// Skip unparseable lines (e.g. progress lines during start/stop).
+		}
+	}
+	return rows;
+}
+
 // compose --timestamps format: <service>-<N>  | <RFC3339> <message>
 const COMPOSE_LINE =
 	/^([a-zA-Z0-9_-]+?)-\d+\s+\|\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s*(.*)/;

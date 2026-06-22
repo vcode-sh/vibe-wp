@@ -6,6 +6,7 @@ export type {
 	CreateSiteInput,
 	HealthReport,
 	Job,
+	JobHistoryEntry,
 	JobStatus,
 	LogLine,
 	MetricTile,

@@ -3,6 +3,7 @@ import {
 	Activity,
 	CopyCheck,
 	HeartPulse,
+	History,
 	LayoutDashboard,
 	ScrollText,
 	Settings,
@@ -44,6 +45,7 @@ const SITE_LINKS: SiteLink[] = [
 ];
 
 const SERVER_LINKS: SiteLink[] = [
+	{ label: "Operations", to: "/operations", icon: History },
 	{ label: "Server & security", to: "/server", icon: ShieldCheck },
 	{ label: "Settings", to: "/settings", icon: Settings },
 ];

@@ -9,6 +9,7 @@ import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyNet } from "@/components/patterns/safety-net";
 import { StatusHero } from "@/components/patterns/status-hero";
 import { VerdictTile } from "@/components/patterns/verdict-tile";
+import { DevDetailsContent } from "@/components/sites/dev-details-content";
 import { SiteControls } from "@/components/sites/site-controls";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
@@ -162,8 +163,7 @@ function OverviewPage() {
 							</div>
 							<ActivityTimeline entries={overview.data.activity} />
 							<DeveloperDetails>
-								Containers, raw perf metrics, live logs and env will appear here
-								once the panel is wired to the core.
+								<DevDetailsContent siteId={siteId} />
 							</DeveloperDetails>
 						</>
 					) : null}

@@ -18,8 +18,14 @@ import {
 	setNotifyConfig,
 } from "../core-bridge/notify-config";
 import type { NotifyConfigRow } from "../core-bridge/notify-config-pure";
+import {
+	applyBackupSchedule,
+	applyDebugFlags,
+	applyMonitorState,
+	getSiteSettings,
+} from "../core-bridge/site-config";
 import { detectSites, findSite } from "../core-bridge/sites";
-import { adminProcedure } from "../procedures";
+import { adminProcedure, protectedProcedure } from "../procedures";
 
 /** Replace the secret with a `hasSecret` boolean — never leak the value. */
 function maskRow(row: BackupConfigRow | null): Record<string, unknown> | null {
@@ -195,5 +201,57 @@ export const settingsRouter = {
 			});
 			const message = (result.stdout || result.stderr).trim();
 			return { ok: result.code === 0, message };
+		}),
+
+	/**
+	 * Effective per-site settings (backup cadence, monitor state, WP debug
+	 * flags). Read-only, so any authenticated role may view it; the mutating
+	 * procedures below are admin-gated.
+	 */
+	siteSettingsGet: protectedProcedure
+		.input(z.object({ siteId: z.string().min(1) }))
+		.handler(async ({ input }) => {
+			const settings = await getSiteSettings(input.siteId);
+			return { settings };
+		}),
+
+	/** Set the scheduled-backup cadence (rewrites the systemd timer). */
+	siteBackupScheduleSet: adminProcedure
+		.input(
+			z.object({
+				siteId: z.string().min(1),
+				cadence: z.enum(["off", "daily", "weekly"]),
+			})
+		)
+		.handler(async ({ input }) => {
+			await applyBackupSchedule(input.siteId, input.cadence);
+			return { ok: true };
+		}),
+
+	/** Enable or disable the hourly health-monitor timer. */
+	siteMonitorSet: adminProcedure
+		.input(z.object({ siteId: z.string().min(1), enabled: z.boolean() }))
+		.handler(async ({ input }) => {
+			await applyMonitorState(input.siteId, input.enabled ? "on" : "off");
+			return { ok: true };
+		}),
+
+	/**
+	 * Set WP debug flags in the site env file. Returns restartRequired so the UI
+	 * can prompt the operator to restart the container (wp-config is rendered at
+	 * container start, so the change is inert until then).
+	 */
+	siteDebugSet: adminProcedure
+		.input(
+			z.object({
+				siteId: z.string().min(1),
+				debugLog: z.boolean().optional(),
+				debugDisplay: z.boolean().optional(),
+				scriptDebug: z.boolean().optional(),
+			})
+		)
+		.handler(async ({ input }) => {
+			const { siteId, ...patch } = input;
+			return await applyDebugFlags(siteId, patch);
 		}),
 };

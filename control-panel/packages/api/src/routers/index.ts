@@ -2,6 +2,7 @@ import type { RouterClient } from "@orpc/server";
 
 import { backupsRouter } from "./backups";
 import { controlOverviewRouter } from "./control-overview";
+import { devinfoRouter } from "./devinfo";
 import { healthRouter } from "./health";
 import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
@@ -26,6 +27,7 @@ export const appRouter = {
 	...logsRouter,
 	...updatesRouter,
 	...settingsRouter,
+	...devinfoRouter,
 };
 
 export type AppRouter = typeof appRouter;

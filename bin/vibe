@@ -32,6 +32,10 @@ Commands:
   refresh-from-prod --yes    Refresh this staging env from prod
   promote-files-to-prod --yes Promote managed plugin/theme files to prod
   env <KEY>                  Print a value from the selected env file
+  backup-schedule-apply <off|daily|weekly>  Install/remove the scheduled-backup timer
+  monitor-schedule-apply <on|off>           Install/remove the hourly health-monitor timer
+  schedule-status            Print backup cadence, monitor state, and WP debug flags (TAB-separated)
+  site-config-apply          Persist per-site WP runtime settings (debug flags) into the env file
 USAGE
 }
 
@@ -151,6 +155,18 @@ case "${command}" in
     ;;
   backup-config-apply)
     "${VIBE_BIN_DIR}/backup-config-apply" "$@"
+    ;;
+  backup-schedule-apply)
+    "${VIBE_BIN_DIR}/backup-schedule-apply" "$@"
+    ;;
+  monitor-schedule-apply)
+    "${VIBE_BIN_DIR}/monitor-schedule-apply" "$@"
+    ;;
+  schedule-status)
+    "${VIBE_BIN_DIR}/schedule-status" "$@"
+    ;;
+  site-config-apply)
+    "${VIBE_BIN_DIR}/site-config-apply" "$@"
     ;;
   backup-test)
     "${VIBE_BIN_DIR}/backup-test" "$@"

@@ -1,0 +1,86 @@
+#!/usr/bin/env sh
+set -eu
+umask 022
+# Install or remove the hourly health-monitor systemd timer for the selected
+# environment so the panel can enable or disable monitoring after install.
+#
+# The installer (installer/src/core/monitor.ts) creates a timer unit named
+#   vibe-wp-monitor-<slug>-<env>.timer
+# that runs `bin/vibe <env> monitor --quiet` hourly. This script reproduces that
+# exact unit so the panel and the installer agree, then enables it for "on", or
+# disables+removes it for "off".
+#
+# The state is passed as the single positional argument (on|off) — not a
+# secret, so argv is appropriate. No secrets are ever printed.
+#
+# Requires root (or passwordless sudo) for /etc/systemd/system writes; the panel
+# service runs as root, matching the installer-created backup/monitor timers.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+state="${1:-}"
+case "${state}" in
+  on|off) ;;
+  *)
+    echo "Usage: ./bin/vibe <env> monitor-schedule-apply <on|off>" >&2
+    exit 2
+    ;;
+esac
+
+# The authoritative slug is the production COMPOSE_PROJECT_NAME tail
+# (vibe-wp-<slug>-prod) — the same value the installer named the unit after.
+project="$(vibe_env_value COMPOSE_PROJECT_NAME)"
+slug="${project#vibe-wp-}"
+slug="${slug%-prod}"
+slug="${slug%-stage}"
+if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
+  slug="$(basename -- "${VIBE_ROOT}")"
+fi
+
+unit="vibe-wp-monitor-${slug}-${VIBE_ENV}"
+service_path="/etc/systemd/system/${unit}.service"
+timer_path="/etc/systemd/system/${unit}.timer"
+
+if [ "$(id -u)" = 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  echo "systemctl not available; cannot manage monitor timer." >&2
+  exit 1
+fi
+
+if [ "${state}" = "off" ]; then
+  ${SUDO} systemctl disable --now "${unit}.timer" >/dev/null 2>&1 || true
+  ${SUDO} rm -f "${timer_path}"
+  ${SUDO} systemctl daemon-reload
+  echo "Health monitor disabled for ${slug} (${VIBE_ENV})."
+  exit 0
+fi
+
+# Render the oneshot service + timer, identical in shape to the installer's, so
+# re-applying from the panel never diverges from the install-time unit.
+service="[Unit]
+Description=Vibe WP health monitor for ${slug} (${VIBE_ENV})
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=${VIBE_ROOT}
+ExecStart=${VIBE_ROOT}/bin/vibe ${VIBE_ENV} monitor --quiet"
+
+timer="[Unit]
+Description=Hourly Vibe WP health monitor for ${slug} (${VIBE_ENV})
+[Timer]
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target"
+
+printf '%s\n' "${service}" | ${SUDO} tee "${service_path}" >/dev/null
+printf '%s\n' "${timer}" | ${SUDO} tee "${timer_path}" >/dev/null
+${SUDO} systemctl daemon-reload
+${SUDO} systemctl enable --now "${unit}.timer" >/dev/null
+echo "Health monitor enabled for ${slug} (${VIBE_ENV})."
