@@ -1,0 +1,34 @@
+#!/usr/bin/env sh
+set -eu
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/backup.sh"
+
+# Fail fast when rclone is missing (backup_require_rclone prints a clear message).
+backup_require_rclone
+
+# Export RCLONE_CONFIG_R2_* from the env file so the child rclone process can
+# read them. The panel injects the credentials as env vars before calling
+# bin/vibe, so vibe_load_env picks them up from the running environment; the
+# export loop in backup_export_rclone re-exports them explicitly for rclone.
+backup_export_rclone
+
+bucket="$(vibe_env_value VIBE_BACKUP_R2_BUCKET)"
+if [ -z "${bucket}" ]; then
+	echo "VIBE_BACKUP_R2_BUCKET is not set — configure a bucket first." >&2
+	exit 1
+fi
+
+# Probe the bucket root (not the prefix, which may not exist yet).
+# rclone lsf lists bucket contents; --max-depth 1 keeps it cheap.
+# Stderr from rclone is safe to surface — it never contains the secret.
+if rclone lsf --max-depth 1 "R2:${bucket}" >/dev/null 2>&1; then
+	echo "ok: connected to ${bucket}"
+	exit 0
+else
+	# Re-run without stdout suppression so the error reaches our stderr.
+	rclone lsf --max-depth 1 "R2:${bucket}" 2>&1 || true
+	echo "R2 probe failed for bucket '${bucket}'" >&2
+	exit 1
+fi
