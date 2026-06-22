@@ -158,7 +158,7 @@ export async function backupTestEnv(
 	// overrides (bucket, creds) are not yet a use-case for test-connection.
 	const cfg = await resolveBackupConfig(siteId);
 
-	if (!cfg.provider || !cfg.accessKeyId || !cfg.secret || !cfg.bucket) {
+	if (!(cfg.provider && cfg.accessKeyId && cfg.secret && cfg.bucket)) {
 		return null;
 	}
 

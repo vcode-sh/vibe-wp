@@ -1,18 +1,25 @@
 /**
- * Settings router — backup R2 config (get/set).
- *
- * NOTE: `backupConfigTest` (rclone lsd probe) is deferred to Phase 2 — it
- * requires an allowlisted rclone exec path that is not yet wired.
+ * Settings router — backup R2 config + monitor alert channels (get/set/test).
  */
 import { z } from "zod";
 import {
 	applyBackupConfigToSite,
+	backupTestEnv,
 	getBackupConfig,
 	listConfiguredSiteIds,
 	setBackupConfig,
 } from "../core-bridge/backup-config";
 import type { BackupConfigRow } from "../core-bridge/backup-config-pure";
 import { GLOBAL_SITE_ID } from "../core-bridge/backup-config-pure";
+import { runVibe } from "../core-bridge/exec";
+import {
+	applyNotifyConfigToSite,
+	getNotifyConfig,
+	listConfiguredNotifySiteIds,
+	setNotifyConfig,
+} from "../core-bridge/notify-config";
+import type { NotifyConfigRow } from "../core-bridge/notify-config-pure";
+import { detectSites, findSite } from "../core-bridge/sites";
 import { adminProcedure } from "../procedures";
 
 /** Replace the secret with a `hasSecret` boolean — never leak the value. */
@@ -22,6 +29,20 @@ function maskRow(row: BackupConfigRow | null): Record<string, unknown> | null {
 	}
 	const { secret, ...rest } = row;
 	return { ...rest, hasSecret: secret !== null && secret.trim() !== "" };
+}
+
+/** Replace the telegram token with a `hasToken` boolean — never leak it. */
+function maskNotifyRow(
+	row: NotifyConfigRow | null
+): Record<string, unknown> | null {
+	if (!row) {
+		return null;
+	}
+	const { telegramToken, ...rest } = row;
+	return {
+		...rest,
+		hasToken: telegramToken !== null && telegramToken.trim() !== "",
+	};
 }
 
 const backupConfigSetInput = z.object({
@@ -36,6 +57,40 @@ const backupConfigSetInput = z.object({
 	enabled: z.number().int().min(0).max(1).optional(),
 	retention: z.number().int().positive().optional(),
 });
+
+const notifyConfigSetInput = z.object({
+	siteId: z.string().min(1),
+	/** Write-only. Omit or send empty string to preserve existing token. */
+	telegramToken: z.string().optional(),
+	telegramChatId: z.string().optional(),
+	webhookUrl: z.string().optional(),
+	email: z.string().optional(),
+	alertOnWarn: z.number().int().min(0).max(1).optional(),
+	enabled: z.number().int().min(0).max(1).optional(),
+});
+
+/**
+ * Applies the saved config to one site (per-site save) or fans out to every
+ * configured site (global save), reporting any sites that failed to receive it.
+ */
+async function applyToSites(
+	siteId: string,
+	listIds: () => Promise<string[]>,
+	apply: (id: string) => Promise<void>
+): Promise<void> {
+	if (siteId !== GLOBAL_SITE_ID) {
+		await apply(siteId);
+		return;
+	}
+	const ids = await listIds();
+	const outcomes = await Promise.allSettled(ids.map((id) => apply(id)));
+	const failed = ids.filter((_, i) => outcomes[i]?.status === "rejected");
+	if (failed.length > 0) {
+		throw new Error(
+			`Saved, but failed to apply config to: ${failed.join(", ")}`
+		);
+	}
+}
 
 export const settingsRouter = {
 	backupConfigGet: adminProcedure
@@ -54,24 +109,82 @@ export const settingsRouter = {
 			const { siteId, ...patch } = input;
 			await setBackupConfig(siteId, patch);
 			// Push the resolved config into each affected site's prod.env so it is
-			// authoritative for both the panel and the cron backup timer. Saving the
-			// global creds row re-applies to every configured site. The DB is the
-			// source of truth, so on partial failure we report every site that did
-			// not receive the update (rather than masking all but the first).
-			if (siteId === GLOBAL_SITE_ID) {
-				const ids = await listConfiguredSiteIds();
-				const outcomes = await Promise.allSettled(
-					ids.map((id) => applyBackupConfigToSite(id))
-				);
-				const failed = ids.filter((_, i) => outcomes[i]?.status === "rejected");
-				if (failed.length > 0) {
-					throw new Error(
-						`Saved, but failed to apply config to: ${failed.join(", ")}`
-					);
-				}
-			} else {
-				await applyBackupConfigToSite(siteId);
-			}
+			// authoritative for both the panel and the cron backup timer.
+			await applyToSites(
+				siteId,
+				listConfiguredSiteIds,
+				applyBackupConfigToSite
+			);
 			return { ok: true };
+		}),
+
+	notifyConfigGet: adminProcedure
+		.input(z.object({ siteId: z.string().min(1) }))
+		.handler(async ({ input }) => {
+			const [site, global] = await Promise.all([
+				getNotifyConfig(input.siteId),
+				getNotifyConfig(GLOBAL_SITE_ID),
+			]);
+			return { site: maskNotifyRow(site), global: maskNotifyRow(global) };
+		}),
+
+	notifyConfigSet: adminProcedure
+		.input(notifyConfigSetInput)
+		.handler(async ({ input }) => {
+			const { siteId, ...patch } = input;
+			await setNotifyConfig(siteId, patch);
+			// Push the resolved channels into each affected site's prod.env so the
+			// cron health monitor delivers alerts through them.
+			await applyToSites(
+				siteId,
+				listConfiguredNotifySiteIds,
+				applyNotifyConfigToSite
+			);
+			return { ok: true };
+		}),
+
+	notifyTest: adminProcedure
+		.input(z.object({ siteId: z.string().min(1) }))
+		.handler(async ({ input }) => {
+			const site = await findSite(input.siteId);
+			if (!site) {
+				return { ok: false, message: "Site not found." };
+			}
+			const result = await runVibe(site.installDir, "prod", "notifyTest");
+			const message = (result.stdout || result.stderr).trim();
+			return { ok: result.code === 0, message };
+		}),
+
+	backupConfigTest: adminProcedure
+		.input(z.object({ siteId: z.string().min(1) }))
+		.handler(async ({ input }) => {
+			const testEnv = await backupTestEnv(input.siteId);
+			if (!testEnv) {
+				return {
+					ok: false,
+					message:
+						"Configure R2 credentials (provider, key, secret, bucket) first.",
+				};
+			}
+
+			// Pick the target site. For the global card siteId === GLOBAL_SITE_ID
+			// so there is no site-specific row — fall back to the first detected site
+			// (same pattern as securityStatus / serverHarden in server.ts).
+			let site =
+				input.siteId === GLOBAL_SITE_ID ? null : await findSite(input.siteId);
+			if (!site) {
+				const sites = await detectSites();
+				site = sites[0] ?? null;
+			}
+			if (!site) {
+				return { ok: false, message: "No site found — deploy a site first." };
+			}
+
+			const result = await runVibe(site.installDir, "prod", "backupTest", {
+				env: testEnv,
+				timeoutMs: 30_000,
+			});
+			const message = (result.stdout || result.stderr).trim();
+			return { ok: result.code === 0, message };
 		}),
 };
