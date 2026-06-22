@@ -5,11 +5,12 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
+import { StagingDialog } from "@/components/provisioning/staging-dialog";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { stagingQuery } from "@/data/queries";
+import { sitesQuery, stagingQuery } from "@/data/queries";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
@@ -22,12 +23,14 @@ function StagingCard({
 	noindex,
 	onRefresh,
 	onPublish,
+	onAdd,
 	refreshPending,
 }: {
 	url: string | null;
 	noindex: boolean;
 	onRefresh: () => void;
 	onPublish: () => void;
+	onAdd: () => void;
 	refreshPending: boolean;
 }) {
 	if (!url) {
@@ -37,11 +40,7 @@ function StagingCard({
 					<span className="text-muted-foreground text-sm">
 						No staging site yet.
 					</span>
-					<Button
-						onClick={() => toast.info("Adding staging isn't available yet.")}
-					>
-						Add staging
-					</Button>
+					<Button onClick={onAdd}>Add staging</Button>
 				</CardContent>
 			</Card>
 		);
@@ -69,7 +68,10 @@ function StagingCard({
 function StagingPage() {
 	const { siteId } = Route.useParams();
 	const staging = useQuery(stagingQuery(siteId));
+	const sites = useQuery(sitesQuery());
+	const productionDomain = sites.data?.find((s) => s.id === siteId)?.domain;
 	const [publishing, setPublishing] = useState(false);
+	const [adding, setAdding] = useState(false);
 	const { start, isRunning } = useOperations();
 
 	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
@@ -123,6 +125,7 @@ function StagingPage() {
 					{staging.data ? (
 						<StagingCard
 							noindex={staging.data.present ? staging.data.noindex : false}
+							onAdd={() => setAdding(true)}
 							onPublish={() => setPublishing(true)}
 							onRefresh={handleRefresh}
 							refreshPending={refresh.isPending || isRunning(siteId, "refresh")}
@@ -131,6 +134,13 @@ function StagingPage() {
 					) : null}
 				</QueryBoundary>
 			</div>
+
+			<StagingDialog
+				onOpenChange={setAdding}
+				open={adding}
+				productionDomain={productionDomain}
+				siteId={siteId}
+			/>
 
 			<SafetyConfirm
 				confirmLabel="Publish to live"

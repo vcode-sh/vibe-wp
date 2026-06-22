@@ -1,6 +1,6 @@
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Database, Plus } from "lucide-react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { SiteCard } from "@/components/patterns/site-card";
@@ -76,12 +76,14 @@ function SiteGrid({
 	sites,
 	now,
 	onRetry,
+	onCreate,
 }: {
 	isError: boolean;
 	isLoading: boolean;
 	sites: SiteSummary[] | undefined;
 	now: Date;
 	onRetry: () => void;
+	onCreate: () => void;
 }) {
 	if (isError) {
 		return (
@@ -105,7 +107,7 @@ function SiteGrid({
 				<p className="mt-1 text-muted-foreground text-sm">
 					Create your first Vibe WP site to get started.
 				</p>
-				<Button className="mt-4">
+				<Button className="mt-4" onClick={onCreate}>
 					<Plus className="size-4" /> New site
 				</Button>
 			</div>
@@ -123,7 +125,11 @@ function SiteGrid({
 function SitesPage() {
 	const sites = useQuery(sitesQuery());
 	const server = useQuery(serverInfoQuery());
+	const navigate = useNavigate();
 	const now = new Date();
+
+	const goNew = (mode: "standard" | "external") =>
+		navigate({ to: "/sites/new", search: { mode } });
 
 	return (
 		<>
@@ -132,10 +138,10 @@ function SitesPage() {
 				<PageHeader
 					actions={
 						<>
-							<Button>
+							<Button onClick={() => goNew("standard")}>
 								<Plus className="size-4" /> New site
 							</Button>
-							<Button variant="outline">
+							<Button onClick={() => goNew("external")} variant="outline">
 								<Database className="size-4" /> External DB &amp; Redis
 							</Button>
 						</>
@@ -155,6 +161,7 @@ function SitesPage() {
 					isError={sites.isError}
 					isLoading={sites.isLoading}
 					now={now}
+					onCreate={() => goNew("standard")}
 					onRetry={() => sites.refetch()}
 					sites={sites.data}
 				/>
