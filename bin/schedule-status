@@ -8,6 +8,8 @@ set -eu
 #   wp_debug_log\t<0|1>
 #   wp_debug_display\t<0|1>
 #   script_debug\t<0|1>
+#   fastcgi_cache\t<on|off>
+#   www_alias\t<on|off>
 #
 # The backup cadence is recovered from the timer unit's OnCalendar so the panel
 # reflects whatever the installer or a prior apply set, without a second store.
@@ -76,8 +78,56 @@ wp_debug_log="$(norm_bool "$(vibe_env_value WP_DEBUG_LOG)")"
 wp_debug_display="$(norm_bool "$(vibe_env_value WP_DEBUG_DISPLAY)")"
 script_debug="$(norm_bool "$(vibe_env_value SCRIPT_DEBUG)")"
 
+# FastCGI page cache toggle (NGINX_FASTCGI_CACHE) from the env file. The nginx
+# entrypoint defaults this to on and normalizes 1/true/yes -> on, 0/false/no ->
+# off, so mirror that here; an unset/blank value reports the on default.
+norm_on_off() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    0|false|no|off) echo off ;;
+    *) echo on ;;
+  esac
+}
+fastcgi_cache="$(norm_on_off "$(vibe_env_value NGINX_FASTCGI_CACHE)")"
+
+# www alias state: read from the site's PROD Caddy snippet, the single source of
+# truth (there is no env key for it). It is "on" only when the snippet's address
+# line serves www.<apex> alongside the apex. Missing snippet / no www host -> off.
+# The prod snippet has no env suffix: vibe-wp-<slug>.caddy.
+www_alias="off"
+prod_env_file="env/prod.env"
+[ -f "${prod_env_file}" ] || prod_env_file="${VIBE_ENV_FILE}"
+www_home="$(VIBE_ENV_FILE="${prod_env_file}" vibe_wp_home)"
+www_apex="${www_home#*://}"
+www_apex="${www_apex%%/*}"
+www_apex="${www_apex%%:*}"
+www_apex="$(printf '%s' "${www_apex}" | tr '[:upper:]' '[:lower:]')"
+case "${www_apex}" in
+  www.*) www_apex="" ;;  # already a www host: no apex alias to report
+esac
+if [ -n "${www_apex}" ]; then
+  www_project="$(VIBE_ENV_FILE="${prod_env_file}" vibe_env_value COMPOSE_PROJECT_NAME)"
+  www_slug="${www_project#vibe-wp-}"
+  www_slug="${www_slug%-prod}"
+  if [ -z "${www_slug}" ] || [ "${www_slug}" = "${www_project}" ]; then
+    www_slug="$(basename -- "${VIBE_ROOT}")"
+  fi
+  www_snippet="/etc/caddy/sites-enabled/vibe-wp-${www_slug}.caddy"
+  if [ -f "${www_snippet}" ]; then
+    # The header is the first `... {` line; check if www.<apex> is a whole token.
+    www_header="$(grep -m1 '{[[:space:]]*$' "${www_snippet}" || true)"
+    if printf '%s' "${www_header}" \
+      | sed 's/{[[:space:]]*$//; s/,/ /g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' \
+      | tr ' ' '\n' \
+      | grep -qx "www.${www_apex}"; then
+      www_alias="on"
+    fi
+  fi
+fi
+
 printf 'backup_schedule\t%s\n' "${backup_schedule}"
 printf 'monitor\t%s\n' "${monitor}"
 printf 'wp_debug_log\t%s\n' "${wp_debug_log}"
 printf 'wp_debug_display\t%s\n' "${wp_debug_display}"
 printf 'script_debug\t%s\n' "${script_debug}"
+printf 'fastcgi_cache\t%s\n' "${fastcgi_cache}"
+printf 'www_alias\t%s\n' "${www_alias}"

@@ -29,6 +29,7 @@ export NGINX_FASTCGI_CACHE_LOCK_TIMEOUT="${NGINX_FASTCGI_CACHE_LOCK_TIMEOUT:-10s
 export NGINX_FASTCGI_CONNECT_TIMEOUT="${NGINX_FASTCGI_CONNECT_TIMEOUT:-10s}"
 export NGINX_FASTCGI_SEND_TIMEOUT="${NGINX_FASTCGI_SEND_TIMEOUT:-120s}"
 export NGINX_FASTCGI_READ_TIMEOUT="${NGINX_FASTCGI_READ_TIMEOUT:-120s}"
+export NGINX_FASTCGI_CACHE="${NGINX_FASTCGI_CACHE:-on}"
 
 case "$NGINX_GZIP" in
   1|true|yes)
@@ -47,6 +48,42 @@ case "$NGINX_OPEN_FILE_CACHE_ERRORS" in
     export NGINX_OPEN_FILE_CACHE_ERRORS="off"
     ;;
 esac
+
+case "$NGINX_FASTCGI_CACHE" in
+  1|true|yes)
+    export NGINX_FASTCGI_CACHE="on"
+    ;;
+  0|false|no)
+    export NGINX_FASTCGI_CACHE="off"
+    ;;
+esac
+
+# Build the fastcgi_cache* directive block for the `location ~ \.php$` server
+# stanza. It is assembled here — AFTER the NGINX_FASTCGI_* values are exported —
+# so every ${...} below is expanded to a literal NOW. site.conf.template then
+# substitutes the single ${NGINX_FASTCGI_CACHE_DIRECTIVES} placeholder with this
+# already-literal block, so there is no second (double-)expansion of the inner
+# vars. When the cache is off the block is empty: PHP-FPM still serves every
+# request, but nothing is cached. The fastcgi_cache_path zone + all $skip_cache*
+# maps in nginx.conf.template stay unconditional regardless of this toggle.
+if [ "$NGINX_FASTCGI_CACHE" = "off" ]; then
+  export NGINX_FASTCGI_CACHE_DIRECTIVES=""
+else
+  export NGINX_FASTCGI_CACHE_DIRECTIVES="fastcgi_cache WORDPRESS;
+    fastcgi_cache_methods GET HEAD;
+    fastcgi_cache_key \"\$fastcgi_https\$host\$request_uri\";
+    fastcgi_cache_bypass \$skip_cache;
+    fastcgi_no_cache \$skip_cache \$upstream_http_set_cookie;
+    fastcgi_cache_valid 200 ${NGINX_FASTCGI_CACHE_TTL};
+    fastcgi_cache_valid 301 302 ${NGINX_FASTCGI_REDIRECT_CACHE_TTL};
+    fastcgi_cache_min_uses ${NGINX_FASTCGI_CACHE_MIN_USES};
+    fastcgi_cache_use_stale error timeout invalid_header updating http_500 http_503;
+    fastcgi_cache_lock on;
+    fastcgi_cache_lock_timeout ${NGINX_FASTCGI_CACHE_LOCK_TIMEOUT};
+    fastcgi_cache_revalidate on;
+    fastcgi_cache_background_update on;
+    add_header X-FastCGI-Cache \$upstream_cache_status always;"
+fi
 
 case "${NGINX_ACCESS_LOG:-1}" in
   0|off|false|no)
@@ -98,10 +135,7 @@ envsubst '
   ${NGINX_CLIENT_MAX_BODY_SIZE}
   ${NGINX_CLIENT_BODY_BUFFER_SIZE}
   ${NGINX_STATIC_CACHE_CONTROL}
-  ${NGINX_FASTCGI_CACHE_TTL}
-  ${NGINX_FASTCGI_REDIRECT_CACHE_TTL}
-  ${NGINX_FASTCGI_CACHE_MIN_USES}
-  ${NGINX_FASTCGI_CACHE_LOCK_TIMEOUT}
+  ${NGINX_FASTCGI_CACHE_DIRECTIVES}
   ${NGINX_FASTCGI_CONNECT_TIMEOUT}
   ${NGINX_FASTCGI_SEND_TIMEOUT}
   ${NGINX_FASTCGI_READ_TIMEOUT}

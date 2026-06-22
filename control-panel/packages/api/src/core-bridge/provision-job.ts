@@ -1,10 +1,14 @@
 import { STREAM_TIMEOUT_MS } from "./exec";
 import { getRealDeps, hasRunningJob, type JobDeps, launchJob } from "./jobs";
 import {
+	type CoreResponse,
 	type InstallerStateLike,
+	isProvisionMode,
+	type ProgressEvent,
 	type ProvisionResult,
-	provisionSequence,
 	type RunHeadlessOpts,
+	runHeadlessRequest,
+	runHeadlessRunPlanStream,
 } from "./provision";
 import { redact } from "./redact";
 
@@ -23,17 +27,29 @@ export function summarizeResults(result: ProvisionResult): string[] {
 	return lines;
 }
 
+/** Render one human, redacted job-output line for a per-task progress event. */
+export function progressLine(event: ProgressEvent): string {
+	if (event.phase === "start") {
+		return redact(`[running] ${event.name}`);
+	}
+	const status = event.status ?? "done";
+	const detail = event.output ? `: ${event.output.split("\n")[0]}` : "";
+	return redact(`[${status}] ${event.name}${detail}`);
+}
+
 /**
- * Adapt provisionSequence to the `{ proc, lines }` shape that jobs.ts drains, so
- * a provision is tracked, persisted, and audited exactly like a streamVibe job.
- * Because runPlan is single-shot (see provisionSequence), this is a ONE-SHOT
- * job: `lines` yields nothing until the sequence resolves, then emits the
- * redacted TaskResult summary; `proc.exited` resolves to 0 on success or 1 on
- * validation/task failure. `proc.kill()` aborts an in-flight sequence.
+ * Adapt the LIVE per-task provision stream to the `{ proc, lines }` shape that
+ * jobs.ts drains, so a provision is tracked, persisted, and audited exactly like
+ * a streamVibe job. validate + plan run one-shot via runHeadlessRequest; on a
+ * validation failure we yield summarizeResults and exit 1 (unchanged behavior).
+ * Otherwise we drive runHeadlessRunPlanStream and yield ONE human line per
+ * progress event (`[running] <name>` on start, `[<status>] <name>` on result),
+ * then a final `Provision complete.`/`Provision failed.` line.
  *
- * Live per-task progress is a DEFERRED v2 installer enhancement: it would need
- * the installer's runPlan to emit NDJSON progress to stdout, which this adapter
- * would then forward line by line instead of buffering to a final summary.
+ * Cancel parity: aborting `ac` kills the installer child's WHOLE process tree
+ * (setsid group kill) AND rejects the in-flight request promptly, so cancelJob
+ * actually stops the privileged subprocess instead of letting it run to
+ * completion while the UI/DB report "canceled".
  */
 export function streamProvision(
 	state: InstallerStateLike,
@@ -46,18 +62,8 @@ export function streamProvision(
 	});
 	async function* lines(): AsyncIterable<string> {
 		try {
-			// Thread the cancel signal into the spawn chain: aborting it kills the
-			// installer child's whole process tree AND rejects the in-flight request
-			// promptly, so cancelJob actually stops the privileged subprocess and the
-			// drain finalizes immediately instead of blocking until natural exit.
-			const result = await provisionSequence(state, {
-				...opts,
-				signal: ac.signal,
-			});
-			for (const line of summarizeResults(result)) {
-				yield line;
-			}
-			exitResolve(result.ok ? 0 : 1);
+			yield* drive(state, opts, ac.signal);
+			// drive() resolves the exit code via the returned ok flag below.
 		} catch (error) {
 			if (ac.signal.aborted) {
 				yield "Provision canceled.";
@@ -65,7 +71,52 @@ export function streamProvision(
 				yield redact(error instanceof Error ? error.message : String(error));
 			}
 			exitResolve(1);
+			return;
 		}
+	}
+	// drive yields lines AND signals the final exit code through exitResolve.
+	async function* drive(
+		s: InstallerStateLike,
+		o: { apply: boolean } & RunHeadlessOpts,
+		signal: AbortSignal
+	): AsyncIterable<string> {
+		if (!isProvisionMode(s.mode)) {
+			throw new Error(`Disallowed provision mode: ${s.mode}`);
+		}
+		const validateRes = await runHeadlessRequest(
+			{ kind: "validate", state: s },
+			{ ...o, signal }
+		);
+		if (validateRes.kind === "validate" && validateRes.errors.length > 0) {
+			for (const line of summarizeResults({
+				validationErrors: validateRes.errors,
+				results: [],
+				ok: false,
+			})) {
+				yield line;
+			}
+			exitResolve(1);
+			return;
+		}
+		const planRes = await runHeadlessRequest(
+			{ kind: "plan", state: s },
+			{ ...o, signal }
+		);
+		if (planRes.kind !== "plan") {
+			throw new Error("expected a plan response from the installer core");
+		}
+		// Live runPlan: forward each progress event as a human line, then finalize.
+		const stream = runHeadlessRunPlanStream(planRes.plan, o.apply, {
+			...o,
+			signal,
+		});
+		for await (const event of stream.events) {
+			yield progressLine(event);
+		}
+		const final = await stream.result;
+		const ok = finalOk(final);
+		yield ok ? "Provision complete." : "Provision failed.";
+		exitResolve(ok ? 0 : 1);
 	}
 	const proc = {
 		exited,
@@ -76,6 +127,14 @@ export function streamProvision(
 		pid: 0,
 	};
 	return { proc, lines: lines() };
+}
+
+/** A runPlan terminal response is ok only when no executed task failed. */
+function finalOk(final: CoreResponse): boolean {
+	return (
+		final.kind === "runPlan" &&
+		final.results.every((r) => r.status !== "failed")
+	);
 }
 
 /** Input for a one-shot provision job driven through the headless core. */

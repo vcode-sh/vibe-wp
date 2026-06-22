@@ -72,9 +72,19 @@ env_upsert() {
   cat "${line}" > "${work}"
 }
 
-# The fixed allowlist of keys this command is permitted to write. Each maps onto
-# a vibe_wp_env_bool() lookup in the WordPress image entrypoint.
-managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG"
+# The fixed allowlist of keys this command is permitted to write. The boolean
+# debug flags map onto vibe_wp_env_bool() lookups in the WordPress image
+# entrypoint; WORDPRESS_IMAGE is the FROM build arg that fixes the PHP version
+# and is only honored on a rebuild (vibe up --build), not a plain restart.
+managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG WORDPRESS_IMAGE NGINX_FASTCGI_CACHE"
+
+# The curated allowlist of WordPress runtime images the panel may select. This
+# MUST stay in lockstep with ALLOWED_WORDPRESS_IMAGES in the control panel
+# (control-panel/packages/api/src/core-bridge/site-config-pure.ts). Because the
+# env file is sourced as root, this shell — not the panel — is the real trust
+# boundary: an image tag that is not EXACTLY one of these is rejected before any
+# write, so an attacker-supplied `WORDPRESS_IMAGE=$(cmd)` can never land here.
+allowed_images="wordpress:7.0-php8.5-fpm wordpress:7.0-php8.4-fpm wordpress:7.0-php8.3-fpm"
 
 # Membership test against a space-separated list (POSIX-safe, no arrays).
 in_list() {
@@ -98,16 +108,36 @@ for key in ${changed_keys}; do
   }
   eval "val=\${${key}:-__VIBE_UNSET__}"
   [ "${val}" = "__VIBE_UNSET__" ] && continue
-  # Every managed key is a boolean debug flag whose only accepted tokens are 0/1.
-  # Reject anything else BEFORE writing — the writer must not trust the caller's
-  # value (env files are sourced as root, so an unvalidated `WP_DEBUG_LOG=$(cmd)`
-  # would execute). The panel only ever sends 0/1; a non-0/1 value is a bug or an
-  # injection attempt and is fatal.
-  case "${val}" in
-    0|1) : ;;
+  # Validate PER KEY before writing — the writer must not trust the caller's
+  # value, since env files are sourced as root (an unvalidated `KEY=$(cmd)` would
+  # execute). The boolean debug flags accept only 0/1; WORDPRESS_IMAGE must be an
+  # EXACT member of the curated image allowlist; NGINX_FASTCGI_CACHE is a literal
+  # on|off (the nginx entrypoint normalizes/renders it). Anything else is a bug or
+  # an injection attempt and is fatal.
+  case "${key}" in
+    WORDPRESS_IMAGE)
+      in_list "${val}" "${allowed_images}" || {
+        echo "Refusing to write disallowed WORDPRESS_IMAGE: ${val}" >&2
+        exit 2
+      }
+      ;;
+    NGINX_FASTCGI_CACHE)
+      case "${val}" in
+        on|off) : ;;
+        *)
+          echo "Refusing to write non-on/off value for ${key}: ${val}" >&2
+          exit 2
+          ;;
+      esac
+      ;;
     *)
-      echo "Refusing to write non-boolean value for ${key}: ${val}" >&2
-      exit 2
+      case "${val}" in
+        0|1) : ;;
+        *)
+          echo "Refusing to write non-boolean value for ${key}: ${val}" >&2
+          exit 2
+          ;;
+      esac
       ;;
   esac
   env_upsert "${key}" "${val}"

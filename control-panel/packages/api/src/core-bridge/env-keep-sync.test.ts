@@ -31,7 +31,12 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toEnv as notifyToEnv } from "./notify-config-pure";
-import { debugPatchToEnv } from "./site-config-pure";
+import {
+	ALLOWED_WORDPRESS_IMAGES,
+	debugPatchToEnv,
+	fastcgiCachePatchToEnv,
+	imagePatchToEnv,
+} from "./site-config-pure";
 
 // ---------------------------------------------------------------------------
 // DB seam. backup-config.ts imports @control-panel/db + ./sites; mock both so
@@ -106,6 +111,17 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 	for (const k of Object.keys(
 		debugPatchToEnv({ debugLog: true, debugDisplay: true, scriptDebug: true })
 	)) {
+		keys.add(k);
+	}
+
+	// siteConfigApply (PHP version): imagePatchToEnv → WORDPRESS_IMAGE (+ sentinel).
+	for (const k of Object.keys(imagePatchToEnv(ALLOWED_WORDPRESS_IMAGES[0]))) {
+		keys.add(k);
+	}
+
+	// siteConfigApply (FastCGI cache): fastcgiCachePatchToEnv → NGINX_FASTCGI_CACHE
+	// (+ sentinel). on/off both emit the same key set; one call suffices.
+	for (const k of Object.keys(fastcgiCachePatchToEnv(false))) {
 		keys.add(k);
 	}
 
@@ -206,12 +222,12 @@ describe("bin/panel env_keep stays in sync with injected env keys", () => {
 		).toEqual([]);
 	});
 
-	it("the two sets are EXACTLY equal (18 keys today)", async () => {
+	it("the two sets are EXACTLY equal (20 keys today)", async () => {
 		const injected = await collectInjectedEnvKeys();
 		const keep = parsePanelEnvKeep();
 		expect(sorted(keep)).toEqual(sorted(injected));
 		// Belt-and-braces: pin the count so a same-size swap can't slip through.
-		expect(injected.size).toBe(18);
-		expect(keep.size).toBe(18);
+		expect(injected.size).toBe(20);
+		expect(keep.size).toBe(20);
 	});
 });

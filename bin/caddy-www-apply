@@ -1,0 +1,191 @@
+#!/usr/bin/env sh
+set -eu
+# caddy-www-apply <on|off> — add or remove the `www.<apex>` alias on a site's
+# host Caddy snippet, serving both apex and www from the SAME block (matching what
+# the installer's renderCaddyfile produces), then hot-reload Caddy.
+#
+# The www alias is NOT stored in the env file or a DB row: the site snippet's
+# address line is the single source of truth. This op edits ONLY that one line
+# (the `<addresses> {` header), so any hand customizations elsewhere in the
+# snippet are preserved. The edit is staged on a temp copy, validated against the
+# whole Caddyfile, and swapped in atomically; if `caddy validate` fails the
+# original snippet is restored and the op exits non-zero WITHOUT reloading.
+#
+# Idempotent: turning www on when it is already present (or off when already
+# absent) is a no-op success. Reads no secrets and prints none.
+#
+# Routed via bin/vibe: `./bin/vibe <env> caddy-www-apply <on|off>`. The prod
+# snippet (no suffix) carries the public apex, so this always targets the prod
+# block regardless of the selected env's WP_HOME.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+action="${1:-}"
+case "${action}" in
+  on|off) : ;;
+  *)
+    echo "Usage: caddy-www-apply <on|off>" >&2
+    exit 2
+    ;;
+esac
+
+# Derive the apex domain from the prod env file's WP_HOME (the public address the
+# installer wrote the snippet for). Read prod.env explicitly via a local override
+# so this op behaves the same whatever env the caller selected.
+prod_env_file="env/prod.env"
+[ -f "${prod_env_file}" ] || prod_env_file="${VIBE_ENV_FILE}"
+home="$(VIBE_ENV_FILE="${prod_env_file}" vibe_wp_home)"
+if [ -z "${home}" ]; then
+  echo "caddy-www-apply: cannot determine the site domain (WP_HOME is empty)" >&2
+  exit 1
+fi
+
+# Strip scheme and any path/port to get the bare apex host.
+apex="${home#*://}"
+apex="${apex%%/*}"
+apex="${apex%%:*}"
+apex="$(printf '%s' "${apex}" | tr '[:upper:]' '[:lower:]')"
+if [ -z "${apex}" ]; then
+  echo "caddy-www-apply: cannot parse the apex domain from WP_HOME (${home})" >&2
+  exit 1
+fi
+
+# Refuse if the configured domain is ALREADY a www host — there is no apex to add
+# a www alias to, and computing `www.www.<x>` would be wrong.
+case "${apex}" in
+  www.*)
+    echo "caddy-www-apply: site domain is already a www host (${apex}); cannot add a www alias" >&2
+    exit 1
+    ;;
+esac
+www="www.${apex}"
+
+# Compute the prod snippet path the same way the installer/schedule-status do:
+# vibe-wp-<slug>.caddy where <slug> is COMPOSE_PROJECT_NAME minus the vibe-wp-
+# prefix and the -<env> suffix. The prod snippet has NO env suffix.
+project="$(VIBE_ENV_FILE="${prod_env_file}" vibe_env_value COMPOSE_PROJECT_NAME)"
+slug="${project#vibe-wp-}"
+slug="${slug%-prod}"
+if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
+  slug="$(basename -- "${VIBE_ROOT}")"
+fi
+
+snippet="/etc/caddy/sites-enabled/vibe-wp-${slug}.caddy"
+if [ ! -f "${snippet}" ]; then
+  echo "caddy-www-apply: site Caddy snippet not found: ${snippet}" >&2
+  exit 1
+fi
+
+# Privilege: run file writes + caddy as root directly when already root, else sudo.
+if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
+
+# The header line is the FIRST `... {` line in the snippet: a comma-separated list
+# of served addresses ending in ` {` (renderCaddyfile emits `apex {` or
+# `apex, www.apex {`). We rewrite ONLY that line.
+header="$(grep -n -m1 '{[[:space:]]*$' "${snippet}" | cut -d: -f1 || true)"
+if [ -z "${header}" ]; then
+  echo "caddy-www-apply: could not locate the site address line in ${snippet}" >&2
+  exit 1
+fi
+header_line="$(sed -n "${header}p" "${snippet}")"
+
+# Does the header already serve the www host? Match it as a whole comma/space
+# token so `www.example.com` does not also match e.g. `mywww.example.com`.
+header_has_www() {
+  # Normalize separators to single spaces, then look for the exact www token.
+  printf '%s' "$1" \
+    | sed 's/{[[:space:]]*$//; s/,/ /g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' \
+    | tr ' ' '\n' \
+    | grep -qx "${www}"
+}
+
+already_on=0
+header_has_www "${header_line}" && already_on=1
+
+# Idempotent no-ops: nothing to change, nothing to reload.
+if [ "${action}" = "on" ] && [ "${already_on}" -eq 1 ]; then
+  echo "www alias already enabled for ${apex}."
+  exit 0
+fi
+if [ "${action}" = "off" ] && [ "${already_on}" -eq 0 ]; then
+  echo "www alias already disabled for ${apex}."
+  exit 0
+fi
+
+# Build the new header line by editing only the address list before ` {`. We
+# tokenize the comma-separated address list and rebuild it, rather than running a
+# regex substitution: token splitting is deterministic on both GNU and BSD tools
+# (no reliance on `\|` BRE alternation, which BSD sed lacks) and never leaves
+# doubled/edge commas. The apex token order is preserved; www is appended (on) or
+# dropped (off).
+addr_part="${header_line%\{*}"
+new_addr=""
+append_token() {
+  if [ -z "${new_addr}" ]; then new_addr="$1"; else new_addr="${new_addr}, $1"; fi
+}
+# Split on commas into whitespace-trimmed tokens (word-splitting on the for-loop).
+old_ifs="${IFS}"
+IFS=' 	,'
+for tok in ${addr_part}; do
+  [ -n "${tok}" ] || continue
+  # Drop any existing www token; we re-add it below for `on` so a duplicate
+  # www in the source list is collapsed to one.
+  [ "${tok}" = "${www}" ] && continue
+  append_token "${tok}"
+done
+IFS="${old_ifs}"
+[ "${action}" = "on" ] && append_token "${www}"
+new_header="${new_addr} {"
+
+# Stage the edit on a temp copy that inherits the snippet's mode/owner (cp -p),
+# rewrite only the header line, then swap in atomically after validation.
+work="$(mktemp "${TMPDIR:-/tmp}/vibe-www.XXXXXX")"
+trap 'rm -f "${work}"' EXIT INT TERM
+${SUDO} cp -p "${snippet}" "${work}.snip" 2>/dev/null || cp -p "${snippet}" "${work}.snip"
+# Rewrite the chosen header line number on the staged copy. Use awk so the
+# replacement text is never re-interpreted by sed as a regex/replacement.
+awk -v ln="${header}" -v repl="${new_header}" \
+  'NR==ln{print repl; next} {print}' "${work}.snip" > "${work}"
+rm -f "${work}.snip"
+
+# Keep a backup of the live snippet so we can roll back if validation fails.
+backup="${snippet}.vibe-www.bak.$$"
+restore_snippet() {
+  ${SUDO} cp -p "${backup}" "${snippet}" 2>/dev/null || true
+  ${SUDO} rm -f "${backup}" 2>/dev/null || true
+}
+${SUDO} cp -p "${snippet}" "${backup}"
+
+# Install the edited snippet (0644, matching deployCaddyfile), then validate the
+# WHOLE Caddyfile. On failure, roll back and exit non-zero WITHOUT reloading.
+if ! ${SUDO} install -m 0644 "${work}" "${snippet}"; then
+  echo "caddy-www-apply: failed to write ${snippet}" >&2
+  restore_snippet
+  exit 1
+fi
+
+if command -v caddy >/dev/null 2>&1; then
+  if ! ${SUDO} caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+    echo "caddy-www-apply: Caddy config invalid after edit — rolling back ${snippet}" >&2
+    restore_snippet
+    exit 1
+  fi
+  # Hot reload (no downtime). A reload failure also rolls back so the live file
+  # always matches what Caddy is running.
+  if ! ${SUDO} systemctl reload caddy >/dev/null 2>&1; then
+    echo "caddy-www-apply: systemctl reload caddy failed — rolling back ${snippet}" >&2
+    restore_snippet
+    exit 1
+  fi
+else
+  echo "caddy-www-apply: caddy not installed; wrote ${snippet} without reload" >&2
+fi
+
+${SUDO} rm -f "${backup}" 2>/dev/null || true
+
+if [ "${action}" = "on" ]; then
+  echo "www alias enabled (${www})."
+else
+  echo "www alias disabled (${www})."
+fi

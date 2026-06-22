@@ -75,19 +75,9 @@ server {
     fastcgi_send_timeout ${NGINX_FASTCGI_SEND_TIMEOUT};
     fastcgi_read_timeout ${NGINX_FASTCGI_READ_TIMEOUT};
 
-    fastcgi_cache WORDPRESS;
-    fastcgi_cache_methods GET HEAD;
-    fastcgi_cache_key "$fastcgi_https$host$request_uri";
-    fastcgi_cache_bypass $skip_cache;
-    fastcgi_no_cache $skip_cache $upstream_http_set_cookie;
-    fastcgi_cache_valid 200 ${NGINX_FASTCGI_CACHE_TTL};
-    fastcgi_cache_valid 301 302 ${NGINX_FASTCGI_REDIRECT_CACHE_TTL};
-    fastcgi_cache_min_uses ${NGINX_FASTCGI_CACHE_MIN_USES};
-    fastcgi_cache_use_stale error timeout invalid_header updating http_500 http_503;
-    fastcgi_cache_lock on;
-    fastcgi_cache_lock_timeout ${NGINX_FASTCGI_CACHE_LOCK_TIMEOUT};
-    fastcgi_cache_revalidate on;
-    fastcgi_cache_background_update on;
-    add_header X-FastCGI-Cache $upstream_cache_status always;
+    # Rendered by docker/nginx/entrypoint.sh from NGINX_FASTCGI_CACHE: the full
+    # fastcgi_cache* block when on, empty when off (PHP-FPM still serves, nothing
+    # is cached). The $skip_cache* maps + fastcgi_cache_path stay unconditional.
+    ${NGINX_FASTCGI_CACHE_DIRECTIVES}
   }
 }

@@ -5,10 +5,9 @@
  *  - Health monitor on/off  → systemd timer (vibe-wp-monitor-<slug>-prod)
  *  - WP debug log / display  → WP_DEBUG_LOG / WP_DEBUG_DISPLAY (DebugFlagsCard)
  *  - Script debug            → SCRIPT_DEBUG (DebugFlagsCard)
- *
- * Settings that are NOT env-togglable today (PHP version, FastCGI page cache,
- * www alias) are surfaced as a clearly-labelled deferred note rather than
- * faked into a control that would not take effect.
+ *  - PHP version             → WORDPRESS_IMAGE (PhpVersionCard); rebuild applies
+ *  - FastCGI page cache      → NGINX_FASTCGI_CACHE (FastcgiCacheCard); recreate applies
+ *  - www alias               → host Caddy snippet (WwwAliasCard); hot reload applies
  */
 import { Label } from "@control-panel/ui/components/label";
 import { Switch } from "@control-panel/ui/components/switch";
@@ -17,6 +16,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { DebugFlagsCard } from "@/components/settings/debug-flags-card";
+import { FastcgiCacheCard } from "@/components/settings/fastcgi-cache-card";
+import { PhpVersionCard } from "@/components/settings/php-version-card";
+import { WwwAliasCard } from "@/components/settings/www-alias-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { siteSettingsQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
@@ -25,8 +27,11 @@ interface Settings {
 	backupSchedule: string;
 	debugDisplay: boolean;
 	debugLog: boolean;
+	fastcgiCache: boolean;
 	monitorEnabled: boolean;
 	scriptDebug: boolean;
+	wordpressImage: string;
+	wwwAlias: boolean;
 }
 
 export function SiteSettingsCard({ siteId }: { siteId: string }) {
@@ -108,32 +113,6 @@ function MonitorCard({
 	);
 }
 
-function DeferredNote() {
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm">Not yet configurable here</CardTitle>
-			</CardHeader>
-			<CardContent>
-				<ul className="grid gap-1.5 text-muted-foreground text-xs">
-					<li>
-						PHP version — fixed by the WordPress image; change it by updating
-						WORDPRESS_IMAGE and redeploying.
-					</li>
-					<li>
-						FastCGI page cache on/off — baked into the nginx site config; not an
-						env toggle yet.
-					</li>
-					<li>
-						www alias — lives in the host Caddy site file, not the site env;
-						managed at install time.
-					</li>
-				</ul>
-			</CardContent>
-		</Card>
-	);
-}
-
 function SiteSettingsForm({
 	siteId,
 	settings,
@@ -152,7 +131,9 @@ function SiteSettingsForm({
 				}}
 				siteId={siteId}
 			/>
-			<DeferredNote />
+			<PhpVersionCard currentImage={settings.wordpressImage} siteId={siteId} />
+			<FastcgiCacheCard initial={settings.fastcgiCache} siteId={siteId} />
+			<WwwAliasCard initial={settings.wwwAlias} siteId={siteId} />
 		</div>
 	);
 }

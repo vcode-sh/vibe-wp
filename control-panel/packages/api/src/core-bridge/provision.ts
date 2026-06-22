@@ -1,4 +1,5 @@
 import { redact } from "./redact";
+import { mergeLineStreams } from "./stream-merge";
 
 /**
  * Provisioning bridge — the panel's allowlisted seam onto the installer's
@@ -247,6 +248,141 @@ export async function runHeadlessRequest(
 		throw new Error(`installer headless error: ${parsed.message}`);
 	}
 	return parsed;
+}
+
+/**
+ * One live per-task progress record, mirroring installer ProgressEvent
+ * (installer/src/core/types.ts). Emitted as a single NDJSON line by the
+ * installer's runPlan stream; forwarded verbatim, never inspected for secrets
+ * (mergeLineStreams already redacts every line before we parse it).
+ */
+export interface ProgressEvent {
+	index: number;
+	kind: "progress";
+	name: string;
+	output?: string;
+	phase: "start" | "result";
+	status?: TaskResultLike["status"];
+	taskId: string;
+	total: number;
+}
+
+/** Streamed runPlan: live progress events plus the resolved terminal response. */
+export interface RunPlanStream {
+	/** Progress events as the installer emits them (one per task start/result). */
+	events: AsyncGenerator<ProgressEvent>;
+	/** Resolves with the terminal CoreResponse (kind "runPlan" or "error"). */
+	result: Promise<CoreResponse>;
+}
+
+/**
+ * Streaming sibling of runHeadlessRequest for the runPlan kind ONLY. Spawns the
+ * SAME `[bin, --headless-json]` through spawnArgvFor/defaultSpawn (setsid on
+ * Linux) so killChildTree reaps the whole tree; writes the runPlan CoreRequest
+ * (carrying generated secrets) to STDIN — never argv; reads STDOUT incrementally
+ * through mergeLineStreams (which redacts each line). Each `{kind:"progress"}`
+ * line is yielded as an event; the terminal `{kind:"runPlan"|"error"}` line
+ * resolves `result`. Unparseable lines are ignored. On abort, killChildTree +
+ * reject promptly — mirroring runHeadlessRequest's cancel parity.
+ * runHeadlessRequest itself is untouched (buffered one-shot for all other kinds).
+ */
+export function runHeadlessRunPlanStream(
+	plan: unknown,
+	apply: boolean,
+	opts: RunHeadlessOpts = {}
+): RunPlanStream {
+	const argv = headlessArgv(opts.bin);
+	assertArgvSecretFree(argv);
+	const spawn = opts.spawn ?? defaultSpawn;
+	let resolveResult: (r: CoreResponse) => void = () => undefined;
+	let rejectResult: (e: Error) => void = () => undefined;
+	const result = new Promise<CoreResponse>((res, rej) => {
+		resolveResult = res;
+		rejectResult = rej;
+	});
+
+	async function* events(): AsyncGenerator<ProgressEvent> {
+		if (opts.signal?.aborted) {
+			rejectResult(new Error("provision canceled"));
+			throw new Error("provision canceled");
+		}
+		const child = spawn(argv);
+		const timer = setTimeout(
+			() => killChildTree(child),
+			opts.timeoutMs ?? DEFAULT_HEADLESS_TIMEOUT_MS
+		);
+		// On abort: kill the child's whole tree AND resolve the stop promise so the
+		// merge unblocks NOW even if the child's streams never close on their own
+		// (mirrors runHeadlessRequest rejecting promptly instead of awaiting exit).
+		let resolveAbort: () => void = () => undefined;
+		const aborted = new Promise<void>((r) => {
+			resolveAbort = r;
+		});
+		const onAbort = () => {
+			killChildTree(child);
+			resolveAbort();
+		};
+		opts.signal?.addEventListener("abort", onAbort, { once: true });
+		// Secrets travel on STDIN only — never argv.
+		child.stdin?.write(JSON.stringify({ kind: "runPlan", plan, apply }));
+		child.stdin?.end();
+		// Force the merge closed shortly after exit so a wedged grandchild can't keep
+		// the stream open forever (same grace contract as exec.ts spawnStream), OR
+		// immediately on abort so a cancel finalizes promptly.
+		const stopSignal = Promise.race([
+			child.exited.then(() => new Promise((r) => setTimeout(r, 1500))),
+			aborted,
+		]);
+		let terminal: CoreResponse | null = null;
+		try {
+			for await (const line of mergeLineStreams(
+				[child.stdout, child.stderr],
+				redact,
+				stopSignal
+			)) {
+				if (opts.signal?.aborted) {
+					break;
+				}
+				const parsed = tryParseLine(line.trim());
+				if (!parsed) {
+					continue; // ignore blank/non-JSON noise (e.g. stderr warnings)
+				}
+				if (parsed.kind === "progress") {
+					yield parsed;
+				} else {
+					terminal = parsed; // terminal runPlan/error line
+				}
+			}
+		} finally {
+			clearTimeout(timer);
+			opts.signal?.removeEventListener("abort", onAbort);
+		}
+		if (opts.signal?.aborted) {
+			rejectResult(new Error("provision canceled"));
+			return;
+		}
+		if (terminal) {
+			resolveResult(terminal);
+			return;
+		}
+		const code = await child.exited;
+		rejectResult(
+			new Error(
+				`installer headless stream ended without a result (exit ${code})`
+			)
+		);
+	}
+
+	return { events: events(), result };
+}
+
+/** Parse one stream line into a ProgressEvent or terminal CoreResponse. */
+function tryParseLine(line: string): ProgressEvent | CoreResponse | null {
+	try {
+		return JSON.parse(line) as ProgressEvent | CoreResponse;
+	} catch {
+		return null;
+	}
 }
 
 export interface ProvisionResult {

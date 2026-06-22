@@ -12,6 +12,7 @@ Commands:
   up [services...]           Start the selected environment
   down [args...]             Stop the selected environment
   restart [services...]      Restart services
+  nginx-recreate             Recreate the nginx container so it re-renders its config from env
   ps                         Show service status
   logs [args...]             Follow logs
   logs-recent [args...]      Print recent logs without following (does not hang)
@@ -36,6 +37,7 @@ Commands:
   monitor-schedule-apply <on|off>           Install/remove the hourly health-monitor timer
   schedule-status            Print backup cadence, monitor state, and WP debug flags (TAB-separated)
   site-config-apply          Persist per-site WP runtime settings (debug flags) into the env file
+  caddy-www-apply <on|off>   Add/remove the www.<domain> alias on the host Caddy snippet and reload
 USAGE
 }
 
@@ -80,6 +82,13 @@ case "${command}" in
     ;;
   restart)
     vibe_compose restart "$@"
+    ;;
+  nginx-recreate)
+    # A plain `restart nginx` does NOT re-run the image entrypoint, so a config
+    # rendered from env (e.g. NGINX_FASTCGI_CACHE) would not change. Force-recreate
+    # the container so entrypoint.sh re-renders nginx.conf + the site config.
+    vibe_require_env_file
+    vibe_compose up -d --force-recreate nginx
     ;;
   ps)
     vibe_compose ps "$@"
@@ -167,6 +176,9 @@ case "${command}" in
     ;;
   site-config-apply)
     "${VIBE_BIN_DIR}/site-config-apply" "$@"
+    ;;
+  caddy-www-apply)
+    "${VIBE_BIN_DIR}/caddy-www-apply" "$@"
     ;;
   backup-test)
     "${VIBE_BIN_DIR}/backup-test" "$@"

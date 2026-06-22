@@ -6,6 +6,33 @@
 export type BackupCadence = "off" | "daily" | "weekly";
 export type MonitorState = "on" | "off";
 
+/**
+ * Curated allowlist of WordPress runtime images the panel may select. A site's
+ * PHP version is fixed by WORDPRESS_IMAGE (a Docker build arg), so picking one
+ * of these tags and rebuilding is how the operator changes PHP. This list is the
+ * TS-side trust boundary; the root shell (bin/site-config-apply) enforces the
+ * SAME set independently, because the env file is sourced as root.
+ */
+export const ALLOWED_WORDPRESS_IMAGES = [
+	"wordpress:7.0-php8.5-fpm",
+	"wordpress:7.0-php8.4-fpm",
+	"wordpress:7.0-php8.3-fpm",
+] as const;
+
+export type WordpressImage = (typeof ALLOWED_WORDPRESS_IMAGES)[number];
+
+/** Human label for each selectable image (the PHP version it ships). */
+export const WORDPRESS_IMAGE_LABELS: Record<WordpressImage, string> = {
+	"wordpress:7.0-php8.5-fpm": "PHP 8.5",
+	"wordpress:7.0-php8.4-fpm": "PHP 8.4",
+	"wordpress:7.0-php8.3-fpm": "PHP 8.3",
+};
+
+/** Exact-membership test against the curated image allowlist. */
+export function isAllowedWordpressImage(tag: string): tag is WordpressImage {
+	return (ALLOWED_WORDPRESS_IMAGES as readonly string[]).includes(tag);
+}
+
 /** Effective per-site settings surfaced to the panel. */
 export interface SiteSettings {
 	/** Scheduled-backup cadence, recovered from the systemd timer. */
@@ -14,10 +41,20 @@ export interface SiteSettings {
 	debugDisplay: boolean;
 	/** WP_DEBUG_LOG — write debug messages to debug.log. */
 	debugLog: boolean;
+	/** NGINX_FASTCGI_CACHE — whether anonymous GET/HEAD is page-cached by nginx. */
+	fastcgiCache: boolean;
 	/** Whether the hourly health-monitor timer is enabled. */
 	monitorEnabled: boolean;
 	/** SCRIPT_DEBUG — load un-minified core CSS/JS. */
 	scriptDebug: boolean;
+	/** Current WORDPRESS_IMAGE (fixes the PHP version). Empty when unreadable. */
+	wordpressImage: string;
+	/**
+	 * Whether the host Caddy snippet serves www.<domain> alongside the apex. Read
+	 * from the snippet (the single source of truth — there is no env key/DB row),
+	 * so an absent www_alias line (or missing snippet) means the alias is off.
+	 */
+	wwwAlias: boolean;
 }
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
@@ -41,6 +78,15 @@ export function parseScheduleStatus(stdout: string): SiteSettings {
 		debugLog: false,
 		debugDisplay: false,
 		scriptDebug: false,
+		// NGINX_FASTCGI_CACHE defaults to on in the runtime (compose + entrypoint),
+		// so an absent fastcgi_cache line means caching is enabled.
+		fastcgiCache: true,
+		// schedule-status does not report the image; the exec layer fills this in
+		// from a separate read-only `env` read (see site-config.ts).
+		wordpressImage: "",
+		// The www alias lives in the host Caddy snippet, not the env; an absent
+		// www_alias line (or no snippet) means the alias is not configured.
+		wwwAlias: false,
 	};
 	for (const raw of stdout.split("\n")) {
 		const [key, value] = raw.split("\t");
@@ -60,6 +106,16 @@ export function parseScheduleStatus(stdout: string): SiteSettings {
 				break;
 			case "script_debug":
 				settings.scriptDebug = envBool(value);
+				break;
+			case "fastcgi_cache":
+				// schedule-status emits a literal on|off; treat only "off" as disabled
+				// so any unexpected token errs on the runtime default (cache on).
+				settings.fastcgiCache = value !== "off";
+				break;
+			case "www_alias":
+				// schedule-status emits a literal on|off; only an explicit "on" enables
+				// the alias (absent/off/anything-else -> not configured).
+				settings.wwwAlias = value === "on";
 				break;
 			default:
 				break;
@@ -98,4 +154,33 @@ export function debugPatchToEnv(patch: {
 		env.VIBE_SITE_CONFIG_KEYS = keys.join(" ");
 	}
 	return env;
+}
+
+/**
+ * Map a selected image tag to the env vars site-config-apply consumes. Naming
+ * WORDPRESS_IMAGE in VIBE_SITE_CONFIG_KEYS is what tells the writer to rewrite
+ * exactly that key. The caller is responsible for validating the tag against
+ * isAllowedWordpressImage first; the shell writer revalidates independently.
+ */
+export function imagePatchToEnv(tag: WordpressImage): {
+	WORDPRESS_IMAGE: WordpressImage;
+	VIBE_SITE_CONFIG_KEYS: "WORDPRESS_IMAGE";
+} {
+	return { WORDPRESS_IMAGE: tag, VIBE_SITE_CONFIG_KEYS: "WORDPRESS_IMAGE" };
+}
+
+/**
+ * Map the FastCGI page-cache toggle to the env vars site-config-apply consumes.
+ * NGINX_FASTCGI_CACHE is a literal on|off (mirrors NGINX_GZIP / NGINX_OPEN_FILE_
+ * CACHE); naming it in VIBE_SITE_CONFIG_KEYS is what tells the writer to rewrite
+ * exactly that key. The shell writer revalidates the on|off value independently.
+ */
+export function fastcgiCachePatchToEnv(enabled: boolean): {
+	NGINX_FASTCGI_CACHE: "off" | "on";
+	VIBE_SITE_CONFIG_KEYS: "NGINX_FASTCGI_CACHE";
+} {
+	return {
+		NGINX_FASTCGI_CACHE: enabled ? "on" : "off",
+		VIBE_SITE_CONFIG_KEYS: "NGINX_FASTCGI_CACHE",
+	};
 }

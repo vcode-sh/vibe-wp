@@ -14,8 +14,15 @@ import type {
 	BackupCadence,
 	MonitorState,
 	SiteSettings,
+	WordpressImage,
 } from "./site-config-pure";
-import { debugPatchToEnv, parseScheduleStatus } from "./site-config-pure";
+import {
+	debugPatchToEnv,
+	fastcgiCachePatchToEnv,
+	imagePatchToEnv,
+	isAllowedWordpressImage,
+	parseScheduleStatus,
+} from "./site-config-pure";
 import { findSite } from "./sites";
 
 /**
@@ -31,8 +38,19 @@ export async function getSiteSettings(
 	if (!site) {
 		return null;
 	}
-	const status = await runVibe(site.installDir, "prod", "scheduleStatus");
-	return parseScheduleStatus(status.code === 0 ? status.stdout : "");
+	// schedule-status reports cadence/monitor/debug flags; the current image is
+	// not part of it, so read WORDPRESS_IMAGE separately via the read-only `env`
+	// op (same approach as the Developer details panel). Run both concurrently.
+	const [status, image] = await Promise.all([
+		runVibe(site.installDir, "prod", "scheduleStatus"),
+		runVibe(site.installDir, "prod", "env", {
+			args: ["WORDPRESS_IMAGE"],
+			timeoutMs: 5000,
+		}),
+	]);
+	const settings = parseScheduleStatus(status.code === 0 ? status.stdout : "");
+	settings.wordpressImage = image.code === 0 ? image.stdout.trim() : "";
+	return settings;
 }
 
 function ensureOk(
@@ -112,4 +130,66 @@ export async function applyDebugFlags(
 	});
 	ensureOk("site-config-apply", siteId, result);
 	return { restartRequired: true };
+}
+
+/**
+ * Persist the selected WordPress image (PHP version) into the site env file.
+ * Returns rebuildRequired: the image is a FROM build arg, so only a rebuild
+ * (`vibe up --build`) — not a plain restart — picks up the new tag. The tag is
+ * validated against the allowlist here and again in the root shell writer.
+ */
+export async function applyWordpressImage(
+	siteId: string,
+	tag: WordpressImage
+): Promise<{ rebuildRequired: boolean }> {
+	if (!isAllowedWordpressImage(tag)) {
+		throw new ORPCError("BAD_REQUEST");
+	}
+	const site = await requireSite(siteId);
+	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
+		env: imagePatchToEnv(tag),
+	});
+	ensureOk("site-config-apply", siteId, result);
+	return { rebuildRequired: true };
+}
+
+/**
+ * Persist the FastCGI page-cache toggle (NGINX_FASTCGI_CACHE) into the site env
+ * file. Returns recreateRequired: nginx renders its config from env only at the
+ * image entrypoint, so a plain `restart nginx` would NOT pick up the change — the
+ * caller must force-recreate the nginx container (the nginxRecreate op) for the
+ * new value to take effect. The on|off value is revalidated by the root shell
+ * writer. The env write itself never recreates anything (so the panel can fan
+ * the streamed recreate job out as a watchable operation).
+ */
+export async function applyFastcgiCache(
+	siteId: string,
+	enabled: boolean
+): Promise<{ recreateRequired: boolean }> {
+	const site = await requireSite(siteId);
+	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
+		env: fastcgiCachePatchToEnv(enabled),
+	});
+	ensureOk("site-config-apply", siteId, result);
+	return { recreateRequired: true };
+}
+
+/**
+ * Add or remove the host Caddy `www.<domain>` alias for a site (serve-both on the
+ * apex block, matching what the installer produces). The op edits ONLY the
+ * snippet's address line, validates the whole Caddyfile, and HOT-reloads Caddy on
+ * success — so there is no restart/recreate to surface, unlike the env-backed
+ * toggles. The on|off value is fixed here and revalidated by the root shell op.
+ */
+export async function applyWwwAlias(
+	siteId: string,
+	enabled: boolean
+): Promise<{ ok: true }> {
+	const site = await requireSite(siteId);
+	const result = await runVibe(site.installDir, "prod", "caddyWwwApply", {
+		args: [enabled ? "on" : "off"],
+		timeoutMs: 30_000,
+	});
+	ensureOk("caddy-www-apply", siteId, result);
+	return { ok: true };
 }

@@ -85,6 +85,7 @@ Production examples set `NGINX_OPEN_FILE_CACHE_ERRORS=on` because theme/plugin f
 FastCGI page cache:
 
 ```env
+NGINX_FASTCGI_CACHE=on
 NGINX_FASTCGI_CACHE_KEYS_ZONE_SIZE=128m
 NGINX_FASTCGI_CACHE_TTL=10m
 NGINX_FASTCGI_REDIRECT_CACHE_TTL=1m
@@ -95,6 +96,23 @@ NGINX_FASTCGI_CACHE_LOCK_TIMEOUT=10s
 ```
 
 Increase `NGINX_FASTCGI_CACHE_TTL` only when the site has a deliberate purge strategy or when a short delay before anonymous users see edits is acceptable.
+
+### Turning the page cache on or off
+
+`NGINX_FASTCGI_CACHE` (default `on`; `1/true/yes` → `on`, `0/false/no` → `off`) is the master switch for the FastCGI page cache. The nginx image entrypoint renders the `fastcgi_cache*` directive block into the `location ~ \.php$` server stanza from this value:
+
+- **`on`** — anonymous `GET`/`HEAD` responses are cached and served from nginx (`X-FastCGI-Cache: HIT` on a warm hit), subject to the skip rules below.
+- **`off`** — the entire `fastcgi_cache*` block is omitted, so PHP-FPM serves every request and nothing is cached (no `X-FastCGI-Cache` header is emitted). This is useful while debugging a caching-sensitive issue or for a site that must always render fresh.
+
+Disabling the cache does **not** change correctness: the `$skip_cache*` maps and the `fastcgi_cache_path` zone in `nginx.conf` stay defined unconditionally, so the cache-skip rules (logged-in users, `wp-admin`, login, REST, query strings, no-cache requests, WooCommerce cart/checkout/account, `Authorization` header) remain valid in both states — `off` simply means no anonymous `GET`/`HEAD` response is ever cached.
+
+Because the cache directives are rendered at container start, changing `NGINX_FASTCGI_CACHE` only takes effect after the nginx container is **recreated** (not merely restarted — a plain `restart` reuses the already-rendered config):
+
+```sh
+./bin/vibe <env> nginx-recreate
+```
+
+The control panel performs this automatically: toggling the FastCGI page cache writes `NGINX_FASTCGI_CACHE` to the site env file and then starts a streamed `nginx-recreate` job so the operator can watch the container come back up.
 
 ## Verification
 

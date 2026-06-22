@@ -6,13 +6,7 @@ import { buildOperationTask } from "./manage-tasks";
 import { runPlan } from "./plan-runner";
 import { redactPlan } from "./redaction";
 import { runTask, type TaskResult } from "./task-runner";
-import type {
-  HostFacts,
-  InstallerState,
-  InstallMode,
-  InstallPlan,
-  ProgressEvent
-} from "./types";
+import type { HostFacts, InstallerState, InstallMode, InstallPlan, ProgressEvent } from "./types";
 import { validateState } from "./validation";
 
 // Frontend-agnostic request/response surface. Any frontend (TUI, web, desktop,

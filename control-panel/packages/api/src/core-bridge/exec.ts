@@ -79,6 +79,12 @@ export const VIBE_OPS = {
 	scheduleStatus: { argv: ["schedule-status"], stream: false },
 	/** Persist per-site WP runtime settings (debug flags) into the env file. */
 	siteConfigApply: { argv: ["site-config-apply"], stream: false },
+	/** Add/remove the www.<domain> Caddy alias and hot-reload (arg: on|off). */
+	caddyWwwApply: {
+		argv: ["caddy-www-apply"],
+		stream: false,
+		takesArg: true,
+	},
 	backupTest: { argv: ["backup-test"], stream: false },
 	notifyConfigApply: { argv: ["notify-config-apply"], stream: false },
 	notifyTest: { argv: ["notify-test"], stream: false },
@@ -87,6 +93,8 @@ export const VIBE_OPS = {
 	up: { argv: ["up"], stream: true },
 	down: { argv: ["down"], stream: true },
 	restart: { argv: ["restart"], stream: true },
+	/** Force-recreate nginx so its entrypoint re-renders config from env. */
+	nginxRecreate: { argv: ["nginx-recreate"], stream: true },
 	cacheFlush: { argv: ["cache-flush"], stream: true },
 	restore: { argv: ["restore"], stream: true, takesArg: true, yes: true },
 	backupVerify: { argv: ["backup-verify"], stream: true, takesArg: true },

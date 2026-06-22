@@ -21,9 +21,13 @@ import type { NotifyConfigRow } from "../core-bridge/notify-config-pure";
 import {
 	applyBackupSchedule,
 	applyDebugFlags,
+	applyFastcgiCache,
 	applyMonitorState,
+	applyWordpressImage,
+	applyWwwAlias,
 	getSiteSettings,
 } from "../core-bridge/site-config";
+import { ALLOWED_WORDPRESS_IMAGES } from "../core-bridge/site-config-pure";
 import { detectSites, findSite } from "../core-bridge/sites";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
@@ -254,4 +258,45 @@ export const settingsRouter = {
 			const { siteId, ...patch } = input;
 			return await applyDebugFlags(siteId, patch);
 		}),
+
+	/**
+	 * Set the site's WordPress image (PHP version). Returns rebuildRequired so
+	 * the UI can trigger `vibe up --build` — the image is a FROM build arg, so a
+	 * plain restart would reuse the old image. The enum is the curated allowlist;
+	 * the root shell writer revalidates it independently.
+	 */
+	sitePhpImageSet: adminProcedure
+		.input(
+			z.object({
+				siteId: z.string().min(1),
+				image: z.enum(ALLOWED_WORDPRESS_IMAGES),
+			})
+		)
+		.handler(
+			async ({ input }) => await applyWordpressImage(input.siteId, input.image)
+		),
+
+	/**
+	 * Toggle the FastCGI page cache (NGINX_FASTCGI_CACHE) in the site env file.
+	 * Returns recreateRequired so the UI can start the streamed nginx-recreate job
+	 * — nginx renders its config from env only at the image entrypoint, so a plain
+	 * restart would leave the old value in place.
+	 */
+	siteFastcgiCacheSet: adminProcedure
+		.input(z.object({ siteId: z.string().min(1), enabled: z.boolean() }))
+		.handler(
+			async ({ input }) => await applyFastcgiCache(input.siteId, input.enabled)
+		),
+
+	/**
+	 * Add or remove the host Caddy www.<domain> alias for a site. The op edits the
+	 * snippet's address line and hot-reloads Caddy, so there is nothing to restart
+	 * — it just succeeds or throws. www requires a DNS record for www.<domain>;
+	 * the UI surfaces that as a non-blocking hint (the op does not enforce DNS).
+	 */
+	siteWwwAliasSet: adminProcedure
+		.input(z.object({ siteId: z.string().min(1), enabled: z.boolean() }))
+		.handler(
+			async ({ input }) => await applyWwwAlias(input.siteId, input.enabled)
+		),
 };
