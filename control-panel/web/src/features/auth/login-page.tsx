@@ -7,7 +7,7 @@ export function LoginPage() {
 	const [showSignIn, setShowSignIn] = useState(true);
 
 	return (
-		<main className="min-h-screen">
+		<main className="grid min-h-screen place-items-center px-4 py-10">
 			{showSignIn ? (
 				<SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
 			) : (

@@ -17,6 +17,7 @@ import {
 	runHeadlessRequest,
 	type SpawnFn,
 } from "./provision";
+import { streamProvision } from "./provision-job";
 
 const BIN = "/opt/vibe-wp-panel/bin/vibe-wp-installer";
 const SECRET = "sup3r-s3cret-admin-pw";
@@ -24,6 +25,7 @@ const EXIT_1 = /exited 1/;
 const ERR_NOPE = /nope/;
 const ERR_NON_JSON = /non-JSON/;
 const ERR_BAD_MODE = /Disallowed provision mode/;
+const ERR_CANCELED = /provision canceled/;
 
 /** A fake `--headless-json` child: captures argv + stdin, replays scripted JSON. */
 function fakeSpawn(opts: {
@@ -55,6 +57,29 @@ function fakeSpawn(opts: {
 			kill: () => undefined,
 		};
 	};
+}
+
+/**
+ * A fake child that NEVER exits and whose streams stay open — models a
+ * privileged installer subprocess still running. The only way out of an
+ * in-flight request against it is the cancel/abort path, so it lets us prove
+ * abort both rejects the promise and tears the child down. `killed` flips when
+ * the bridge invokes kill() (the off-Linux / no-pid killChildTree fallback).
+ */
+function openSpawn(): { killed: () => boolean; spawn: SpawnFn } {
+	let wasKilled = false;
+	const neverExits = new Promise<number>(() => undefined);
+	const spawn: SpawnFn = () => ({
+		stdin: { write: () => undefined, end: () => undefined },
+		// start()-only streams never close, so the body Promise.all never settles.
+		stdout: new ReadableStream<Uint8Array>({ start: () => undefined }),
+		stderr: new ReadableStream<Uint8Array>({ start: () => undefined }),
+		exited: neverExits,
+		kill: () => {
+			wasKilled = true;
+		},
+	});
+	return { killed: () => wasKilled, spawn };
 }
 
 const VALID_STATE: InstallerStateLike = {
@@ -176,6 +201,68 @@ describe("runHeadlessRequest", () => {
 				}
 			)
 		).rejects.toThrow(ERR_NON_JSON);
+	});
+});
+
+describe("runHeadlessRequest cancel/abort", () => {
+	it("rejects promptly AND kills the child when the signal aborts mid-flight", async () => {
+		const { killed, spawn } = openSpawn();
+		const ac = new AbortController();
+		const pending = runHeadlessRequest(
+			{ kind: "detect" },
+			{ bin: BIN, spawn, signal: ac.signal }
+		);
+		// Abort after the request is in-flight (child spawned, await blocked on the
+		// never-resolving body). The abort listener must reject the race AND kill.
+		queueMicrotask(() => ac.abort());
+		await expect(pending).rejects.toThrow(ERR_CANCELED);
+		// killChildTree fell back to the plain child.kill() (no pid on the seam).
+		expect(killed()).toBe(true);
+	});
+
+	it("throws before spawning when the signal is already aborted", async () => {
+		const argvSink: string[][] = [];
+		const ac = new AbortController();
+		ac.abort();
+		await expect(
+			runHeadlessRequest(
+				{ kind: "detect" },
+				{
+					bin: BIN,
+					signal: ac.signal,
+					spawn: fakeSpawn({
+						argvSink,
+						stdinSink: [],
+						responses: [JSON.stringify({ kind: "detect", host: {} })],
+					}),
+				}
+			)
+		).rejects.toThrow(ERR_CANCELED);
+		// Early-abort guard fires before any spawn — nothing was launched.
+		expect(argvSink).toHaveLength(0);
+	});
+});
+
+describe("streamProvision cancel", () => {
+	it("aborting via proc.kill() yields 'Provision canceled.' and a non-zero exit", async () => {
+		const { killed, spawn } = openSpawn();
+		const { proc, lines } = streamProvision(VALID_STATE, {
+			apply: true,
+			bin: BIN,
+			spawn,
+		});
+		// Cancel once the validate spawn is in-flight against the never-exiting child;
+		// proc.kill() aborts the threaded signal so the sequence rejects promptly.
+		queueMicrotask(() => proc.kill());
+		const collected: string[] = [];
+		for await (const line of lines) {
+			collected.push(line);
+		}
+		const code = await proc.exited;
+		expect(collected).toContain("Provision canceled.");
+		expect(code).not.toBe(0);
+		// The signal-driven kill reached the spawned child's teardown.
+		expect(killed()).toBe(true);
 	});
 });
 

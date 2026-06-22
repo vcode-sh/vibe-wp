@@ -60,7 +60,7 @@ export function SignUpForm({
 	}
 
 	return (
-		<div className="mx-auto mt-10 w-full max-w-md p-6">
+		<div className="w-full max-w-md p-6">
 			<h1 className="mb-2 text-center font-semibold text-2xl">
 				Create a control account
 			</h1>

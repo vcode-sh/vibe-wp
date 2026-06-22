@@ -50,12 +50,18 @@ export const operationsRouter = {
 		.input(z.object({ jobId: z.string() }))
 		.handler(async ({ input, context }): Promise<{ canceled: boolean }> => {
 			const job = getJob(input.jobId);
+			if (!job) {
+				// Unknown or evicted (past FINALIZED_TTL_MS) — cancelJob would throw a
+				// plain Error here, which oRPC masks as an opaque 500. Surface the same
+				// typed NOT_FOUND as operationsGet/operationsStream instead.
+				throw new ORPCError("NOT_FOUND");
+			}
 			const canceled = cancelJob(input.jobId);
 			if (canceled) {
 				await writeAudit(
 					context.session.user.id,
 					"cancel",
-					job?.siteId ?? null,
+					job.siteId,
 					input.jobId
 				);
 			}

@@ -22,18 +22,15 @@ function HealthPage() {
 		enabled: perfEnabled,
 	});
 
+	// The backend emits a binary signal: uptimePercent is 100 only when a single
+	// instantaneous HTTP probe passed, otherwise 0. Present it honestly as
+	// reachable/unreachable rather than a fabricated continuous percentage.
 	let uptimeLabel = "—";
 	let uptimeClass = "";
 	if (health.data !== undefined) {
-		const pct = health.data.uptimePercent;
-		uptimeLabel = `${pct}%`;
-		if (pct >= 99.9) {
-			uptimeClass = "text-success";
-		} else if (pct >= 99) {
-			uptimeClass = "text-warning";
-		} else {
-			uptimeClass = "text-destructive";
-		}
+		const reachable = health.data.uptimePercent >= 100;
+		uptimeLabel = reachable ? "Reachable" : "Unreachable";
+		uptimeClass = reachable ? "text-success" : "text-destructive";
 	}
 
 	return (

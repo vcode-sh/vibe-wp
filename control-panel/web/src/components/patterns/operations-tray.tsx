@@ -17,10 +17,15 @@ import {
 import { client } from "@/lib/orpc/client";
 
 // If a live stream for a not-yet-finished op produces no events for this long
-// after (re)subscribing, the server-side job record was likely evicted and the
-// stream closed without a terminal `done`. Treat that as unknown rather than a
-// perpetual "running" spinner.
+// after (re)subscribing, the connection likely dropped (the LineStream heartbeat
+// stops refreshing `lastEventAt`) without a terminal `done`. The stream has no
+// reconnect, so rather than infer an outcome from silence we ask the server for
+// the authoritative job status. Jobs can legitimately run far longer than this.
 const STALE_STREAM_MS = 15_000;
+
+function isTerminal(status: JobStatus): boolean {
+	return status === "succeeded" || status === "failed" || status === "canceled";
+}
 
 function elapsed(ms: number): string {
 	const s = Math.max(0, Math.floor(ms / 1000));
@@ -91,6 +96,10 @@ function TrayCard({ op }: { op: Operation }) {
 		persisted === null
 	);
 	const [now, setNow] = useState(() => Date.now());
+	// Transient display state when a stale stream couldn't be resolved against the
+	// server (e.g. the job was evicted past its TTL). NON-sticky: never persisted,
+	// so a later reconnect/refetch can still deliver the real terminal event.
+	const [unknown, setUnknown] = useState(false);
 
 	useEffect(() => {
 		if (persisted !== null) {
@@ -104,18 +113,44 @@ function TrayCard({ op }: { op: Operation }) {
 		return () => clearInterval(t);
 	}, [persisted, live.done, live.status, op.jobId, finish]);
 
-	// A stream that produced no events well past (re)subscription likely closed
-	// without a terminal `done` (evicted/gone job). Mark it finished so it shows a
-	// terminal state and doesn't re-stream forever on the next reload.
+	// A stream that has gone silent past the threshold without a terminal `done`
+	// likely lost its connection (no reconnect, errors swallowed). NEVER infer the
+	// outcome from silence — a long-running one-shot job (e.g. a ~9-min provision)
+	// emits no lines and would be falsely failed. Ask the server for the real
+	// status: persist it only if terminal; if the job is gone (NOT_FOUND) show a
+	// non-sticky "Unknown" so a later refetch can still resolve it.
 	useEffect(() => {
 		if (persisted !== null || live.done) {
 			return;
 		}
-		const sinceLastEvent = STALE_STREAM_MS - (now - live.lastEventAt);
-		if (sinceLastEvent <= 0 && live.lines.length === 0) {
-			finish(op.jobId, "failed");
+		const isStale = now - live.lastEventAt >= STALE_STREAM_MS;
+		if (!(isStale && live.lines.length === 0)) {
 			return;
 		}
+		let on = true;
+		client
+			.operationsGet({ jobId: op.jobId })
+			.then((job) => {
+				if (!on) {
+					return;
+				}
+				if (isTerminal(job.status)) {
+					// Authoritative terminal status — persist it. A successful long op
+					// that merely lost its stream resolves to "succeeded", never "failed".
+					finish(op.jobId, job.status);
+				}
+				// Still queued/running: leave `active` true and keep waiting.
+			})
+			.catch(() => {
+				// NOT_FOUND (evicted past TTL) or a transient fetch error: don't persist
+				// a terminal status. Show "Unknown" until a refetch/reconnect resolves it.
+				if (on) {
+					setUnknown(true);
+				}
+			});
+		return () => {
+			on = false;
+		};
 	}, [
 		persisted,
 		live.done,
@@ -126,9 +161,13 @@ function TrayCard({ op }: { op: Operation }) {
 		finish,
 	]);
 
-	const done = persisted !== null || live.done;
-	const status: JobStatus | "unknown" =
-		persisted ?? (live.done ? live.status : "unknown");
+	const done = persisted !== null || live.done || unknown;
+	let status: JobStatus | "unknown" = "unknown";
+	if (persisted !== null) {
+		status = persisted;
+	} else if (live.done) {
+		status = live.status;
+	}
 
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5 shadow-md">
