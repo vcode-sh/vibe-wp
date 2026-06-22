@@ -1,7 +1,7 @@
 import { Avatar, AvatarFallback } from "@control-panel/ui/components/avatar";
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDown, LogIn } from "lucide-react";
+import { ChevronsUpDown, KeyRound, LogIn, UserRound } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -65,9 +65,24 @@ export function UserMenu() {
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-56 bg-card" side="top">
 				<DropdownMenuGroup>
-					<DropdownMenuLabel>Account</DropdownMenuLabel>
+					<DropdownMenuLabel className="grid gap-0.5">
+						<span className="font-medium text-sm">{displayName}</span>
+						<span className="font-normal text-muted-foreground text-xs">
+							{session.user.email}
+						</span>
+					</DropdownMenuLabel>
 					<DropdownMenuSeparator />
-					<DropdownMenuItem>{session.user.email}</DropdownMenuItem>
+					<DropdownMenuItem render={<Link to="/profile" />}>
+						<UserRound className="size-4" />
+						Profile
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						render={<Link hash="change-password" to="/profile" />}
+					>
+						<KeyRound className="size-4" />
+						Change password
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
 					<DropdownMenuItem
 						onClick={() => {
 							authClient.signOut({

@@ -87,7 +87,10 @@ export function BanUserDialog({
 					<AlertDialogCancel onClick={() => onOpenChange(false)}>
 						Cancel
 					</AlertDialogCancel>
-					<AlertDialogAction disabled={ban.isPending} onClick={() => ban.mutate()}>
+					<AlertDialogAction
+						disabled={ban.isPending}
+						onClick={() => ban.mutate()}
+					>
 						{ban.isPending ? "Banning…" : "Ban user"}
 					</AlertDialogAction>
 				</AlertDialogFooter>

@@ -61,7 +61,9 @@ export function PasswordField({
 			{showStrength && value ? (
 				<div className="grid gap-1">
 					<Progress value={strength.percent} />
-					<span className="text-muted-foreground text-xs">{strength.label}</span>
+					<span className="text-muted-foreground text-xs">
+						{strength.label}
+					</span>
 				</div>
 			) : null}
 		</div>

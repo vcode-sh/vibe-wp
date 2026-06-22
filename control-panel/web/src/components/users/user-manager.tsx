@@ -14,8 +14,8 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import {
 	filterUsers,
-	paginate,
 	type PanelUser,
+	paginate,
 	sortUsers,
 	type UserFilter,
 } from "@/lib/users/derive";
@@ -74,7 +74,62 @@ export function UserManager() {
 
 	const all = query.data ?? [];
 	const filtered = sortUsers(filterUsers(all, filter));
-	const { slice, page: safePage, pageCount } = paginate(filtered, page, PAGE_SIZE);
+	const {
+		slice,
+		page: safePage,
+		pageCount,
+	} = paginate(filtered, page, PAGE_SIZE);
+
+	function body() {
+		if (all.length === 0) {
+			return (
+				<p className="rounded-lg border p-6 text-muted-foreground text-sm">
+					No panel users yet.
+				</p>
+			);
+		}
+		if (filtered.length === 0) {
+			return (
+				<p className="rounded-lg border p-6 text-muted-foreground text-sm">
+					No users match your filters.
+				</p>
+			);
+		}
+		return (
+			<div className="grid gap-3">
+				<UsersTable
+					currentUserId={currentUserId}
+					onChanged={onChanged}
+					users={slice}
+				/>
+				{pageCount > 1 ? (
+					<div className="flex items-center justify-between">
+						<span className="text-muted-foreground text-sm">
+							Page {safePage + 1} of {pageCount} · {filtered.length} users
+						</span>
+						<div className="flex gap-2">
+							<Button
+								disabled={safePage === 0}
+								onClick={() => setPage(safePage - 1)}
+								size="sm"
+								variant="outline"
+							>
+								Previous
+							</Button>
+							<Button
+								disabled={safePage >= pageCount - 1}
+								onClick={() => setPage(safePage + 1)}
+								size="sm"
+								variant="outline"
+							>
+								Next
+							</Button>
+						</div>
+					</div>
+				) : null}
+			</div>
+		);
+	}
 
 	return (
 		<>
@@ -102,48 +157,7 @@ export function UserManager() {
 					onRetry={() => query.refetch()}
 					skeletonClassName="h-64 w-full"
 				>
-					{all.length === 0 ? (
-						<p className="rounded-lg border p-6 text-muted-foreground text-sm">
-							No panel users yet.
-						</p>
-					) : filtered.length === 0 ? (
-						<p className="rounded-lg border p-6 text-muted-foreground text-sm">
-							No users match your filters.
-						</p>
-					) : (
-						<div className="grid gap-3">
-							<UsersTable
-								currentUserId={currentUserId}
-								onChanged={onChanged}
-								users={slice}
-							/>
-							{pageCount > 1 ? (
-								<div className="flex items-center justify-between">
-									<span className="text-muted-foreground text-sm">
-										Page {safePage + 1} of {pageCount} · {filtered.length} users
-									</span>
-									<div className="flex gap-2">
-										<Button
-											disabled={safePage === 0}
-											onClick={() => setPage(safePage - 1)}
-											size="sm"
-											variant="outline"
-										>
-											Previous
-										</Button>
-										<Button
-											disabled={safePage >= pageCount - 1}
-											onClick={() => setPage(safePage + 1)}
-											size="sm"
-											variant="outline"
-										>
-											Next
-										</Button>
-									</div>
-								</div>
-							) : null}
-						</div>
-					)}
+					{body()}
 				</QueryBoundary>
 			</div>
 		</>

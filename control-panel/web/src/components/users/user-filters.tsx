@@ -5,8 +5,8 @@
  */
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { UserFilter } from "@/lib/users/derive";
 import { ROLE_OPTIONS } from "@/lib/roles";
+import type { UserFilter } from "@/lib/users/derive";
 
 const SELECT_CLASS =
 	"flex h-9 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";

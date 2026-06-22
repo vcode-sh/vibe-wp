@@ -5,7 +5,14 @@
  * always an admin, the last admin can never be removed (never zero admins).
  */
 import { useMutation } from "@tanstack/react-query";
-import { Ban, KeyRound, LogOut, MoreHorizontal, ShieldOff, Trash2 } from "lucide-react";
+import {
+	Ban,
+	KeyRound,
+	LogOut,
+	MoreHorizontal,
+	ShieldOff,
+	Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -101,12 +108,15 @@ export function UserRowActions({
 
 	const revoke = useMutation({
 		mutationFn: async () => {
-			const res = await authClient.admin.revokeUserSessions({ userId: user.id });
+			const res = await authClient.admin.revokeUserSessions({
+				userId: user.id,
+			});
 			if (res.error) {
 				throw new Error(res.error.message ?? "Failed to revoke sessions.");
 			}
 		},
-		onSuccess: () => toast.success(`Signed out all sessions for ${user.email}.`),
+		onSuccess: () =>
+			toast.success(`Signed out all sessions for ${user.email}.`),
 		onError: (err: Error) => toast.error(err.message),
 	});
 

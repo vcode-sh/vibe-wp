@@ -8,9 +8,9 @@ import { Label } from "@control-panel/ui/components/label";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PasswordField } from "@/components/users/password-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PasswordField } from "@/components/users/password-field";
 import { authClient } from "@/lib/auth-client";
 import { passwordSchema } from "@/lib/password";
 
@@ -50,7 +50,7 @@ export function ChangePasswordCard() {
 		confirm === next;
 
 	return (
-		<Card>
+		<Card className="scroll-mt-20" id="change-password">
 			<CardHeader>
 				<CardTitle className="text-sm">Change password</CardTitle>
 			</CardHeader>

@@ -69,8 +69,8 @@ export function DeleteUserDialog({
 					<AlertDialogTitle>Permanently delete {user.email}?</AlertDialogTitle>
 					<AlertDialogDescription>
 						This is irreversible. The account, sessions, and all audit linkage
-						will be destroyed. Consider banning instead if you may need the audit
-						trail later.
+						will be destroyed. Consider banning instead if you may need the
+						audit trail later.
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<div className="grid gap-1.5 px-1 pb-1">

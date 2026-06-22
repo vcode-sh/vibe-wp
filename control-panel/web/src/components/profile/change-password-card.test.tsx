@@ -20,19 +20,19 @@ function wrap(ui: ReactNode) {
 describe("ChangePasswordCard", () => {
 	it("keeps submit disabled until valid and matching", () => {
 		render(wrap(<ChangePasswordCard />));
-		const submit = screen.getByRole("button", { name: /change password/i });
+		const submit = screen.getByRole("button", { name: "Change password" });
 		expect(submit).toBeDisabled();
-		fireEvent.change(screen.getByLabelText(/current password/i), {
+		fireEvent.change(screen.getByLabelText("Current password"), {
 			target: { value: "oldpass12" },
 		});
-		fireEvent.change(screen.getByLabelText(/^new password/i), {
+		fireEvent.change(screen.getByLabelText("New password"), {
 			target: { value: "newpass12" },
 		});
-		fireEvent.change(screen.getByLabelText(/confirm/i), {
+		fireEvent.change(screen.getByLabelText("Confirm new password"), {
 			target: { value: "mismatch" },
 		});
 		expect(submit).toBeDisabled();
-		fireEvent.change(screen.getByLabelText(/confirm/i), {
+		fireEvent.change(screen.getByLabelText("Confirm new password"), {
 			target: { value: "newpass12" },
 		});
 		expect(submit).not.toBeDisabled();

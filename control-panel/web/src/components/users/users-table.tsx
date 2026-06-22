@@ -4,10 +4,7 @@
  * actions live in `user-row-actions`. The current user's row is flagged so its
  * controls lock.
  */
-import {
-	Avatar,
-	AvatarFallback,
-} from "@control-panel/ui/components/avatar";
+import { Avatar, AvatarFallback } from "@control-panel/ui/components/avatar";
 import {
 	Table,
 	TableBody,

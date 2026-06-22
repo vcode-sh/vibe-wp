@@ -58,7 +58,8 @@ export function SetPasswordDialog({
 				});
 				if (revoked.error) {
 					throw new Error(
-						revoked.error.message ?? "Password set, but revoking sessions failed."
+						revoked.error.message ??
+							"Password set, but revoking sessions failed."
 					);
 				}
 			}
@@ -90,8 +91,8 @@ export function SetPasswordDialog({
 					<DialogTitle>Set a new password</DialogTitle>
 					<DialogDescription>
 						Set a temporary password for{" "}
-						<span className="font-medium text-foreground">{user.email}</span> and
-						share it out of band. They should change it after signing in.
+						<span className="font-medium text-foreground">{user.email}</span>{" "}
+						and share it out of band. They should change it after signing in.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -129,9 +130,12 @@ export function SetPasswordDialog({
 							onCheckedChange={(next) => setRevoke(next === true)}
 						/>
 						<span className="grid gap-0.5">
-							<span className="font-medium">Sign out their active sessions</span>
+							<span className="font-medium">
+								Sign out their active sessions
+							</span>
 							<span className="text-muted-foreground text-xs">
-								Forces any current logins to sign in again with the new password.
+								Forces any current logins to sign in again with the new
+								password.
 							</span>
 						</span>
 					</Label>

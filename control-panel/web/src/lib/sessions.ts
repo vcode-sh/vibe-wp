@@ -3,33 +3,31 @@
  * Profile "Active sessions" card. Pure string parsing of the stored user-agent —
  * good enough to help a user recognise their devices, with safe fallbacks.
  */
+
+// Ordered: Edge's UA contains "Chrome", Chrome's contains "Safari", so the more
+// specific patterns must come first.
+const BROWSERS: ReadonlyArray<readonly [RegExp, string]> = [
+	[/Edg\//, "Edge"],
+	[/Chrome\//, "Chrome"],
+	[/Firefox\//, "Firefox"],
+	[/Safari\//, "Safari"],
+];
+
+const OPERATING_SYSTEMS: ReadonlyArray<readonly [RegExp, string]> = [
+	[/Mac OS X/, "macOS"],
+	[/Windows/, "Windows"],
+	[/Android/, "Android"],
+	[/iPhone|iPad/, "iOS"],
+	[/Linux/, "Linux"],
+];
+
 export function describeSession(s: {
 	userAgent?: string | null;
 	ipAddress?: string | null;
 }): { device: string; detail: string } {
 	const ua = s.userAgent ?? "";
-	let browser = "";
-	if (/Edg\//.test(ua)) {
-		browser = "Edge";
-	} else if (/Chrome\//.test(ua)) {
-		browser = "Chrome";
-	} else if (/Firefox\//.test(ua)) {
-		browser = "Firefox";
-	} else if (/Safari\//.test(ua)) {
-		browser = "Safari";
-	}
-	let os = "";
-	if (/Mac OS X/.test(ua)) {
-		os = "macOS";
-	} else if (/Windows/.test(ua)) {
-		os = "Windows";
-	} else if (/Android/.test(ua)) {
-		os = "Android";
-	} else if (/(iPhone|iPad)/.test(ua)) {
-		os = "iOS";
-	} else if (/Linux/.test(ua)) {
-		os = "Linux";
-	}
+	const browser = BROWSERS.find(([re]) => re.test(ua))?.[1] ?? "";
+	const os = OPERATING_SYSTEMS.find(([re]) => re.test(ua))?.[1] ?? "";
 	const device =
 		browser || os
 			? [browser, os].filter(Boolean).join(" · ")

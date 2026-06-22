@@ -26,7 +26,11 @@ import { type PanelRole, ROLE_OPTIONS } from "@/lib/roles";
 import { PasswordField } from "./password-field";
 import { RoleSelect } from "./role-select";
 
-export function AddUserDialog({ onChanged }: { onChanged: () => Promise<void> }) {
+export function AddUserDialog({
+	onChanged,
+}: {
+	onChanged: () => Promise<void>;
+}) {
 	const [open, setOpen] = useState(false);
 	const [email, setEmail] = useState("");
 	const [name, setName] = useState("");

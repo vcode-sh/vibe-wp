@@ -11,7 +11,7 @@ describe("UserFilters", () => {
 				value={{ query: "", role: "all", status: "all" }}
 			/>
 		);
-		fireEvent.change(screen.getByPlaceholderText(/search/i), {
+		fireEvent.change(screen.getByLabelText("Search users"), {
 			target: { value: "bob" },
 		});
 		expect(onChange).toHaveBeenCalledWith({
@@ -29,7 +29,7 @@ describe("UserFilters", () => {
 				value={{ query: "", role: "all", status: "all" }}
 			/>
 		);
-		fireEvent.change(screen.getByLabelText(/filter by role/i), {
+		fireEvent.change(screen.getByLabelText("Filter by role"), {
 			target: { value: "admin" },
 		});
 		expect(onChange).toHaveBeenCalledWith({
@@ -37,7 +37,7 @@ describe("UserFilters", () => {
 			role: "admin",
 			status: "all",
 		});
-		fireEvent.change(screen.getByLabelText(/filter by status/i), {
+		fireEvent.change(screen.getByLabelText("Filter by status"), {
 			target: { value: "banned" },
 		});
 		expect(onChange).toHaveBeenCalledWith({

@@ -17,7 +17,7 @@ describe("PasswordField", () => {
 		);
 		const input = screen.getByLabelText("Password") as HTMLInputElement;
 		expect(input.type).toBe("password");
-		fireEvent.click(screen.getByRole("button", { name: /show password/i }));
+		fireEvent.click(screen.getByRole("button", { name: "Show password" }));
 		expect(input.type).toBe("text");
 	});
 	it("shows a strength meter when enabled and non-empty", () => {
@@ -33,7 +33,7 @@ describe("PasswordField", () => {
 				value="Tr0ub4dour&long"
 			/>
 		);
-		expect(screen.getByText(/strong|good|fair|weak/i)).toBeInTheDocument();
+		expect(screen.getByText("Strong")).toBeInTheDocument();
 	});
 	it("calls onChange", () => {
 		const onChange = vi.fn();

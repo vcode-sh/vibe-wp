@@ -7,7 +7,7 @@
  */
 import type { PanelRole } from "@control-panel/auth/access";
 
-export type { PanelRole };
+export type { PanelRole } from "@control-panel/auth/access";
 
 export const ROLE_OPTIONS = [
 	{ value: "viewer", label: "Viewer", blurb: "Read-only access." },
@@ -23,9 +23,7 @@ export function roleLabel(role: string): string {
 	return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
 }
 
-export function roleVariant(
-	role: string
-): "default" | "secondary" | "outline" {
+export function roleVariant(role: string): "default" | "secondary" | "outline" {
 	if (role === "admin") {
 		return "default";
 	}

@@ -52,7 +52,9 @@ export function SessionsCard() {
 		mutationFn: async () => {
 			const res = await authClient.revokeOtherSessions();
 			if (res.error) {
-				throw new Error(res.error.message ?? "Failed to sign out other devices.");
+				throw new Error(
+					res.error.message ?? "Failed to sign out other devices."
+				);
 			}
 		},
 		onSuccess: async () => {

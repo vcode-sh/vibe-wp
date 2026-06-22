@@ -28,13 +28,13 @@ describe("AddUserDialog", () => {
 				/>
 			)
 		);
-		fireEvent.click(screen.getByRole("button", { name: /add user/i }));
-		const submit = screen.getByRole("button", { name: /create user/i });
+		fireEvent.click(screen.getByRole("button", { name: "Add user" }));
+		const submit = screen.getByRole("button", { name: "Create user" });
 		expect(submit).toBeDisabled();
-		fireEvent.change(screen.getByLabelText(/email/i), {
+		fireEvent.change(screen.getByLabelText("Email"), {
 			target: { value: "x@y.com" },
 		});
-		fireEvent.change(screen.getByLabelText(/temporary password/i), {
+		fireEvent.change(screen.getByLabelText("Temporary password"), {
 			target: { value: "longenough" },
 		});
 		expect(submit).not.toBeDisabled();
