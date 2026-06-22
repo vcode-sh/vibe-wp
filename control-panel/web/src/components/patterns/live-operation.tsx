@@ -15,10 +15,10 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { GENERIC_STEPS, OP_STEPS } from "@/lib/live/op-steps";
 import { parseRcloneProgress } from "@/lib/live/progress";
 import { deriveSteps, type Step } from "@/lib/live/steps";
+import { useAutoScroll } from "@/lib/live/use-auto-scroll";
 import { useLiveStream } from "@/lib/live/use-live-stream";
 import { client } from "@/lib/orpc/client";
 
@@ -99,6 +99,9 @@ export function LiveOperation({
 			setCanceling(false);
 		}
 	}, [open]);
+
+	// Auto-scroll the raw-log pane as lines arrive; only follows when pinned.
+	const logRef = useAutoScroll<HTMLDivElement>(live.lines.length);
 
 	const rawSteps = deriveSteps(live.lines, OP_STEPS[kind] ?? GENERIC_STEPS);
 	// Once finished, the trailing "active" step is complete — stop its spinner.
@@ -184,11 +187,15 @@ export function LiveOperation({
 						Show details
 					</CollapsibleTrigger>
 					<CollapsibleContent>
-						<ScrollArea className="mt-2 h-40 rounded-md border border-border bg-background p-3 font-mono text-muted-foreground text-xs">
+						{/* Plain div so the ref attaches directly to the scrollable element. */}
+						<div
+							className="mt-2 h-40 overflow-y-auto rounded-md border border-border bg-background p-3 font-mono text-muted-foreground text-xs"
+							ref={logRef}
+						>
 							<pre className="whitespace-pre-wrap break-words">
 								{live.lines.join("\n")}
 							</pre>
-						</ScrollArea>
+						</div>
 					</CollapsibleContent>
 				</Collapsible>
 			</DialogContent>
