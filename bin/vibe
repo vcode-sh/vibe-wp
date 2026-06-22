@@ -88,8 +88,49 @@ case "${command}" in
     vibe_compose logs --no-color --tail=200 "$@"
     ;;
   backups)
-    # List available backup directories for this env (newest last), one per line.
-    ls -1d "$(backup_root)"/*/ 2>/dev/null | sed 's#/*$##' || true
+    # List available backups for this env, one per line, TAB-separated:
+    # <path>\t<bytes>\t<location>\t<complete>
+    # location: "both" if the backup also exists on the remote, else "local".
+    # complete: "complete" if manifest.txt + declared db + wp-content archives exist, else "partial".
+    _backup_root="$(backup_root)"
+
+    # Build a set of remote basenames once (only when remote is enabled).
+    _remote_basenames=""
+    if backup_remote_enabled 2>/dev/null; then
+      _remote_basenames="$(backup_list_remote 2>/dev/null | while IFS= read -r rpath; do
+        [ -n "${rpath}" ] && basename "${rpath}"
+      done)"
+    fi
+
+    ls -1d "${_backup_root}/"*/ 2>/dev/null | sed 's#/*$##' | while IFS= read -r dir; do
+      [ -d "${dir}" ] || continue
+
+      # Size in bytes (total for the dir).
+      _bytes="$(du -sb "${dir}" 2>/dev/null | cut -f1)"
+      [ -n "${_bytes}" ] || _bytes=0
+
+      # Location: check if basename is among remote basenames.
+      _name="$(basename "${dir}")"
+      if printf '%s\n' "${_remote_basenames}" | grep -qx "${_name}" 2>/dev/null; then
+        _loc="both"
+      else
+        _loc="local"
+      fi
+
+      # Completeness: manifest must exist and declare db + wp-content archives.
+      _manifest="${dir}/manifest.txt"
+      _complete="partial"
+      if [ -f "${_manifest}" ]; then
+        _db_file="$(grep '^database=' "${_manifest}" | cut -d= -f2 | tr -d '[:space:]')"
+        _wc_file="$(grep '^wp_content=' "${_manifest}" | cut -d= -f2 | tr -d '[:space:]')"
+        if [ -n "${_db_file}" ] && [ -n "${_wc_file}" ] && \
+           [ -s "${dir}/${_db_file}" ] && [ -s "${dir}/${_wc_file}" ]; then
+          _complete="complete"
+        fi
+      fi
+
+      printf '%s\t%s\t%s\t%s\n' "${dir}" "${_bytes}" "${_loc}" "${_complete}"
+    done || true
     ;;
   backups-remote)
     # List off-server (R2) backups as local-equivalent paths; restore auto-fetches.

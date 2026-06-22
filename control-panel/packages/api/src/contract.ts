@@ -60,7 +60,7 @@ export interface ServerInfo {
 
 export interface BackupRecord {
 	id: string;
-	location: "local" | "offsite";
+	location: "local" | "offsite" | "both";
 	sizeMB: number;
 	verified: boolean;
 	whenISO: string;

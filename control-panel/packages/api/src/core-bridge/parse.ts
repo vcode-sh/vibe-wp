@@ -67,23 +67,55 @@ function isoFromPath(path: string): string {
 	return "";
 }
 
+function parseBinLocation(raw: string): BackupRecord["location"] {
+	if (raw === "both") {
+		return "both";
+	}
+	if (raw === "offsite") {
+		return "offsite";
+	}
+	return "local";
+}
+
+function parseTabLine(trimmed: string): BackupRecord {
+	// New TAB-separated format: <path>\t<bytes>\t<location>\t<complete>
+	const parts = trimmed.split("\t");
+	const path = (parts[0] ?? "").replace(TRAILING_SLASH, "");
+	const bytes = Number(parts[1] ?? "0") || 0;
+	const sizeMB = Math.round((bytes / 1_048_576) * 10) / 10;
+	return {
+		id: path,
+		location: parseBinLocation(parts[2] ?? "local"),
+		sizeMB,
+		verified: (parts[3] ?? "") === "complete",
+		whenISO: isoFromPath(path),
+	};
+}
+
+function parsePathLine(path: string): BackupRecord {
+	// Back-compat: old bin output — just a plain path, no tabs.
+	return {
+		id: path,
+		location:
+			path.includes("/offsite") || path.includes("remote")
+				? "offsite"
+				: "local",
+		sizeMB: 0,
+		verified: false,
+		whenISO: isoFromPath(path),
+	};
+}
+
 export function parseBackups(stdout: string): BackupRecord[] {
 	const records: BackupRecord[] = [];
 	for (const raw of stdout.split("\n")) {
-		const path = raw.trim().replace(TRAILING_SLASH, "");
-		if (!path) {
+		const trimmed = raw.trim().replace(TRAILING_SLASH, "");
+		if (!trimmed) {
 			continue;
 		}
-		records.push({
-			id: path,
-			location:
-				path.includes("/offsite") || path.includes("remote")
-					? "offsite"
-					: "local",
-			sizeMB: 0,
-			verified: true,
-			whenISO: isoFromPath(path),
-		});
+		records.push(
+			trimmed.includes("\t") ? parseTabLine(trimmed) : parsePathLine(trimmed)
+		);
 	}
 	return records.sort((a, b) => (a.whenISO < b.whenISO ? 1 : -1));
 }

@@ -27,12 +27,26 @@ export const Route = createFileRoute("/_auth/sites/$siteId/backups")({
 	component: BackupsPage,
 });
 
+function locationLabel(loc: BackupRecord["location"]): string {
+	if (loc === "offsite") {
+		return "off-site";
+	}
+	if (loc === "both") {
+		return "local + off-site";
+	}
+	return "local";
+}
+
 function BackupsPage() {
 	const { siteId } = Route.useParams();
-	const backups = useQuery(backupsQuery(siteId));
+	const { start, isRunning } = useOperations();
+	const backupRunning = isRunning(siteId, "backup");
+	const backups = useQuery({
+		...backupsQuery(siteId),
+		refetchInterval: backupRunning ? 4000 : false,
+	});
 	const now = new Date();
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
-	const { start, isRunning } = useOperations();
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
@@ -114,10 +128,12 @@ function BackupsPage() {
 									{backups.data.map((b) => (
 										<TableRow key={b.id}>
 											<TableCell>{relativeTime(b.whenISO, now)}</TableCell>
-											<TableCell>{b.sizeMB} MB</TableCell>
+											<TableCell>
+												{b.sizeMB > 0 ? `${b.sizeMB} MB` : "—"}
+											</TableCell>
 											<TableCell>
 												<Badge variant="outline">
-													{b.location === "offsite" ? "off-site" : "local"}
+													{locationLabel(b.location)}
 												</Badge>
 											</TableCell>
 											<TableCell>

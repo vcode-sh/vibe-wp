@@ -66,6 +66,34 @@ describe("parseBackups", () => {
 			parseBackups("/var/backups/vibe-wp/acme/prod/latest\n")[0]?.whenISO
 		).toBe("");
 	});
+
+	it("parses new TAB-separated format with real size, location=both, and complete", () => {
+		const r = parseBackups(
+			"/var/backups/vibe-wp/acme/prod/20260622T102446Z\t9438934\tboth\tcomplete\n"
+		);
+		expect(r).toHaveLength(1);
+		const rec = r[0];
+		expect(rec?.whenISO).toBe("2026-06-22T10:24:46Z");
+		expect(rec?.sizeMB).toBe(9.0);
+		expect(rec?.location).toBe("both");
+		expect(rec?.verified).toBe(true);
+	});
+
+	it("parses TAB format with location=local and partial completeness", () => {
+		const r = parseBackups(
+			"/var/backups/vibe-wp/acme/prod/20260622T120000Z\t2097152\tlocal\tpartial\n"
+		);
+		expect(r[0]?.location).toBe("local");
+		expect(r[0]?.verified).toBe(false);
+		expect(r[0]?.sizeMB).toBe(2);
+	});
+
+	it("back-compat: plain path (no tab) falls back to old behavior — sizeMB 0, verified false", () => {
+		const r = parseBackups("/var/backups/vibe-wp/acme/prod/20260621T200601Z\n");
+		expect(r[0]?.sizeMB).toBe(0);
+		expect(r[0]?.verified).toBe(false);
+		expect(r[0]?.location).toBe("local");
+	});
 });
 
 describe("parseChecksJson", () => {
