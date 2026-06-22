@@ -6,7 +6,7 @@
  */
 import { db } from "@control-panel/db";
 import { notifyConfig } from "@control-panel/db/schema/notify";
-import { eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { runVibe } from "./exec";
 import type {
@@ -58,7 +58,6 @@ export async function setNotifyConfig(
 		webhookUrl: rest.webhookUrl ?? null,
 		email: rest.email ?? null,
 		alertOnWarn: rest.alertOnWarn ?? null,
-		enabled: rest.enabled ?? null,
 		telegramToken: tokenUpdate.telegramToken ?? null,
 	};
 
@@ -97,15 +96,6 @@ export async function notifyConfigEnv(
 ): Promise<Record<string, string>> {
 	const cfg = await resolveNotifyConfig(siteId);
 	return toEnv(cfg);
-}
-
-/** Per-site config rows the user has saved (excludes the global row). */
-export async function listConfiguredNotifySiteIds(): Promise<string[]> {
-	const rows = await db
-		.select({ siteId: notifyConfig.siteId })
-		.from(notifyConfig)
-		.where(ne(notifyConfig.siteId, GLOBAL_SITE_ID));
-	return rows.map((r) => r.siteId);
 }
 
 /**

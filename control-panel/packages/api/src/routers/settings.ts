@@ -15,7 +15,6 @@ import { runVibe } from "../core-bridge/exec";
 import {
 	applyNotifyConfigToSite,
 	getNotifyConfig,
-	listConfiguredNotifySiteIds,
 	setNotifyConfig,
 } from "../core-bridge/notify-config";
 import type { NotifyConfigRow } from "../core-bridge/notify-config-pure";
@@ -66,7 +65,6 @@ const notifyConfigSetInput = z.object({
 	webhookUrl: z.string().optional(),
 	email: z.string().optional(),
 	alertOnWarn: z.number().int().min(0).max(1).optional(),
-	enabled: z.number().int().min(0).max(1).optional(),
 });
 
 /**
@@ -133,11 +131,14 @@ export const settingsRouter = {
 		.handler(async ({ input }) => {
 			const { siteId, ...patch } = input;
 			await setNotifyConfig(siteId, patch);
-			// Push the resolved channels into each affected site's prod.env so the
-			// cron health monitor delivers alerts through them.
+			// Notifications are configured globally (there is no per-site notify UI),
+			// so a global save must reach EVERY real site — not only sites with a
+			// per-site notify row (which never exist). resolveNotifyConfig for a site
+			// with no row resolves to the global config, so each site's env receives
+			// the global channels and the cron monitor delivers alerts.
 			await applyToSites(
 				siteId,
-				listConfiguredNotifySiteIds,
+				async () => (await detectSites()).map((s) => s.id),
 				applyNotifyConfigToSite
 			);
 			return { ok: true };
@@ -146,9 +147,17 @@ export const settingsRouter = {
 	notifyTest: adminProcedure
 		.input(z.object({ siteId: z.string().min(1) }))
 		.handler(async ({ input }) => {
-			const site = await findSite(input.siteId);
+			// The global card sends siteId === GLOBAL_SITE_ID (no site-specific row),
+			// so fall back to the first detected site — same pattern as
+			// backupConfigTest. The test reads channels from that site's prod.env.
+			let site =
+				input.siteId === GLOBAL_SITE_ID ? null : await findSite(input.siteId);
 			if (!site) {
-				return { ok: false, message: "Site not found." };
+				const sites = await detectSites();
+				site = sites[0] ?? null;
+			}
+			if (!site) {
+				return { ok: false, message: "No site found — deploy a site first." };
 			}
 			const result = await runVibe(site.installDir, "prod", "notifyTest");
 			const message = (result.stdout || result.stderr).trim();

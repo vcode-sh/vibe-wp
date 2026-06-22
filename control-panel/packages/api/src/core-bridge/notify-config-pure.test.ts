@@ -15,7 +15,6 @@ function row(overrides: Partial<NotifyConfigRow> = {}): NotifyConfigRow {
 		webhookUrl: null,
 		email: null,
 		alertOnWarn: null,
-		enabled: null,
 		...overrides,
 	};
 }
@@ -41,18 +40,11 @@ describe("mergeNotifyConfig", () => {
 		expect(cfg.webhookUrl).toBe("https://hook");
 	});
 
-	it("enabled comes only from site row", () => {
-		const global = row({ enabled: 1 });
-		const site = row({ siteId: "s1", enabled: 0 });
+	it("alertOnWarn site value overrides global", () => {
+		const global = row({ alertOnWarn: 1 });
+		const site = row({ siteId: "s1", alertOnWarn: 0 });
 		const cfg = mergeNotifyConfig(global, site);
-		expect(cfg.enabled).toBe(0);
-	});
-
-	it("enabled is null when site row has no enabled", () => {
-		const global = row({ enabled: 1 });
-		const site = row({ siteId: "s1" });
-		const cfg = mergeNotifyConfig(global, site);
-		expect(cfg.enabled).toBeNull();
+		expect(cfg.alertOnWarn).toBe(0);
 	});
 
 	it("alertOnWarn inherits from global when site is null", () => {
@@ -68,7 +60,6 @@ describe("mergeNotifyConfig", () => {
 		expect(cfg.webhookUrl).toBeNull();
 		expect(cfg.email).toBeNull();
 		expect(cfg.alertOnWarn).toBeNull();
-		expect(cfg.enabled).toBeNull();
 	});
 });
 
@@ -83,7 +74,6 @@ describe("toEnv", () => {
 		webhookUrl: "https://hook.example.com",
 		email: "ops@example.com",
 		alertOnWarn: 1 as number | null,
-		enabled: 1 as number | null,
 	};
 
 	it("maps all channel fields when fully configured", () => {
@@ -118,7 +108,6 @@ describe("toEnv", () => {
 			webhookUrl: null,
 			email: null,
 			alertOnWarn: null,
-			enabled: null,
 		});
 		expect(env).toEqual({ VIBE_MONITOR_ALERT_ON_WARN: "0" });
 	});

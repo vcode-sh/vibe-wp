@@ -18,6 +18,4 @@ export const notifyConfig = sqliteTable("notify_config", {
 	email: text("email"),
 	/** 1 = alert on warnings too, 0 = failures only, null = inherit/default. */
 	alertOnWarn: integer("alert_on_warn"),
-	/** 1 = enabled, 0 = disabled, null = inherit from global. */
-	enabled: integer("enabled"),
 });

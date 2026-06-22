@@ -9,7 +9,6 @@ export const GLOBAL_SITE_ID = "__global__";
 export interface NotifyConfigRow {
 	alertOnWarn: number | null;
 	email: string | null;
-	enabled: number | null;
 	siteId: string;
 	telegramChatId: string | null;
 	telegramToken: string | null;
@@ -20,7 +19,6 @@ export interface NotifyConfigRow {
 export interface EffectiveNotifyConfig {
 	alertOnWarn: number | null;
 	email: string | null;
-	enabled: number | null;
 	telegramChatId: string | null;
 	telegramToken: string | null;
 	webhookUrl: string | null;
@@ -29,7 +27,8 @@ export interface EffectiveNotifyConfig {
 /**
  * Merges a global row and a site-specific row into effective config.
  * For every channel field: the site value takes precedence over global.
- * `enabled` comes from the site row only — there is no global fallback.
+ * The presence of any channel is the de-facto enable — there is no separate
+ * master enable switch (bin/monitor has none).
  */
 export function mergeNotifyConfig(
 	global: NotifyConfigRow | null,
@@ -44,8 +43,6 @@ export function mergeNotifyConfig(
 		webhookUrl: s.webhookUrl ?? g.webhookUrl ?? null,
 		email: s.email ?? g.email ?? null,
 		alertOnWarn: s.alertOnWarn ?? g.alertOnWarn ?? null,
-		// `enabled` comes from the site row only — there is no global fallback.
-		enabled: s.enabled ?? null,
 	};
 }
 
