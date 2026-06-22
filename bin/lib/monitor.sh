@@ -67,14 +67,14 @@ monitor_check_http() {
     monitor_warn "HTTP uptime: no WP_HOME/WP_SITEURL configured (skipped)"
     return 0
   fi
-  code="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 15 "${url}/" 2>/dev/null || printf '000')"
-  if [ "${code}" = "000" ]; then
-    monitor_fail "HTTP uptime: ${url} unreachable"
-  elif [ "${code}" -lt 400 ] 2>/dev/null; then
-    monitor_ok "HTTP uptime: ${url} returned ${code}"
-  else
-    monitor_fail "HTTP uptime: ${url} returned ${code}"
-  fi
+  # curl already prints 000 on connection-refused/timeout/DNS-failure; do NOT
+  # add a `|| printf 000` fallback or it concatenates to "000000", which would
+  # slip past a `= 000` guard and read as < 400 (a hard-down site reported Up).
+  code="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 15 "${url}/" 2>/dev/null)"
+  case "${code}" in
+    2??|3??) monitor_ok "HTTP uptime: ${url} returned ${code}" ;;
+    *) monitor_fail "HTTP uptime: ${url} returned ${code:-000}" ;;
+  esac
 }
 
 # 2. Disk space: backup root filesystem and / must have headroom.

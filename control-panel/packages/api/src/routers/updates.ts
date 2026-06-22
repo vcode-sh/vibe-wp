@@ -14,7 +14,11 @@ export const updatesRouter = {
 			if (!site) {
 				return { plugins: 0 };
 			}
-			const out = await runVibe(site.installDir, "prod", "wpPluginUpdates");
+			// `compose run --rm wp` can be slow; give it more than the 60s default
+			// so a slow run is not killed → empty stdout → false "0 updates".
+			const out = await runVibe(site.installDir, "prod", "wpPluginUpdates", {
+				timeoutMs: 90_000,
+			});
 			return { plugins: parseWpUpdateCount(out.stdout) };
 		}),
 

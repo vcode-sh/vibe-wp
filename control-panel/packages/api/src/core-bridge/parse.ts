@@ -196,11 +196,12 @@ const securityEnvelope = z.object({
 });
 
 export function parseSecurityStatus(stdout: string): SecurityStatus {
-	try {
-		return securityEnvelope.parse(JSON.parse(stdout.trim()));
-	} catch {
-		return { firewall: false, fail2ban: false, autoUpdates: false };
-	}
+	// A genuine all-off posture is VALID JSON ({"firewall":false,...}) and parses
+	// normally. Unparseable/empty output means "couldn't determine" (e.g. the
+	// script is missing or the process was killed) — THROW so the procedure
+	// rejects and the UI shows its error state, rather than faking an all-off
+	// posture that reads as a real (but false) "everything is off".
+	return securityEnvelope.parse(JSON.parse(stdout.trim()));
 }
 
 export function parseWpUpdateCount(stdout: string): number {

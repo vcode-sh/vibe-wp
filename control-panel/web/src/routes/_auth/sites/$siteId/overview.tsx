@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { DeveloperDetails } from "@/components/patterns/developer-details";
@@ -27,6 +28,35 @@ function OverviewPage() {
 
 	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
+
+	const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+	const needs = overview.data?.needs ?? [];
+	const visibleNeeds = needs.filter((n) => !snoozed.has(n.id));
+	const needsKey = needs.map((n) => n.id).join("\n");
+
+	// A snoozed need is hidden until its underlying condition clears. Once the
+	// server stops reporting that id, prune it so the same stable id can resurface
+	// later. Guard the setState so we only update when something actually changes,
+	// avoiding a render loop.
+	useEffect(() => {
+		const presentIds = new Set(needsKey ? needsKey.split("\n") : []);
+		setSnoozed((prev) => {
+			let changed = false;
+			const next = new Set<string>();
+			for (const id of prev) {
+				if (presentIds.has(id)) {
+					next.add(id);
+				} else {
+					changed = true;
+				}
+			}
+			return changed ? next : prev;
+		});
+	}, [needsKey]);
+
+	function handleLater(id: string) {
+		setSnoozed((prev) => new Set([...prev, id]));
+	}
 
 	async function handleApplyUpdates(what: "core" | "plugins" = "core") {
 		try {
@@ -80,12 +110,16 @@ function OverviewPage() {
 					{overview.data ? (
 						<>
 							<StatusHero
-								calm={overview.data.needs.length === 0}
+								calm={visibleNeeds.length === 0}
 								headline={overview.data.headline}
 								status={overview.data.status}
 								subline={overview.data.subline}
 							/>
-							<NeedsYou items={overview.data.needs} onAct={handleAct} />
+							<NeedsYou
+								items={visibleNeeds}
+								onAct={handleAct}
+								onLater={handleLater}
+							/>
 							{pluginCount > 0 ? (
 								<div className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3 text-sm">
 									<span className="text-muted-foreground">

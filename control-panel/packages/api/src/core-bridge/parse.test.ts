@@ -169,12 +169,21 @@ describe("parseSecurityStatus", () => {
 			autoUpdates: true,
 		});
 	});
-	it("returns all-false fallback on garbage input", () => {
-		expect(parseSecurityStatus("not json")).toEqual({
+	it("parses a genuine all-off posture (valid JSON) as all false", () => {
+		const r = parseSecurityStatus(
+			'{"firewall":false,"fail2ban":false,"autoUpdates":false}'
+		);
+		expect(r).toEqual({
 			firewall: false,
 			fail2ban: false,
 			autoUpdates: false,
 		});
+	});
+	it("throws on garbage input (couldn't determine, not all-off)", () => {
+		expect(() => parseSecurityStatus("not json")).toThrow();
+	});
+	it("throws on empty input", () => {
+		expect(() => parseSecurityStatus("")).toThrow();
 	});
 });
 

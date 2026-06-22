@@ -59,15 +59,15 @@ function ServerPage() {
 					subtitle="The VPS shared by all your sites."
 					title="Server & security"
 				/>
-				<QueryBoundary
-					errorMessage="Couldn't load server info."
-					hasData={Boolean(server.data)}
-					isError={server.isError}
-					isLoading={server.isLoading}
-					onRetry={() => server.refetch()}
-					skeletonClassName="h-36 w-full"
-				>
-					<div className="grid gap-4 sm:grid-cols-2">
+				<div className="grid gap-4 sm:grid-cols-2">
+					<QueryBoundary
+						errorMessage="Couldn't load server info."
+						hasData={Boolean(server.data)}
+						isError={server.isError}
+						isLoading={server.isLoading}
+						onRetry={() => server.refetch()}
+						skeletonClassName="h-36 w-full"
+					>
 						<Card>
 							<CardHeader>
 								<CardTitle className="text-sm">Host</CardTitle>
@@ -78,40 +78,40 @@ function ServerPage() {
 								<div>Disk used: {server.data?.diskPercent ?? "—"}%</div>
 							</CardContent>
 						</Card>
+					</QueryBoundary>
+					<QueryBoundary
+						errorMessage="Couldn't load security status."
+						hasData={Boolean(security.data)}
+						isError={security.isError}
+						isLoading={security.isLoading}
+						onRetry={() => security.refetch()}
+						skeletonClassName="h-36 w-full"
+					>
 						<Card>
 							<CardHeader>
 								<CardTitle className="text-sm">Security</CardTitle>
 							</CardHeader>
-							<CardContent>
-								<QueryBoundary
-									errorMessage="Couldn't load security status."
-									hasData={Boolean(security.data)}
-									isError={security.isError}
-									isLoading={security.isLoading}
-									onRetry={() => security.refetch()}
-									skeletonClassName="h-16 w-full"
-								>
-									{security.data ? (
-										<div className="grid gap-1 text-sm">
-											<SecurityRow
-												active={security.data.firewall}
-												label="Firewall"
-											/>
-											<SecurityRow
-												active={security.data.fail2ban}
-												label="fail2ban"
-											/>
-											<SecurityRow
-												active={security.data.autoUpdates}
-												label="Auto-updates"
-											/>
-										</div>
-									) : null}
-								</QueryBoundary>
+							<CardContent className="grid gap-1 text-sm">
+								{security.data ? (
+									<>
+										<SecurityRow
+											active={security.data.firewall}
+											label="Firewall"
+										/>
+										<SecurityRow
+											active={security.data.fail2ban}
+											label="fail2ban"
+										/>
+										<SecurityRow
+											active={security.data.autoUpdates}
+											label="Auto-updates"
+										/>
+									</>
+								) : null}
 							</CardContent>
 						</Card>
-					</div>
-				</QueryBoundary>
+					</QueryBoundary>
+				</div>
 				{/* Site lifecycle (stop/start/restart) needs a site-scoped UI — tracked as a follow-up. */}
 			</div>
 		</>

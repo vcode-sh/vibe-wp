@@ -135,7 +135,11 @@ export const sitesRouter = {
 			const [smokeRes, backupsRes, updatesRes, audit] = await Promise.all([
 				runVibe(site.installDir, "prod", "smoke", { timeoutMs: 90_000 }),
 				runVibe(site.installDir, "prod", "backups"),
-				runVibe(site.installDir, "prod", "wpPluginUpdates"),
+				// `compose run --rm wp` can be slow; match smoke's budget so a slow
+				// run is not killed → empty stdout → updates need silently suppressed.
+				runVibe(site.installDir, "prod", "wpPluginUpdates", {
+					timeoutMs: 90_000,
+				}),
 				recentAudit(site.id),
 			]);
 			const smoke = parseSmoke(smokeRes.stdout);
