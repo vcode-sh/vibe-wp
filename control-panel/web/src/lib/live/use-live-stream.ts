@@ -3,9 +3,9 @@ import { useEffect, useReducer, useRef } from "react";
 import type { StreamEvent } from "@/data/types";
 import { initialLiveState, type LiveState, liveReducer } from "./live-reducer";
 
-type Source = () =>
-	| AsyncIterable<StreamEvent>
-	| Promise<AsyncIterable<StreamEvent>>;
+type Source = (
+	signal: AbortSignal
+) => AsyncIterable<StreamEvent> | Promise<AsyncIterable<StreamEvent>>;
 
 export function useLiveStream(source: Source, active: boolean): LiveState {
 	const [state, dispatch] = useReducer(
@@ -27,8 +27,9 @@ export function useLiveStream(source: Source, active: boolean): LiveState {
 		// runner doesn't show the previous operation's lines.
 		dispatch({ reset: true, at: Date.now() });
 		let on = true;
+		const ac = new AbortController();
 		(async () => {
-			const iter = await sourceRef.current();
+			const iter = await sourceRef.current(ac.signal);
 			for await (const event of iter) {
 				if (!on) {
 					break;
@@ -38,6 +39,7 @@ export function useLiveStream(source: Source, active: boolean): LiveState {
 		})().catch(() => undefined);
 		return () => {
 			on = false;
+			ac.abort();
 		};
 	}, [active]);
 

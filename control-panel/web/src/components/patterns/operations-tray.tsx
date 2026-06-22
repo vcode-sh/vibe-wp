@@ -59,7 +59,7 @@ function TrayCardStatus({
 function TrayCard({ op }: { op: Operation }) {
 	const { expand, dismiss, finish } = useOperations();
 	const live = useLiveStream(
-		() => client.operationsStream({ jobId: op.jobId }),
+		(signal) => client.operationsStream({ jobId: op.jobId }, { signal }),
 		true
 	);
 	const [now, setNow] = useState(() => Date.now());

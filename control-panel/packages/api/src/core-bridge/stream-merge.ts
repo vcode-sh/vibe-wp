@@ -76,6 +76,12 @@ export function mergeLineStreams(
 				});
 			}
 		} finally {
+			// Cancel all readers first so any parked reader.read() unblocks
+			// immediately — prevents a hang when the consumer calls iterator.return()
+			// while a pump is blocked waiting for the next chunk.
+			for (const r of readers) {
+				r.cancel().catch(() => undefined);
+			}
 			await Promise.allSettled(pumps);
 		}
 	})();

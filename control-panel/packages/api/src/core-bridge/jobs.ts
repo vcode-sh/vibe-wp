@@ -133,7 +133,9 @@ export async function startJob(
 		throw new Error("Unknown site");
 	}
 	if (hasRunningJob(input.siteId, input.kind)) {
-		throw new Error("An operation of this type is already running for this site.");
+		throw new Error(
+			"An operation of this type is already running for this site."
+		);
 	}
 	const jobId = crypto.randomUUID();
 	const stream = new LineStream();

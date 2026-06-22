@@ -40,7 +40,10 @@ function ServerPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button disabled={harden.isPending || isRunning("server", "harden")} onClick={handleHarden}>
+						<Button
+							disabled={harden.isPending || isRunning("server", "harden")}
+							onClick={handleHarden}
+						>
 							Secure the server
 						</Button>
 					}

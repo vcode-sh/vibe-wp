@@ -97,7 +97,11 @@ function loadFromStorage(): Pick<OperationsState, "ops" | "finished"> | null {
 	}
 }
 
-const initialState: OperationsState = { ops: [], expandedId: null, finished: [] };
+const initialState: OperationsState = {
+	ops: [],
+	expandedId: null,
+	finished: [],
+};
 
 interface OperationsContextValue {
 	dismiss: (jobId: string) => void;

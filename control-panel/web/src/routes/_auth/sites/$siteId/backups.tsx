@@ -78,7 +78,10 @@ function BackupsPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button disabled={runBackup.isPending || isRunning(siteId, "backup")} onClick={handleBackupNow}>
+						<Button
+							disabled={runBackup.isPending || isRunning(siteId, "backup")}
+							onClick={handleBackupNow}
+						>
 							Back up now
 						</Button>
 					}

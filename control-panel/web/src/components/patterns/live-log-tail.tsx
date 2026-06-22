@@ -9,7 +9,10 @@ export function LiveLogTail({
 	siteId: string;
 	active: boolean;
 }) {
-	const live = useLiveStream(() => client.logsFollow({ siteId }), active);
+	const live = useLiveStream(
+		(signal) => client.logsFollow({ siteId }, { signal }),
+		active
+	);
 	const text = live.lines.slice(-500).join("\n");
 
 	// Auto-scroll as lines arrive; pauses if the user scrolls up.

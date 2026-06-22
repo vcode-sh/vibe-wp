@@ -45,7 +45,12 @@ function OverviewPage() {
 	async function handleBackup() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
-			start({ jobId: result.jobId, title: "Backing up…", kind: "backup", siteId });
+			start({
+				jobId: result.jobId,
+				title: "Backing up…",
+				kind: "backup",
+				siteId,
+			});
 		} catch {
 			toast.error("Failed to start backup.");
 		}
@@ -88,7 +93,9 @@ function OverviewPage() {
 										available
 									</span>
 									<Button
-										disabled={applyUpdates.isPending || isRunning(siteId, "wpUpdate")}
+										disabled={
+											applyUpdates.isPending || isRunning(siteId, "wpUpdate")
+										}
 										onClick={() => handleApplyUpdates("plugins")}
 										size="sm"
 										variant="outline"

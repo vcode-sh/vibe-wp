@@ -25,13 +25,23 @@ describe("parseRcloneProgress", () => {
 			eta: "40s",
 		});
 	});
-	it("treats an unknown ETA ('-') as empty", () => {
-		const r = parseRcloneProgress("220 KiB / 8 MiB, 3%, 0 B/s, ETA -");
+	it("treats an unknown ETA ('-') as empty (Transferred: prefix)", () => {
+		const r = parseRcloneProgress(
+			"Transferred:   220 KiB / 8 MiB, 3%, 0 B/s, ETA -"
+		);
 		expect(r?.eta).toBe("");
 		expect(r?.percent).toBe(3);
 	});
 	it("returns null for a non-progress line", () => {
 		expect(parseRcloneProgress("Dumping MariaDB...")).toBeNull();
 		expect(parseRcloneProgress("")).toBeNull();
+	});
+	it("does NOT parse prose containing a size-ratio + percent (no rclone prefix or rate /s)", () => {
+		// Must not false-positive on generic log lines that happen to contain
+		// a size-ratio + percent but lack the required rclone log prefix/label
+		// or the trailing rate with /s.
+		expect(
+			parseRcloneProgress("Some random log: 12 KiB / 99 KiB, 12%, blah")
+		).toBeNull();
 	});
 });

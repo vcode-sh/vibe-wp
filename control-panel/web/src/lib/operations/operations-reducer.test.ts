@@ -116,10 +116,16 @@ describe("operationsReducer", () => {
 			finished: ["job-b"],
 		};
 		const backupRunning = state.ops.some(
-			(o) => o.siteId === "site-1" && o.kind === "backup" && !state.finished.includes(o.jobId)
+			(o) =>
+				o.siteId === "site-1" &&
+				o.kind === "backup" &&
+				!state.finished.includes(o.jobId)
 		);
 		const restoreRunning = state.ops.some(
-			(o) => o.siteId === "site-1" && o.kind === "restore" && !state.finished.includes(o.jobId)
+			(o) =>
+				o.siteId === "site-1" &&
+				o.kind === "restore" &&
+				!state.finished.includes(o.jobId)
 		);
 		expect(backupRunning).toBe(true);
 		expect(restoreRunning).toBe(false);

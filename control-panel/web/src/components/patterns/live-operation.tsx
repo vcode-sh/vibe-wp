@@ -4,7 +4,7 @@ import {
 	CollapsibleTrigger,
 } from "@control-panel/ui/components/collapsible";
 import { Progress } from "@control-panel/ui/components/progress";
-import { Ban, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, CircleHelp, Loader2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -58,10 +58,19 @@ function TerminalStatus({ status }: { status: string }) {
 			</div>
 		);
 	}
+	if (status === "succeeded") {
+		return (
+			<div className="flex items-center gap-1 text-sm text-success">
+				<CheckCircle2 aria-hidden className="size-4" />
+				<span>Done</span>
+			</div>
+		);
+	}
+	// Any other terminal status (e.g. an unexpected value): neutral, not green.
 	return (
-		<div className="flex items-center gap-1 text-sm text-success">
-			<CheckCircle2 aria-hidden className="size-4" />
-			<span>Done</span>
+		<div className="flex items-center gap-1 text-muted-foreground text-sm">
+			<CircleHelp aria-hidden className="size-4" />
+			<span>Finished</span>
 		</div>
 	);
 }
@@ -86,7 +95,7 @@ export function LiveOperation({
 	const [now, setNow] = useState(() => Date.now());
 	const [canceling, setCanceling] = useState(false);
 	const live = useLiveStream(
-		() => client.operationsStream({ jobId: jobId as string }),
+		(signal) => client.operationsStream({ jobId: jobId as string }, { signal }),
 		Boolean(open && jobId)
 	);
 

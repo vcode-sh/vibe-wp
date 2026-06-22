@@ -37,7 +37,7 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
 		return next;
 	}
 	if (event.line.length > 0) {
-		next.lines = [...state.lines, event.line];
+		next.lines = [...state.lines, event.line].slice(-1000);
 		next.lastLine = event.line;
 		next.lastLineAt = at;
 	}
