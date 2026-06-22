@@ -1,3 +1,4 @@
+import { buildBaseState } from "./base-state";
 import { detectHostFacts } from "./host";
 import { buildInstallPlan } from "./install-plan";
 import { availableOperations, type ManageOperation } from "./manage-operations";
@@ -5,7 +6,7 @@ import { buildOperationTask } from "./manage-tasks";
 import { runPlan } from "./plan-runner";
 import { redactPlan } from "./redaction";
 import { runTask, type TaskResult } from "./task-runner";
-import type { HostFacts, InstallerState, InstallPlan } from "./types";
+import type { HostFacts, InstallerState, InstallMode, InstallPlan } from "./types";
 import { validateState } from "./validation";
 
 // Frontend-agnostic request/response surface. Any frontend (TUI, web, desktop,
@@ -13,6 +14,7 @@ import { validateState } from "./validation";
 // business logic stays the single shared brain. JSON-serializable by design.
 export type CoreRequest =
   | { kind: "detect" }
+  | { kind: "baseState"; domain?: string; mode?: InstallMode }
   | { kind: "validate"; state: InstallerState }
   | { kind: "plan"; state: InstallerState; redact?: boolean }
   | { kind: "operations"; hasStaging?: boolean }
@@ -21,6 +23,7 @@ export type CoreRequest =
 
 export type CoreResponse =
   | { kind: "detect"; host: HostFacts }
+  | { kind: "baseState"; state: InstallerState }
   | { kind: "validate"; errors: string[] }
   | { kind: "plan"; plan: InstallPlan }
   | { kind: "operations"; operations: ManageOperation[] }
@@ -32,6 +35,13 @@ export async function runHeadless(request: CoreRequest): Promise<CoreResponse> {
   switch (request.kind) {
     case "detect":
       return { kind: "detect", host: await detectHostFacts() };
+    case "baseState": {
+      const host = await detectHostFacts();
+      return {
+        kind: "baseState",
+        state: buildBaseState(host, { domain: request.domain, mode: request.mode })
+      };
+    }
     case "validate":
       return { kind: "validate", errors: validateState(request.state) };
     case "plan": {

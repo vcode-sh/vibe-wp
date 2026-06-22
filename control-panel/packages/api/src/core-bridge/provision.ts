@@ -45,6 +45,7 @@ export type InstallerStateLike = { mode: string } & Record<string, unknown>;
  */
 export type CoreRequest =
 	| { kind: "detect" }
+	| { kind: "baseState"; domain?: string; mode?: ProvisionMode }
 	| { kind: "validate"; state: InstallerStateLike }
 	| { kind: "plan"; state: InstallerStateLike; redact?: boolean }
 	| { kind: "operations"; hasStaging?: boolean }
@@ -65,6 +66,7 @@ export interface TaskResultLike {
 
 export type CoreResponse =
 	| { kind: "detect"; host: unknown }
+	| { kind: "baseState"; state: InstallerStateLike }
 	| { kind: "validate"; errors: string[] }
 	| { kind: "plan"; plan: unknown }
 	| { kind: "operations"; operations: unknown[] }

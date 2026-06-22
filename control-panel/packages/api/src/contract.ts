@@ -118,3 +118,47 @@ export interface StreamEvent {
 	line: string;
 	status: JobStatus;
 }
+
+/** Every provisioning procedure returns the tracked job's id for the ops tray. */
+export interface ProvisionJobRef {
+	jobId: string;
+}
+
+export type PerformancePresetInput =
+	| "conservative"
+	| "balanced"
+	| "high-memory";
+export type BackupScheduleInput = "off" | "daily" | "weekly";
+
+/** Shared, validated shape for the new-site + external-services wizards. */
+export interface CreateSiteInput {
+	adminEmail: string;
+	backupSchedule?: BackupScheduleInput;
+	domain: string;
+	monitorEnabled?: boolean;
+	performancePreset?: PerformancePresetInput;
+	siteTitle?: string;
+	stagingDomain?: string;
+	stagingEnabled: boolean;
+}
+
+/** createSite + the external DB/Redis connection fields (passwords are secret). */
+export interface CreateExternalInput extends CreateSiteInput {
+	extDbHost: string;
+	extDbName: string;
+	extDbPassword: string;
+	extDbUser: string;
+	extRedisHost: string;
+	extRedisPassword: string;
+	extRedisPort: string;
+}
+
+export interface AttachStagingInput {
+	siteId: string;
+	stagingDomain: string;
+}
+
+export interface RemoveSiteInput {
+	purge: boolean;
+	siteId: string;
+}

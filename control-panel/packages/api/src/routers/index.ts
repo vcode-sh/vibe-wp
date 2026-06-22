@@ -6,6 +6,7 @@ import { healthRouter } from "./health";
 import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
+import { provisioningRouter } from "./provisioning";
 import { serverRouter } from "./server";
 import { settingsRouter } from "./settings";
 import { sitesRouter } from "./sites";
@@ -19,6 +20,7 @@ export const appRouter = {
 	...sitesRouter,
 	...backupsRouter,
 	...operationsRouter,
+	...provisioningRouter,
 	...serverRouter,
 	...stagingRouter,
 	...logsRouter,
