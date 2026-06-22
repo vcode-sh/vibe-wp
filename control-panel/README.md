@@ -61,6 +61,21 @@ Three roles are defined via the admin plugin + access control: `viewer` (read si
 
 It: installs Bun if absent, builds `control-panel/`, writes `server/.env` with a generated secret, applies the DB schema, creates a `vibe-panel` system user (added to the `docker` group), writes a `vibe-wp-panel.service` systemd unit, drops a Caddy snippet so the panel is served over HTTPS, and bootstraps the owner account. After install, `bin/panel status` and `bin/panel uninstall [--purge]` are available.
 
+For break-glass account recovery on the VPS, reset a panel user's password over
+SSH instead of using email delivery:
+
+```sh
+./bin/panel reset-password --email you@example.com
+```
+
+The command prompts for the new password without echoing it, asks for explicit
+confirmation, updates the local Better Auth credential account, and revokes that
+user's existing sessions. For automation, pipe the secret on stdin:
+
+```sh
+printf '%s\n' "$NEW_PANEL_PASSWORD" | ./bin/panel reset-password --email you@example.com --password-stdin --yes
+```
+
 Real-VPS end-to-end validation (browser sign-in → live sites → real backup stream via SSE) is pending as of 2026-06-21.
 
 ## Getting Started

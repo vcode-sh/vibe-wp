@@ -13,12 +13,13 @@ SUDOERS_FILE=/etc/sudoers.d/vibe-wp-panel
 if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 usage() {
-  echo "Usage: bin/panel <install|update|status|logs|uninstall> [options]"
+  echo "Usage: bin/panel <install|update|status|logs|reset-password|uninstall> [options]"
   echo ""
   echo "  install    --domain d --admin-email e [--port N] [--admin-password P]"
   echo "  update     Rebuild + redeploy the panel from the current repo checkout"
   echo "  status     Show systemd service status"
   echo "  logs       Tail panel service logs  [-n N] [-f]"
+  echo "  reset-password --email e [--password-stdin --yes]"
   echo "  uninstall  [--purge]"
   exit 1
 }
@@ -30,6 +31,9 @@ shift || true
 DOMAIN=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
+RESET_EMAIL=""
+PASSWORD_STDIN=0
+YES=0
 PURGE=0
 LOGS_FOLLOW=0
 LOGS_LINES=200
@@ -39,6 +43,9 @@ while [ $# -gt 0 ]; do
     --domain)         DOMAIN="$2";         shift 2 ;;
     --admin-email)    ADMIN_EMAIL="$2";    shift 2 ;;
     --admin-password) ADMIN_PASSWORD="$2"; shift 2 ;;
+    --email)          RESET_EMAIL="$2";    shift 2 ;;
+    --password-stdin) PASSWORD_STDIN=1;    shift ;;
+    --yes)            YES=1;               shift ;;
     --port)           PORT="$2";           shift 2 ;;
     --purge)          PURGE=1;             shift ;;
     -f)               LOGS_FOLLOW=1;       shift ;;
@@ -356,6 +363,66 @@ status_panel() {
   systemctl status $UNIT.service --no-pager || true
 }
 
+reset_password_panel() {
+  env_file="$PANEL_DIR/app/server/.env"
+  if ! $SUDO test -f "$env_file"; then
+    echo "panel: no existing installation found at $PANEL_DIR — run 'bin/panel install' first." >&2
+    return 1
+  fi
+  [ -n "$RESET_EMAIL" ] || { echo "panel: --email is required" >&2; return 1; }
+
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "Installing Bun..."
+    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
+  fi
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+
+  if [ "$PASSWORD_STDIN" = 1 ]; then
+    if [ "$YES" != 1 ]; then
+      echo "panel: --password-stdin requires --yes" >&2
+      return 1
+    fi
+    ( cd "$PANEL_DIR/app/server" && "$BUN" run src/cli/reset-password.ts --email "$RESET_EMAIL" --password-stdin )
+    return
+  fi
+
+  if [ ! -t 0 ]; then
+    echo "panel: interactive reset requires a TTY; use --password-stdin --yes for automation" >&2
+    return 1
+  fi
+
+  printf 'New password for %s: ' "$RESET_EMAIL"
+  stty -echo
+  read -r NEW_PASSWORD
+  stty echo
+  echo
+  printf 'Repeat new password: '
+  stty -echo
+  read -r NEW_PASSWORD_CONFIRM
+  stty echo
+  echo
+
+  if [ "$NEW_PASSWORD" != "$NEW_PASSWORD_CONFIRM" ]; then
+    NEW_PASSWORD=""
+    NEW_PASSWORD_CONFIRM=""
+    echo "panel: passwords do not match" >&2
+    return 1
+  fi
+
+  printf 'This will reset the panel password for %s and revoke existing sessions. Type RESET to continue: ' "$RESET_EMAIL"
+  read -r CONFIRM
+  if [ "$CONFIRM" != "RESET" ]; then
+    NEW_PASSWORD=""
+    NEW_PASSWORD_CONFIRM=""
+    echo "panel: aborted"
+    return 1
+  fi
+
+  printf '%s\n' "$NEW_PASSWORD" | ( cd "$PANEL_DIR/app/server" && "$BUN" run src/cli/reset-password.ts --email "$RESET_EMAIL" --password-stdin )
+  NEW_PASSWORD=""
+  NEW_PASSWORD_CONFIRM=""
+}
+
 uninstall_panel() {
   $SUDO systemctl disable --now $UNIT.service 2>/dev/null || true
   $SUDO rm -f /etc/systemd/system/$UNIT.service /etc/caddy/sites-enabled/vibe-wp-panel.caddy
@@ -381,6 +448,7 @@ case "$cmd" in
   update)    update_panel ;;
   status)    status_panel ;;
   logs)      logs_panel ;;
+  reset-password) reset_password_panel ;;
   uninstall) uninstall_panel ;;
   *)         usage ;;
 esac
