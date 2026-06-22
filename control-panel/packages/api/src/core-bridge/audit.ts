@@ -26,6 +26,7 @@ const LABEL: Record<string, string> = {
 	backup: "Backed up",
 	restore: "Restored a backup",
 	backupVerify: "Verified a backup",
+	cancel: "Canceled an operation",
 	cacheFlush: "Cleared the cache",
 	refresh: "Copied live to staging",
 	promote: "Published staging to live",
