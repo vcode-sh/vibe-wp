@@ -3,6 +3,40 @@ import { mergeLineStreams } from "./stream-merge";
 
 export type VibeEnv = "local" | "stage" | "prod" | "external";
 
+/**
+ * Privilege boundary. In production the panel server runs as the unprivileged
+ * `vibe-panel` user and may only reach the host through the root-owned,
+ * sudoers-gated wrapper at PANEL_PRIVILEGED_RUNNER (bin/vibe-panel-run). When
+ * that env is SET we prefix every host spawn with `sudo -n <runner> <verb> …`;
+ * the wrapper revalidates the site path/env (vibe) or args (installer) before
+ * doing anything. When UNSET (dev/local) we spawn directly, exactly as before —
+ * no behavior change. Read lazily from process.env (like installerBin) so tests
+ * and dev never need it set.
+ */
+function privilegedRunner(): string | null {
+	const fromEnv = process.env.PANEL_PRIVILEGED_RUNNER;
+	return fromEnv && fromEnv.length > 0 ? fromEnv : null;
+}
+
+/**
+ * Rewrite a site `bin/vibe` argv produced by buildVibeArgv —
+ * `["<siteDir>/bin/vibe", env, ...rest]` — into the privileged form the wrapper
+ * expects: `["sudo","-n",runner,"vibe",siteDir,env,...rest]`. The wrapper then
+ * reconstructs and execs `"<siteDir>/bin/vibe" env ...rest`. When no runner is
+ * configured the argv is returned unchanged (direct dev spawn). Secrets are
+ * never in argv here (only op verbs + paths), matching the existing contract.
+ */
+export function wrapVibeArgv(siteDir: string, vibeArgv: string[]): string[] {
+	const runner = privilegedRunner();
+	if (!runner) {
+		return vibeArgv;
+	}
+	// vibeArgv[0] is "<siteDir>/bin/vibe"; drop it and pass siteDir explicitly so
+	// the root wrapper — not the unprivileged caller — owns path reconstruction.
+	const rest = vibeArgv.slice(1);
+	return ["sudo", "-n", runner, "vibe", siteDir, ...rest];
+}
+
 export async function hostExec(
 	argv: string[],
 	opts: { timeoutMs?: number } = {}
@@ -117,7 +151,10 @@ export async function runVibe(
 		env?: Record<string, string>;
 	} = {}
 ): Promise<{ stdout: string; stderr: string; code: number }> {
-	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
+	const argv = wrapVibeArgv(
+		siteDir,
+		buildVibeArgv(siteDir, env, op, opts.args ?? [])
+	);
 	const proc = Bun.spawn(argv, {
 		cwd: siteDir,
 		stdout: "pipe",
@@ -147,7 +184,12 @@ function spawnStream(
 ) {
 	// On Linux, spawn under setsid so the op gets its own session+group (pgid == pid).
 	// This lets killTree signal the whole op tree with process.kill(-pid) without
-	// touching the panel server's own process group.
+	// touching the panel server's own process group. When a privileged runner is
+	// configured the chain is `setsid sudo -n <runner> <verb> …`: setsid still wraps
+	// the WHOLE chain, so the session leader is the `sudo` process and pgid == its
+	// pid. killpg(-pid, SIGTERM) therefore reaps sudo + the wrapper + the site's
+	// bin/vibe + its docker/wp subprocesses in one shot; `sudo -n` forwards the
+	// SIGTERM it receives to its own child, so nothing is orphaned.
 	const onLinux = process.platform === "linux";
 	const child = Bun.spawn(onLinux ? ["setsid", ...argv] : argv, {
 		...(opts.cwd ? { cwd: opts.cwd } : {}),
@@ -207,7 +249,10 @@ export function streamVibe(
 		env?: Record<string, string>;
 	} = {}
 ) {
-	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
+	const argv = wrapVibeArgv(
+		siteDir,
+		buildVibeArgv(siteDir, env, op, opts.args ?? [])
+	);
 	return spawnStream(argv, {
 		cwd: siteDir,
 		timeoutMs: opts.timeoutMs,

@@ -16,6 +16,10 @@ export const env = createEnv({
 		PANEL_INSTALLER_BIN: z
 			.string()
 			.default("/opt/vibe-wp-panel/bin/vibe-wp-installer"),
+		// Root-owned, sudoers-gated wrapper (bin/vibe-panel-run). When set, the
+		// unprivileged panel reaches the host only via `sudo -n <runner> …`.
+		// Optional: unset in dev/local, where the panel spawns directly.
+		PANEL_PRIVILEGED_RUNNER: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

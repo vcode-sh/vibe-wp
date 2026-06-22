@@ -5,6 +5,10 @@ PANEL_DIR=/opt/vibe-wp-panel
 REPO_DIR="$(CDPATH='' cd "$(dirname "$0")/.." && pwd)"
 UNIT=vibe-wp-panel
 PORT=4000
+# Dedicated least-privilege account the panel server runs as. It reaches the
+# host ONLY through the root-owned, sudoers-gated wrapper bin/vibe-panel-run.
+PANEL_USER=vibe-panel
+SUDOERS_FILE=/etc/sudoers.d/vibe-wp-panel
 
 if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
@@ -75,6 +79,42 @@ install_installer_bin() {
   $SUDO install -m 0755 "$dist" "$PANEL_DIR/bin/vibe-wp-installer"
 }
 
+# Create the dedicated least-privilege panel account if absent. Idempotent:
+# re-running install/update never errors when the user already exists.
+ensure_panel_user() {
+  if id "$PANEL_USER" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Creating system user $PANEL_USER..."
+  nologin="$(command -v nologin || echo /usr/sbin/nologin)"
+  $SUDO useradd --system --no-create-home --shell "$nologin" "$PANEL_USER"
+}
+
+# Install the root-owned, sudoers-gated host-exec wrapper and write the sudoers
+# rule that lets vibe-panel run ONLY that wrapper as root, with no password.
+# The wrapper MUST stay root-owned + 0755 (never vibe-panel-writable) or the
+# whole privilege boundary collapses. The sudoers file is validated with
+# `visudo -cf` and removed + aborted on if it is malformed.
+install_runner_and_sudoers() {
+  $SUDO install -d -m 0755 "$PANEL_DIR/bin"
+  # root:root 0755 — readable/executable by vibe-panel, writable only by root.
+  $SUDO install -o root -g root -m 0755 \
+    "$REPO_DIR/bin/vibe-panel-run" "$PANEL_DIR/bin/vibe-panel-run"
+
+  # Write the sudoers rule to a temp file, validate it, then move into place.
+  tmp_sudoers="$(mktemp)"
+  printf '%s ALL=(root) NOPASSWD: %s\n' \
+    "$PANEL_USER" "$PANEL_DIR/bin/vibe-panel-run" > "$tmp_sudoers"
+  if $SUDO visudo -cf "$tmp_sudoers" >/dev/null 2>&1; then
+    $SUDO install -o root -g root -m 0440 "$tmp_sudoers" "$SUDOERS_FILE"
+    rm -f "$tmp_sudoers"
+  else
+    rm -f "$tmp_sudoers"
+    echo "panel: generated sudoers rule is invalid — aborting (no rule written)" >&2
+    return 1
+  fi
+}
+
 # deploy_panel: build + copy app dir + write env + db:push + restart service.
 # Called by both install_panel (with a freshly-prompted DOMAIN/SECRET) and
 # update_panel (with values sourced from the existing server/.env).
@@ -82,6 +122,12 @@ install_installer_bin() {
 deploy_panel() {
   $SUDO install -d -m 0755 "$PANEL_DIR"
   $SUDO install -d -m 0700 "$PANEL_DIR/data"
+
+  # Least-privilege account + the root-owned host-exec wrapper + sudoers rule.
+  # Done up-front so the systemd unit can run as vibe-panel and the server's
+  # PANEL_PRIVILEGED_RUNNER points at a wrapper that already exists.
+  ensure_panel_user
+  install_runner_and_sudoers
 
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
   printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
@@ -92,7 +138,9 @@ deploy_panel() {
   # Installer binary — the provisioning bridge drives this (PANEL_INSTALLER_BIN).
   install_installer_bin
 
-  # Env (contains BETTER_AUTH_SECRET — keep it root-only, never world-readable)
+  # Env (contains BETTER_AUTH_SECRET). Owned by vibe-panel + 0600: the service
+  # (running as vibe-panel) can read it; nobody else can. PANEL_PRIVILEGED_RUNNER
+  # makes every host op flow through the sudoers-gated wrapper.
   ( umask 077 && printf '%s\n' \
     "DATABASE_URL=file:$PANEL_DIR/data/panel.db" \
     "BETTER_AUTH_SECRET=$SECRET" \
@@ -101,25 +149,35 @@ deploy_panel() {
     "NODE_ENV=production" \
     "PANEL_SITES_ROOTS=/opt:/srv" \
     "PANEL_INSTALLER_BIN=$PANEL_DIR/bin/vibe-wp-installer" \
+    "PANEL_PRIVILEGED_RUNNER=$PANEL_DIR/bin/vibe-panel-run" \
     | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null )
+  $SUDO chown "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/app/server/.env"
   $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
 
-  # DB migrate (the auth DB holds password hashes + sessions — keep it root-only)
+  # DB migrate (the auth DB holds password hashes + sessions). Run as root, then
+  # hand the data dir + db to vibe-panel so the service can read/write its DB.
   ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push )
+  $SUDO chown -R "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/data"
+  $SUDO chmod 700 "$PANEL_DIR/data"
   $SUDO chmod 600 "$PANEL_DIR/data/panel.db" 2>/dev/null || true
 
-  # systemd service (Bun runtime). The MVP runs as root for full host access
-  # to site operations (backup writes, docker), matching the existing
-  # vibe-wp-backup/monitor timers. A dedicated least-privilege user + a
-  # sudoers allowlist for the site bin/vibe entrypoints is a fan-out hardening
-  # item; the exec-layer command allowlist remains the primary control.
-  $SUDO chmod -R a+rX "$PANEL_DIR/app/web/dist" 2>/dev/null || true
+  # The app dir + wrapper + installer binary stay root-owned but world-readable/
+  # executable so the unprivileged vibe-panel service can read+run them (but not
+  # rewrite them — that is what keeps the sudoers gate meaningful).
+  $SUDO chmod -R a+rX "$PANEL_DIR/app" 2>/dev/null || true
+  # Ensure the Bun runtime itself is executable by vibe-panel.
+  $SUDO chmod a+rx "$BUN" 2>/dev/null || true
 
+  # systemd service (Bun runtime) — runs as the least-privilege vibe-panel user.
+  # It owns no root powers; all host operations go through sudo -n on the
+  # allowlisted, validating wrapper (PANEL_PRIVILEGED_RUNNER).
   service="[Unit]
 Description=Vibe WP control panel
 After=network.target docker.service
 [Service]
 Type=simple
+User=$PANEL_USER
+Group=$PANEL_USER
 WorkingDirectory=$PANEL_DIR/app/server
 Environment=PORT=$PORT
 ExecStart=$BUN run src/index.ts
@@ -252,12 +310,18 @@ status_panel() {
 uninstall_panel() {
   $SUDO systemctl disable --now $UNIT.service 2>/dev/null || true
   $SUDO rm -f /etc/systemd/system/$UNIT.service /etc/caddy/sites-enabled/vibe-wp-panel.caddy
+  # Drop the sudoers grant so the boundary can never linger after teardown.
+  $SUDO rm -f "$SUDOERS_FILE"
   $SUDO systemctl daemon-reload
   if command -v caddy >/dev/null 2>&1; then
     $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy || true
   fi
   if [ "$PURGE" = 1 ]; then
     $SUDO rm -rf "$PANEL_DIR"
+    # Remove the dedicated account too on a purge (idempotent / best-effort).
+    if id "$PANEL_USER" >/dev/null 2>&1; then
+      $SUDO userdel "$PANEL_USER" 2>/dev/null || true
+    fi
     echo "panel: purged"
   fi
   echo "panel: uninstalled"

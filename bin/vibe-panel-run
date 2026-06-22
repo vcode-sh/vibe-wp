@@ -1,0 +1,206 @@
+#!/bin/sh
+# vibe-panel-run — root-owned, sudoers-gated privilege boundary for the control panel.
+#
+# The panel server runs as the unprivileged `vibe-panel` user. The ONLY thing it
+# may `sudo` is this wrapper (see /etc/sudoers.d/vibe-wp-panel), so this script is
+# the single host-exec chokepoint and MUST validate every input before acting.
+#
+# SAFETY INVARIANTS (the controller validates these on the VPS):
+#   - This file is installed root:root 0755 and is NEVER writable by vibe-panel.
+#     If vibe-panel could rewrite it, the sudoers gate would be worthless.
+#   - It never eval/execs arbitrary caller input. Subcommands are fixed; site
+#     paths are validated against the PANEL_SITES_ROOTS allowlist; the env token
+#     is checked against a fixed set; installer args must be exactly --headless-json.
+#   - `siteinfo` prints ONLY non-secret fields. It NEVER prints DB/Redis
+#     passwords, WP salts, R2/monitor secrets, or any other env value.
+set -eu
+
+# Roots under which a site install dir is allowed to live. The panel passes the
+# same default; keeping it here too means the gate holds even if the caller lies.
+PANEL_SITES_ROOTS="${PANEL_SITES_ROOTS:-/opt:/srv}"
+# Installer binary the panel drives for provisioning. Fixed default mirrors the
+# panel's PANEL_INSTALLER_BIN; only `--headless-json` may ever be passed.
+PANEL_INSTALLER_BIN="${PANEL_INSTALLER_BIN:-/opt/vibe-wp-panel/bin/vibe-wp-installer}"
+
+die() {
+  echo "vibe-panel-run: $1" >&2
+  exit 1
+}
+
+# Canonicalize an EXISTING directory to its absolute, symlink-resolved path.
+# Portable across GNU + BSD: `cd -P` resolves symlinks and `pwd` prints the
+# canonical absolute path. Empty output means the dir does not exist / is not a
+# directory (the caller then aborts). We deliberately avoid GNU-only realpath
+# flags (-e/-m) so the validation behaves identically everywhere.
+canonical_dir() {
+  ( CDPATH='' cd -P -- "$1" 2>/dev/null && pwd ) || true
+}
+
+# Is the canonical path "$1" under one of the colon-separated PANEL_SITES_ROOTS
+# roots? Pure prefix check on canonical paths (each root is canonicalized too,
+# so a symlinked root still matches). A path equal to a root is NOT a site dir.
+under_allowed_root() {
+  candidate="$1"
+  IFS=:
+  for root in $PANEL_SITES_ROOTS; do
+    [ -n "$root" ] || continue
+    real_root="$(canonical_dir "$root")"
+    [ -n "$real_root" ] || continue
+    case "$candidate" in
+      "$real_root"/*) unset IFS; return 0 ;;
+    esac
+  done
+  unset IFS
+  return 1
+}
+
+# Validate that $1 is a safe, allowlisted site install dir containing bin/vibe.
+validate_site_dir() {
+  dir="$1"
+  case "$dir" in
+    /*) : ;;                       # must be absolute
+    *) die "site dir must be an absolute path" ;;
+  esac
+  case "$dir" in
+    *..*) die "site dir must not contain '..'" ;;
+  esac
+  # Canonicalize AND require existence as a directory; symlinks are resolved here
+  # so a symlink pointing outside the roots is caught by under_allowed_root.
+  real="$(canonical_dir "$dir")"
+  [ -n "$real" ] || die "site dir does not exist or is not a directory"
+  under_allowed_root "$real" || die "site dir is outside the allowed roots"
+  [ -x "$real/bin/vibe" ] || die "site dir has no bin/vibe entrypoint"
+  SITE_DIR_REAL="$real"
+}
+
+# Validate the env token against the fixed set the stack supports.
+validate_env() {
+  case "$1" in
+    local|stage|prod|external) : ;;
+    *) die "invalid env: $1" ;;
+  esac
+}
+
+# --- siteinfo: scan roots, print ONLY non-secret fields as TAB-separated rows.
+# Columns: installDir  slug  domain  prodPort  stagePort  hasStaging  stagingDomain
+# slug          = COMPOSE_PROJECT_NAME minus the vibe-wp- prefix and -prod/-stage suffix
+# domain        = host part of prod WP_HOME
+# *Port         = numeric tail of HTTP_PORT (e.g. 127.0.0.1:18000 -> 18000)
+# stagingDomain = host part of stage WP_HOME ("" when no staging)
+# We read prod.env / stage.env which are 0600 root-only (they hold secrets) and
+# deliberately surface NONE of those secret keys — only these non-secret fields
+# (install dir, slug, the public domains, the published HTTP ports, staging flag).
+env_value() {
+  # Read a single KEY's value from an env file without sourcing it (so no env
+  # file content can execute). Strips surrounding quotes. Empty if absent.
+  file="$1"
+  key="$2"
+  [ -f "$file" ] || { echo ""; return 0; }
+  line="$(grep -m1 "^${key}=" "$file" 2>/dev/null || true)"
+  val="${line#*=}"
+  # strip matching surrounding single or double quotes
+  case "$val" in
+    \"*\") val="${val#\"}"; val="${val%\"}" ;;
+    \'*\') val="${val#\'}"; val="${val%\'}" ;;
+  esac
+  echo "$val"
+}
+
+host_of() {
+  # Extract the hostname from a URL like https://example.com/path -> example.com
+  url="$1"
+  [ -n "$url" ] || { echo ""; return 0; }
+  # drop scheme://, then everything from the first / or : onwards
+  rest="${url#*://}"
+  rest="${rest%%/*}"
+  rest="${rest%%:*}"
+  echo "$rest"
+}
+
+port_of() {
+  # Numeric tail of HTTP_PORT (after the last ':'); empty if not a positive int.
+  raw="$1"
+  [ -n "$raw" ] || { echo ""; return 0; }
+  num="${raw##*:}"
+  case "$num" in
+    ''|*[!0-9]*) echo "" ;;
+    *) [ "$num" -gt 0 ] 2>/dev/null && echo "$num" || echo "" ;;
+  esac
+}
+
+slug_of() {
+  # vibe-wp-<slug>-prod / vibe-wp-<slug>-stage -> <slug>; fall back to dir tail.
+  project="$1"
+  fallback="$2"
+  [ -n "$project" ] || { echo "$fallback"; return 0; }
+  s="${project#vibe-wp-}"
+  s="${s%-prod}"
+  s="${s%-stage}"
+  [ -n "$s" ] && echo "$s" || echo "$fallback"
+}
+
+siteinfo() {
+  IFS=:
+  for root in $PANEL_SITES_ROOTS; do
+    [ -n "$root" ] || continue
+    [ -d "$root" ] || continue
+    # Find site install dirs (those containing bin/vibe) up to a small depth.
+    find "$root" -maxdepth 4 -type f -path '*/bin/vibe' 2>/dev/null
+  done | while IFS= read -r vibebin; do
+    dir="${vibebin%/bin/vibe}"
+    prod="$dir/env/prod.env"
+    stage="$dir/env/stage.env"
+    home="$(env_value "$prod" WP_HOME)"
+    [ -n "$home" ] || home="$(env_value "$stage" WP_HOME)"
+    [ -n "$home" ] || continue
+    fallback="${dir##*/}"
+    slug="$(slug_of "$(env_value "$prod" COMPOSE_PROJECT_NAME)" "$fallback")"
+    domain="$(host_of "$home")"
+    prod_port="$(port_of "$(env_value "$prod" HTTP_PORT)")"
+    stage_port="$(port_of "$(env_value "$stage" HTTP_PORT)")"
+    stage_home="$(env_value "$stage" WP_HOME)"
+    if [ -n "$stage_home" ]; then
+      has_staging=1
+      staging_domain="$(host_of "$stage_home")"
+    else
+      has_staging=0
+      staging_domain=""
+    fi
+    # TAB-separated; non-secret fields ONLY.
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$dir" "$slug" "$domain" "$prod_port" "$stage_port" "$has_staging" "$staging_domain"
+  done
+  unset IFS
+}
+
+sub="${1:-}"
+[ -n "$sub" ] || die "missing subcommand"
+shift || true
+
+case "$sub" in
+  vibe)
+    # vibe <siteDir> <env> <op> [args...]
+    [ $# -ge 2 ] || die "usage: vibe <siteDir> <env> <op> [args...]"
+    site_dir="$1"; shift
+    env_tok="$1"; shift
+    validate_site_dir "$site_dir"
+    validate_env "$env_tok"
+    # Reconstruct and exec the site's own entrypoint. The panel already
+    # allowlists the op via buildVibeArgv; we additionally guarded the path+env.
+    exec "$SITE_DIR_REAL/bin/vibe" "$env_tok" "$@"
+    ;;
+  installer)
+    # installer --headless-json  (NOTHING else is permitted)
+    [ $# -eq 1 ] || die "installer takes exactly one arg"
+    [ "$1" = "--headless-json" ] || die "installer arg must be --headless-json"
+    [ -x "$PANEL_INSTALLER_BIN" ] || die "installer binary not executable"
+    exec "$PANEL_INSTALLER_BIN" --headless-json
+    ;;
+  siteinfo)
+    [ $# -eq 0 ] || die "siteinfo takes no arguments"
+    siteinfo
+    ;;
+  *)
+    die "unknown subcommand: $sub"
+    ;;
+esac

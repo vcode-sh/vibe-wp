@@ -5,6 +5,7 @@ import { hostFromUrl, parseEnvFile } from "./parse";
 const STRIP_BIN_VIBE = /\/bin\/vibe$/;
 const COMPOSE_PROJECT_PREFIX = /^vibe-wp-/;
 const COMPOSE_PROJECT_PROD_SUFFIX = /-prod$/;
+const TRAILING_CR = /\r$/;
 
 export interface DetectedSite {
 	/**
@@ -61,7 +62,72 @@ function httpPortOf(value: string | undefined): number | null {
 	return Number.isInteger(port) && port > 0 ? port : null;
 }
 
-export async function detectSites(): Promise<DetectedSite[]> {
+/** Coerce a string field to a positive integer port, or null. */
+function portNum(value: string | undefined): number | null {
+	const n = Number(value);
+	return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Parse one sanitized TSV row from the wrapper's `siteinfo` into a DetectedSite.
+ * Columns: installDir  slug(caddy)  domain  prodPort  stagePort  hasStaging  stagingDomain
+ * Returns null for a blank/malformed row (missing install dir or domain).
+ */
+function parseSiteinfoRow(raw: string): DetectedSite | null {
+	const line = raw.replace(TRAILING_CR, "");
+	if (!line.trim()) {
+		return null;
+	}
+	const cols = line.split("\t");
+	const installDir = cols[0];
+	const domain = cols[2];
+	if (!(installDir && domain)) {
+		return null;
+	}
+	const slug = installDir.split("/").filter(Boolean).pop() ?? installDir;
+	const caddySlug = cols[1];
+	const staged = cols[5] === "1";
+	const stagingDomain = cols[6];
+	return {
+		id: slug,
+		slug,
+		caddySlug: caddySlug || slug,
+		installDir,
+		domain,
+		hasStaging: staged,
+		stagingDomain: staged && stagingDomain ? stagingDomain : null,
+		prodPort: portNum(cols[3]),
+		stagePort: portNum(cols[4]),
+	};
+}
+
+/**
+ * Privileged path: the panel runs unprivileged and CANNOT read the 0600 root
+ * env files. Obtain the site list from the root-owned wrapper, which reads those
+ * files itself and prints ONLY sanitized non-secret fields (see parseSiteinfoRow
+ * for the columns). The caddy-derived slug becomes caddySlug; the panel's stable
+ * id/slug stays the install-dir tail (unchanged contract). No secret ever reaches
+ * the panel here.
+ */
+async function detectSitesViaRunner(runner: string): Promise<DetectedSite[]> {
+	const proc = Bun.spawn(["sudo", "-n", runner, "siteinfo"], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const out = await new Response(proc.stdout).text();
+	await proc.exited;
+	const sites: DetectedSite[] = [];
+	for (const raw of out.split("\n")) {
+		const site = parseSiteinfoRow(raw);
+		if (site) {
+			sites.push(site);
+		}
+	}
+	return sites;
+}
+
+/** Dev path: read the env files directly (panel runs as a user that can read them). */
+async function detectSitesDirect(): Promise<DetectedSite[]> {
 	const roots = env.PANEL_SITES_ROOTS.split(":").filter(Boolean).join(" ");
 	const proc = Bun.spawn(
 		[
@@ -100,6 +166,14 @@ export async function detectSites(): Promise<DetectedSite[]> {
 		});
 	}
 	return sites;
+}
+
+export function detectSites(): Promise<DetectedSite[]> {
+	const runner = process.env.PANEL_PRIVILEGED_RUNNER;
+	if (runner && runner.length > 0) {
+		return detectSitesViaRunner(runner);
+	}
+	return detectSitesDirect();
 }
 
 export async function findSite(siteId: string): Promise<DetectedSite | null> {

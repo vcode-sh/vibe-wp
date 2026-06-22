@@ -117,8 +117,26 @@ export type SpawnFn = (argv: string[]) => SpawnedChild;
 
 const DEFAULT_HEADLESS_TIMEOUT_MS = 30 * 60 * 1000;
 
+/**
+ * Privilege boundary for provisioning. When PANEL_PRIVILEGED_RUNNER is set the
+ * panel runs unprivileged and the installer must be launched through the
+ * root-owned, sudoers-gated wrapper, which only accepts the literal
+ * `installer --headless-json` subcommand. The CANONICAL argv stays
+ * `[bin, "--headless-json"]` (so assertArgvSecretFree's secret-free invariant is
+ * unchanged); we only rewrite the *spawn* argv to the privileged form at the
+ * last moment. Secrets still travel exclusively on STDIN — never argv. When the
+ * runner is unset (dev/local) the argv spawns directly, exactly as before.
+ */
+function spawnArgvFor(canonical: string[]): string[] {
+	const runner = process.env.PANEL_PRIVILEGED_RUNNER;
+	if (runner && runner.length > 0) {
+		return ["sudo", "-n", runner, "installer", "--headless-json"];
+	}
+	return canonical;
+}
+
 function defaultSpawn(argv: string[]): SpawnedChild {
-	return Bun.spawn(argv, {
+	return Bun.spawn(spawnArgvFor(argv), {
 		stdin: "pipe",
 		stdout: "pipe",
 		stderr: "pipe",
