@@ -37,7 +37,9 @@ function StagingCard({
 					<span className="text-muted-foreground text-sm">
 						No staging site yet.
 					</span>
-					<Button onClick={() => toast.success("Add staging (mock)…")}>
+					<Button
+						onClick={() => toast.info("Adding staging isn't available yet.")}
+					>
 						Add staging
 					</Button>
 				</CardContent>

@@ -24,13 +24,11 @@ function HealthPage() {
 				<PageHeader
 					actions={
 						<>
+							<Button onClick={() => health.refetch()}>Run health check</Button>
 							<Button
-								onClick={() => toast.success("Health check: running (mock)…")}
-							>
-								Run health check
-							</Button>
-							<Button
-								onClick={() => toast.success("Perf report: running (mock)…")}
+								onClick={() =>
+									toast.info("Performance reports aren't available yet.")
+								}
 								variant="outline"
 							>
 								Perf report
