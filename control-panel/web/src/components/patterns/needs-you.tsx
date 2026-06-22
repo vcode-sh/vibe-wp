@@ -4,6 +4,7 @@ import {
 	CollapsibleTrigger,
 } from "@control-panel/ui/components/collapsible";
 import { Check, ChevronRight } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -16,7 +17,15 @@ export function NeedsYou({
 	items: NeedItem[];
 	onAct: (item: NeedItem) => void;
 }) {
-	if (items.length === 0) {
+	const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+
+	const visible = items.filter((item) => !snoozed.has(item.id));
+
+	function handleLater(id: string) {
+		setSnoozed((prev) => new Set([...prev, id]));
+	}
+
+	if (visible.length === 0) {
 		return (
 			<Card className="flex items-center gap-3 border-success/40 p-4 text-sm">
 				<Check className="size-4 text-success" />
@@ -33,7 +42,7 @@ export function NeedsYou({
 					<ChevronRight className="size-4 text-warning transition-transform group-data-[panel-open]/needs-you-trigger:rotate-90" />
 					<span>Needs you</span>
 					<span className="rounded-full border border-warning/50 bg-warning/10 px-2 text-warning text-xs">
-						{items.length}
+						{visible.length}
 					</span>
 					<span className="ml-auto text-muted-foreground text-xs">
 						we always back up before changes
@@ -41,7 +50,7 @@ export function NeedsYou({
 				</CollapsibleTrigger>
 				<CollapsibleContent className="px-4 pb-4">
 					<div className="grid gap-2">
-						{items.map((item) => (
+						{visible.map((item) => (
 							<div
 								className="flex items-center gap-3 rounded-sm border border-border bg-background p-3"
 								key={item.id}
@@ -53,7 +62,11 @@ export function NeedsYou({
 									</div>
 								</div>
 								<div className="ml-auto flex shrink-0 gap-2">
-									<Button size="sm" variant="ghost">
+									<Button
+										onClick={() => handleLater(item.id)}
+										size="sm"
+										variant="ghost"
+									>
 										Later
 									</Button>
 									<Button onClick={() => onAct(item)} size="sm">

@@ -145,10 +145,7 @@ export function overviewFor(siteId: string): SiteOverview {
 export function healthFor(_siteId: string): HealthReport {
 	return {
 		tiles: acmeOverview.tiles,
-		ttfbMs: 210,
-		cacheHitPercent: 94,
-		tlsDays: 89,
-		uptimePercent: 99.9,
+		uptimePercent: 100,
 		alertChannels: ["Telegram", "Email"],
 	};
 }

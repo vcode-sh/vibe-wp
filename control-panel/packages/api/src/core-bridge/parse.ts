@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import type { BackupRecord, LogLine, PerfReport } from "../contract";
+import type {
+	BackupRecord,
+	LogLine,
+	PerfReport,
+	SecurityStatus,
+} from "../contract";
 
 export function parseEnvFile(text: string): Record<string, string> {
 	const out: Record<string, string> = {};
@@ -181,6 +186,20 @@ export function parsePerfJson(stdout: string): PerfReport {
 			opcacheHitPercent: 0,
 			redisHitPercent: 0,
 		};
+	}
+}
+
+const securityEnvelope = z.object({
+	firewall: z.boolean(),
+	fail2ban: z.boolean(),
+	autoUpdates: z.boolean(),
+});
+
+export function parseSecurityStatus(stdout: string): SecurityStatus {
+	try {
+		return securityEnvelope.parse(JSON.parse(stdout.trim()));
+	} catch {
+		return { firewall: false, fail2ban: false, autoUpdates: false };
 	}
 }
 

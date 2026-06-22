@@ -8,6 +8,7 @@ import {
 	parseLogLines,
 	parseMonitorJson,
 	parsePerfJson,
+	parseSecurityStatus,
 	parseSmoke,
 	parseWpUpdateCount,
 } from "./parse";
@@ -153,6 +154,26 @@ describe("parsePerfJson", () => {
 			cacheHitPercent: 0,
 			opcacheHitPercent: 0,
 			redisHitPercent: 0,
+		});
+	});
+});
+
+describe("parseSecurityStatus", () => {
+	it("parses a valid security-status envelope", () => {
+		const r = parseSecurityStatus(
+			'{"firewall":true,"fail2ban":false,"autoUpdates":true}'
+		);
+		expect(r).toEqual({
+			firewall: true,
+			fail2ban: false,
+			autoUpdates: true,
+		});
+	});
+	it("returns all-false fallback on garbage input", () => {
+		expect(parseSecurityStatus("not json")).toEqual({
+			firewall: false,
+			fail2ban: false,
+			autoUpdates: false,
 		});
 	});
 });

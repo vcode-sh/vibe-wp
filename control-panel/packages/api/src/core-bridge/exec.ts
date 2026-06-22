@@ -18,6 +18,9 @@ export async function hostExec(
 export const VIBE_OPS = {
 	smoke: { argv: ["smoke"], stream: false },
 	doctorRuntime: { argv: ["doctor-runtime"], stream: false },
+	monitor: { argv: ["monitor", "--json", "--no-notify"], stream: false },
+	perfReport: { argv: ["perf-report", "--json"], stream: false },
+	securityStatus: { argv: ["security-status"], stream: false },
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
 	backupLocal: { argv: ["backup", "--local-only"], stream: true },

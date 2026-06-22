@@ -68,11 +68,14 @@ export interface BackupRecord {
 
 export interface HealthReport {
 	alertChannels: string[];
-	cacheHitPercent: number;
 	tiles: MetricTile[];
-	tlsDays: number;
-	ttfbMs: number;
 	uptimePercent: number;
+}
+
+export interface SecurityStatus {
+	autoUpdates: boolean;
+	fail2ban: boolean;
+	firewall: boolean;
 }
 
 export type StagingInfo =

@@ -1,10 +1,10 @@
 import { env } from "@control-panel/env/server";
 import { ORPCError } from "@orpc/server";
 
-import type { ServerInfo } from "../contract";
+import type { SecurityStatus, ServerInfo } from "../contract";
 import { hostExec, runVibe } from "../core-bridge/exec";
 import { startJob } from "../core-bridge/jobs";
-import { parseSmoke } from "../core-bridge/parse";
+import { parseSecurityStatus, parseSmoke } from "../core-bridge/parse";
 import { detectSites } from "../core-bridge/sites";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
@@ -48,6 +48,23 @@ export const serverRouter = {
 			(await runVibe(site.installDir, "prod", "doctorRuntime")).stdout
 		);
 	}),
+
+	securityStatus: protectedProcedure.handler(
+		async (): Promise<SecurityStatus> => {
+			// Host-level check; any site's bin/vibe reaches the same host script.
+			const sites = await detectSites();
+			const site = sites[0];
+			if (!site) {
+				throw new ORPCError("NOT_FOUND");
+			}
+			const { stdout } = await runVibe(
+				site.installDir,
+				"prod",
+				"securityStatus"
+			);
+			return parseSecurityStatus(stdout);
+		}
+	),
 
 	serverHarden: adminProcedure.handler(async ({ context }) => {
 		const sites = await detectSites();

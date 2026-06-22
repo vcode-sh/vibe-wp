@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { useState } from "react";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { VerdictTile } from "@/components/patterns/verdict-tile";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { healthQuery } from "@/data/queries";
+import { healthPerfQuery, healthQuery } from "@/data/queries";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/health")({
 	component: HealthPage,
@@ -16,6 +16,23 @@ export const Route = createFileRoute("/_auth/sites/$siteId/health")({
 function HealthPage() {
 	const { siteId } = Route.useParams();
 	const health = useQuery(healthQuery(siteId));
+	const [perfEnabled, setPerfEnabled] = useState(false);
+	const perf = useQuery({
+		...healthPerfQuery(siteId),
+		enabled: perfEnabled,
+	});
+
+	let uptimeLabel = "—";
+	let uptimeClass = "";
+	if (health.data !== undefined) {
+		if (health.data.uptimePercent >= 100) {
+			uptimeLabel = "Up";
+			uptimeClass = "text-success";
+		} else {
+			uptimeLabel = "Down";
+			uptimeClass = "text-destructive";
+		}
+	}
 
 	return (
 		<>
@@ -26,12 +43,17 @@ function HealthPage() {
 						<>
 							<Button onClick={() => health.refetch()}>Run health check</Button>
 							<Button
-								onClick={() =>
-									toast.info("Performance reports aren't available yet.")
-								}
+								disabled={perf.isFetching}
+								onClick={() => {
+									if (perfEnabled) {
+										perf.refetch();
+									} else {
+										setPerfEnabled(true);
+									}
+								}}
 								variant="outline"
 							>
-								Perf report
+								{perf.isFetching ? "Loading…" : "Perf report"}
 							</Button>
 						</>
 					}
@@ -55,13 +77,12 @@ function HealthPage() {
 							<div className="grid gap-4 sm:grid-cols-2">
 								<Card>
 									<CardHeader>
-										<CardTitle className="text-sm">Performance</CardTitle>
+										<CardTitle className="text-sm">Status</CardTitle>
 									</CardHeader>
 									<CardContent className="grid gap-1 text-sm">
-										<div>TTFB: {health.data.ttfbMs}ms</div>
-										<div>Cache hit: {health.data.cacheHitPercent}%</div>
-										<div>Uptime: {health.data.uptimePercent}%</div>
-										<div>TLS valid: {health.data.tlsDays} days</div>
+										<div>
+											Uptime: <span className={uptimeClass}>{uptimeLabel}</span>
+										</div>
 									</CardContent>
 								</Card>
 								<Card>
@@ -69,10 +90,38 @@ function HealthPage() {
 										<CardTitle className="text-sm">Alerts</CardTitle>
 									</CardHeader>
 									<CardContent className="text-sm">
-										Channels: {health.data.alertChannels.join(" · ")}
+										{health.data.alertChannels.length > 0
+											? `Channels: ${health.data.alertChannels.join(" · ")}`
+											: "No alert channels configured."}
 									</CardContent>
 								</Card>
 							</div>
+							{perfEnabled ? (
+								<QueryBoundary
+									errorMessage="Couldn't load the performance report."
+									hasData={Boolean(perf.data)}
+									isError={perf.isError}
+									isLoading={perf.isLoading}
+									onRetry={() => perf.refetch()}
+									skeletonClassName="h-36 w-full"
+								>
+									{perf.data ? (
+										<Card>
+											<CardHeader>
+												<CardTitle className="text-sm">
+													Performance report
+												</CardTitle>
+											</CardHeader>
+											<CardContent className="grid gap-1 text-sm">
+												<div>TTFB: {perf.data.ttfbMs}ms</div>
+												<div>Page cache hit: {perf.data.cacheHitPercent}%</div>
+												<div>OPcache hit: {perf.data.opcacheHitPercent}%</div>
+												<div>Redis hit: {perf.data.redisHitPercent}%</div>
+											</CardContent>
+										</Card>
+									) : null}
+								</QueryBoundary>
+							) : null}
 						</>
 					) : null}
 				</QueryBoundary>

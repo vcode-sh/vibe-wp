@@ -8,6 +8,7 @@ VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 monitor_quiet=0
 monitor_json=0
+monitor_no_notify=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -20,14 +21,24 @@ while [ "$#" -gt 0 ]; do
       monitor_quiet=1
       shift
       ;;
+    --no-notify)
+      monitor_no_notify=1
+      shift
+      ;;
     -h|--help)
       cat <<'USAGE'
 Usage:
-  ./bin/monitor [--quiet]
+  ./bin/monitor [--quiet] [--json] [--no-notify]
 
 Runs health checks against the running stack for the selected VIBE_ENV and
 reports each as ok:/warn:/fail:. Exits non-zero when any check fails (so a
 systemd service marks the unit failed); exits 0 when only warnings occur.
+
+Flags:
+  --quiet       Suppress per-check ok/warn/fail lines on stdout.
+  --json        Emit a single JSON object instead of text (implies --quiet).
+  --no-notify   Skip all alert channels (Telegram/webhook/email). Use when a
+                tool polls monitor and should never trigger notifications.
 
 Checks:
   1. HTTP uptime      - WP_HOME answers with an HTTP status < 400
@@ -129,10 +140,13 @@ if [ "${monitor_json}" != "1" ]; then
   printf '%s\n' "${summary}"
 fi
 
-# Decide whether to alert.
+# Decide whether to alert. --no-notify forces alerts off (e.g. when the
+# control panel polls monitor and must never trigger notifications).
 alert_on_warn="$(vibe_env_value VIBE_MONITOR_ALERT_ON_WARN)"
 should_alert=0
-if [ "${monitor_failures}" -gt 0 ]; then
+if [ "${monitor_no_notify}" = "1" ]; then
+  should_alert=0
+elif [ "${monitor_failures}" -gt 0 ]; then
   should_alert=1
 elif [ "${monitor_warnings}" -gt 0 ] && [ "${alert_on_warn}" = "1" ]; then
   should_alert=1

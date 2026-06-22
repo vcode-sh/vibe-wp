@@ -22,7 +22,8 @@ Commands:
   restore <backup> [args...] Restore a backup
   backups                    List available backups for this env (newest last)
   backups-remote             List off-server (R2) backups as restorable paths
-  monitor [--quiet]          Run health checks (uptime, disk, TLS, backups, containers) and alert
+  monitor [--quiet] [--json] [--no-notify]  Run health checks (uptime, disk, TLS, backups, containers); alert unless --no-notify
+  security-status            Print host security posture as JSON (firewall, fail2ban, auto-updates)
   harden [--dry-run] [--ssh-key-only]  Apply host hardening (firewall, fail2ban, auto-updates)
   doctor-runtime             Run runtime checks
   perf-report                Print a read-only performance report
@@ -165,6 +166,9 @@ case "${command}" in
     ;;
   monitor)
     "${VIBE_BIN_DIR}/monitor" "$@"
+    ;;
+  security-status)
+    "${VIBE_BIN_DIR}/security-status" "$@"
     ;;
   harden)
     "${VIBE_BIN_DIR}/harden" "$@"

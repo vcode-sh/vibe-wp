@@ -6,7 +6,7 @@ import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { serverInfoQuery } from "@/data/queries";
+import { securityStatusQuery, serverInfoQuery } from "@/data/queries";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
@@ -14,8 +14,17 @@ export const Route = createFileRoute("/_auth/server")({
 	component: ServerPage,
 });
 
+function SecurityRow({ label, active }: { label: string; active: boolean }) {
+	return (
+		<div className={active ? "text-success" : "text-warning"}>
+			{label}: {active ? "on" : "off"}
+		</div>
+	);
+}
+
 function ServerPage() {
 	const server = useQuery(serverInfoQuery());
+	const security = useQuery(securityStatusQuery());
 	const { start, isRunning } = useOperations();
 
 	const harden = useMutation(orpc.serverHarden.mutationOptions());
@@ -73,10 +82,32 @@ function ServerPage() {
 							<CardHeader>
 								<CardTitle className="text-sm">Security</CardTitle>
 							</CardHeader>
-							<CardContent className="grid gap-1 text-sm">
-								<div className="text-success">Firewall: on</div>
-								<div className="text-success">fail2ban: active</div>
-								<div className="text-success">Auto-updates: on</div>
+							<CardContent>
+								<QueryBoundary
+									errorMessage="Couldn't load security status."
+									hasData={Boolean(security.data)}
+									isError={security.isError}
+									isLoading={security.isLoading}
+									onRetry={() => security.refetch()}
+									skeletonClassName="h-16 w-full"
+								>
+									{security.data ? (
+										<div className="grid gap-1 text-sm">
+											<SecurityRow
+												active={security.data.firewall}
+												label="Firewall"
+											/>
+											<SecurityRow
+												active={security.data.fail2ban}
+												label="fail2ban"
+											/>
+											<SecurityRow
+												active={security.data.autoUpdates}
+												label="Auto-updates"
+											/>
+										</div>
+									) : null}
+								</QueryBoundary>
 							</CardContent>
 						</Card>
 					</div>

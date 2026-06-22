@@ -1,0 +1,98 @@
+#!/usr/bin/env sh
+set -eu
+
+# bin/security-status — read-only report of host security posture as JSON.
+# POSIX sh (dash) only, no bashisms. Mirrors the checks applied by bin/harden:
+#   firewall     ufw is active (`ufw status` reports "Status: active")
+#   fail2ban     the fail2ban service is active
+#   autoUpdates  unattended-upgrades is configured (apt periodic config from
+#                bin/harden exists) or its systemd service is active
+#
+# This is a HOST-level script (not per-site); it does not use VIBE_ENV. Every
+# check is safe when the underlying tool is absent (absent -> false) and never
+# requires root beyond the read-only status checks below. Prints exactly one
+# JSON object on stdout: {"firewall":bool,"fail2ban":bool,"autoUpdates":bool}.
+
+case "${1:-}" in
+  -h|--help)
+    cat <<'USAGE'
+Usage:
+  ./bin/security-status [-h|--help]
+
+Prints host security posture as a single JSON object:
+  {"firewall":bool,"fail2ban":bool,"autoUpdates":bool}
+
+  firewall     true when ufw is active
+  fail2ban     true when the fail2ban service is active
+  autoUpdates  true when unattended-upgrades is configured or its service runs
+
+Read-only: makes no changes. Each check reports false when its tool is absent.
+USAGE
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    echo "Unknown option: $1" >&2
+    exit 1
+    ;;
+esac
+
+has_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Firewall: ufw must report an active status. `ufw status` may need root on
+# some systems; fall back to a non-privileged attempt and treat any failure
+# (including a missing binary) as inactive.
+check_firewall() {
+  if ! has_cmd ufw; then
+    return 1
+  fi
+  if ufw status 2>/dev/null | grep -q "Status: active"; then
+    return 0
+  fi
+  if has_cmd sudo && sudo -n ufw status 2>/dev/null | grep -q "Status: active"; then
+    return 0
+  fi
+  return 1
+}
+
+# fail2ban: the systemd unit must be active. Missing systemctl/unit -> false.
+check_fail2ban() {
+  has_cmd systemctl || return 1
+  [ "$(systemctl is-active fail2ban 2>/dev/null)" = "active" ]
+}
+
+# Automatic security updates: bin/harden either writes the apt periodic config
+# or relies on apt timers; treat the config file (with the periodic flag) as
+# the source of truth, and also accept an active unattended-upgrades service.
+check_auto_updates() {
+  auto_file="/etc/apt/apt.conf.d/20auto-upgrades"
+  if [ -f "${auto_file}" ] && \
+     grep -q 'APT::Periodic::Unattended-Upgrade "1"' "${auto_file}" 2>/dev/null; then
+    return 0
+  fi
+  if has_cmd systemctl && \
+     [ "$(systemctl is-active unattended-upgrades 2>/dev/null)" = "active" ]; then
+    return 0
+  fi
+  return 1
+}
+
+firewall=false
+fail2ban=false
+auto_updates=false
+
+if check_firewall; then
+  firewall=true
+fi
+if check_fail2ban; then
+  fail2ban=true
+fi
+if check_auto_updates; then
+  auto_updates=true
+fi
+
+printf '{"firewall":%s,"fail2ban":%s,"autoUpdates":%s}\n' \
+  "${firewall}" "${fail2ban}" "${auto_updates}"
