@@ -14,14 +14,48 @@ describe("buildVibeArgv", () => {
 		// @ts-expect-error — intentionally invalid op
 		expect(() => buildVibeArgv("/opt/acme", "prod", "rm -rf")).toThrow();
 	});
-	it("only exposes the allowlisted read/backup ops", () => {
+	it("exposes the allowlisted read + operation ops", () => {
 		expect(Object.keys(VIBE_OPS).sort()).toEqual([
 			"backup",
+			"backupVerify",
 			"backups",
+			"cacheFlush",
 			"doctorRuntime",
+			"down",
+			"harden",
 			"logsRecent",
+			"promote",
+			"refresh",
+			"restart",
+			"restore",
 			"smoke",
+			"up",
+			"wpList",
+			"wpUpdate",
 		]);
+	});
+});
+
+describe("buildVibeArgv operations", () => {
+	it("appends extra args then --yes for restore", () => {
+		expect(buildVibeArgv("/opt/acme", "prod", "restore", ["/b/2026"])).toEqual([
+			"/opt/acme/bin/vibe",
+			"prod",
+			"restore",
+			"/b/2026",
+			"--yes",
+		]);
+	});
+	it("runs staging refresh with --yes and no arg", () => {
+		expect(buildVibeArgv("/opt/acme", "stage", "refresh")).toEqual([
+			"/opt/acme/bin/vibe",
+			"stage",
+			"refresh-from-prod",
+			"--yes",
+		]);
+	});
+	it("rejects args for an op that does not take them", () => {
+		expect(() => buildVibeArgv("/opt/acme", "prod", "up", ["x"])).toThrow();
 	});
 });
 

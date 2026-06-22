@@ -20,6 +20,17 @@ export const VIBE_OPS = {
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
 	logsRecent: { argv: ["logs-recent"], stream: false },
+	up: { argv: ["up"], stream: true },
+	down: { argv: ["down"], stream: true },
+	restart: { argv: ["restart"], stream: true },
+	cacheFlush: { argv: ["cache-flush"], stream: true },
+	restore: { argv: ["restore"], stream: true, takesArg: true, yes: true },
+	backupVerify: { argv: ["backup-verify"], stream: true, takesArg: true },
+	refresh: { argv: ["refresh-from-prod"], stream: true, yes: true },
+	promote: { argv: ["promote-files-to-prod"], stream: true, yes: true },
+	harden: { argv: ["harden"], stream: true },
+	wpUpdate: { argv: ["wp"], stream: true, takesArg: true },
+	wpList: { argv: ["wp"], stream: false, takesArg: true },
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;
@@ -30,22 +41,37 @@ export const STREAM_TIMEOUT_MS = 30 * 60 * 1000;
 export function buildVibeArgv(
 	siteDir: string,
 	env: VibeEnv,
-	op: VibeOp
+	op: VibeOp,
+	extraArgs: string[] = []
 ): string[] {
-	const spec = VIBE_OPS[op];
+	const spec = VIBE_OPS[op] as {
+		argv: readonly string[];
+		stream: boolean;
+		takesArg?: boolean;
+		yes?: boolean;
+	};
 	if (!spec) {
 		throw new Error(`Disallowed vibe op: ${String(op)}`);
 	}
-	return [`${siteDir}/bin/vibe`, env, ...spec.argv];
+	if (extraArgs.length > 0 && !spec.takesArg) {
+		throw new Error(`Op ${String(op)} does not accept arguments`);
+	}
+	return [
+		`${siteDir}/bin/vibe`,
+		env,
+		...spec.argv,
+		...extraArgs,
+		...(spec.yes ? ["--yes"] : []),
+	];
 }
 
 export async function runVibe(
 	siteDir: string,
 	env: VibeEnv,
 	op: VibeOp,
-	opts: { timeoutMs?: number } = {}
+	opts: { timeoutMs?: number; args?: string[] } = {}
 ): Promise<{ stdout: string; stderr: string; code: number }> {
-	const argv = buildVibeArgv(siteDir, env, op);
+	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
 	const proc = Bun.spawn(argv, {
 		cwd: siteDir,
 		stdout: "pipe",
@@ -65,9 +91,9 @@ export function streamVibe(
 	siteDir: string,
 	env: VibeEnv,
 	op: VibeOp,
-	opts: { timeoutMs?: number } = {}
+	opts: { timeoutMs?: number; args?: string[] } = {}
 ) {
-	const proc = Bun.spawn(buildVibeArgv(siteDir, env, op), {
+	const proc = Bun.spawn(buildVibeArgv(siteDir, env, op, opts.args ?? []), {
 		cwd: siteDir,
 		stdout: "pipe",
 		stderr: "pipe",
