@@ -9,6 +9,7 @@ import {
 	parseMonitorJson,
 	parsePerfJson,
 	parseSmoke,
+	parseWpUpdateCount,
 } from "./parse";
 
 describe("parseEnvFile", () => {
@@ -140,5 +141,18 @@ describe("parseLogLines", () => {
 	});
 	it("returns an empty array for empty stdout", () => {
 		expect(parseLogLines("", "php")).toEqual([]);
+	});
+});
+
+describe("parseWpUpdateCount", () => {
+	it("returns the array length for a valid JSON array", () => {
+		const json = JSON.stringify([
+			{ name: "woocommerce", version: "8.0.0", update_version: "8.1.0" },
+			{ name: "akismet", version: "5.0.0", update_version: "5.1.0" },
+		]);
+		expect(parseWpUpdateCount(json)).toBe(2);
+	});
+	it("returns 0 for non-JSON garbage", () => {
+		expect(parseWpUpdateCount("not json at all")).toBe(0);
 	});
 });

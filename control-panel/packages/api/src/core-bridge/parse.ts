@@ -152,6 +152,15 @@ export function parsePerfJson(stdout: string): PerfReport {
 	}
 }
 
+export function parseWpUpdateCount(stdout: string): number {
+	try {
+		const arr = JSON.parse(stdout.trim());
+		return Array.isArray(arr) ? arr.length : 0;
+	} catch {
+		return 0;
+	}
+}
+
 export function parseLogLines(
 	stdout: string,
 	source: LogLine["source"]
