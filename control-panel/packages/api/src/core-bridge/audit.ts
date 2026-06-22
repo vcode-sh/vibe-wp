@@ -23,7 +23,7 @@ export function actionToKind(action: string): ActivityEntry["kind"] {
 }
 
 const LABEL: Record<string, string> = {
-	backup: "Back up completed",
+	backup: "Backed up",
 	restore: "Restored a backup",
 	backupVerify: "Verified a backup",
 	cacheFlush: "Cleared the cache",

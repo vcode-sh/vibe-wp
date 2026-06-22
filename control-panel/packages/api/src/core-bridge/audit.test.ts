@@ -14,7 +14,7 @@ describe("actionToKind", () => {
 });
 
 describe("auditToActivity", () => {
-	it("renders rows newest-first into ActivityEntry", () => {
+	it("maps an audit row into an ActivityEntry", () => {
 		const out = auditToActivity([
 			{
 				id: "1",
@@ -25,6 +25,25 @@ describe("auditToActivity", () => {
 			},
 		]);
 		expect(out[0]).toMatchObject({ id: "1", kind: "backup", good: true });
-		expect(out[0]?.text).toContain("Back up");
+		expect(out[0]?.text).toBe("Backed up");
+	});
+	it("preserves input order (sorting is the db's job, not this map)", () => {
+		const out = auditToActivity([
+			{
+				id: "a",
+				action: "harden",
+				siteId: "acme",
+				jobId: null,
+				at: new Date("2026-06-22T12:00:00Z"),
+			},
+			{
+				id: "b",
+				action: "restore",
+				siteId: "acme",
+				jobId: null,
+				at: new Date("2026-06-22T09:00:00Z"),
+			},
+		]);
+		expect(out.map((e) => e.id)).toEqual(["a", "b"]);
 	});
 });
