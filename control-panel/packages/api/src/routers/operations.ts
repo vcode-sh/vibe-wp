@@ -2,8 +2,8 @@ import { eventIterator } from "@orpc/server";
 import { z } from "zod";
 
 import type { Job, StreamEvent } from "../contract";
-import { getJob, streamJob } from "../core-bridge/jobs";
-import { protectedProcedure } from "../procedures";
+import { cancelJob, getJob, streamJob } from "../core-bridge/jobs";
+import { adminProcedure, protectedProcedure } from "../procedures";
 
 const streamEventSchema = z.object({
 	line: z.string(),
@@ -29,5 +29,12 @@ export const operationsRouter = {
 			for await (const ev of streamJob(input.jobId)) {
 				yield ev;
 			}
+		}),
+
+	operationsCancel: adminProcedure
+		.input(z.object({ jobId: z.string() }))
+		.handler(({ input }): { canceled: true } => {
+			cancelJob(input.jobId);
+			return { canceled: true };
 		}),
 };
