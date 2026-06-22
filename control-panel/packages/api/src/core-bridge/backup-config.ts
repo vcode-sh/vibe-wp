@@ -131,5 +131,14 @@ export async function applyBackupConfigToSite(siteId: string): Promise<void> {
 		return;
 	}
 	const env = await backupConfigEnv(siteId);
-	await runVibe(site.installDir, "prod", "backupConfigApply", { env });
+	const result = await runVibe(site.installDir, "prod", "backupConfigApply", {
+		env,
+	});
+	// runVibe never throws on a non-zero exit, so a failed env-file write would
+	// otherwise be reported to the caller as success. Surface it instead.
+	if (result.code !== 0) {
+		throw new Error(
+			`backup-config-apply failed for ${siteId} (exit ${result.code}): ${result.stderr.trim()}`
+		);
+	}
 }

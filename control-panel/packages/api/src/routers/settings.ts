@@ -55,10 +55,20 @@ export const settingsRouter = {
 			await setBackupConfig(siteId, patch);
 			// Push the resolved config into each affected site's prod.env so it is
 			// authoritative for both the panel and the cron backup timer. Saving the
-			// global creds row re-applies to every configured site.
+			// global creds row re-applies to every configured site. The DB is the
+			// source of truth, so on partial failure we report every site that did
+			// not receive the update (rather than masking all but the first).
 			if (siteId === GLOBAL_SITE_ID) {
 				const ids = await listConfiguredSiteIds();
-				await Promise.all(ids.map(applyBackupConfigToSite));
+				const outcomes = await Promise.allSettled(
+					ids.map((id) => applyBackupConfigToSite(id))
+				);
+				const failed = ids.filter((_, i) => outcomes[i]?.status === "rejected");
+				if (failed.length > 0) {
+					throw new Error(
+						`Saved, but failed to apply config to: ${failed.join(", ")}`
+					);
+				}
 			} else {
 				await applyBackupConfigToSite(siteId);
 			}

@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 set -eu
+umask 077
 # Persist the R2 backup configuration into the selected environment's env file.
 #
 # The control panel injects the resolved config as environment variables (from
@@ -17,35 +18,45 @@ VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 vibe_require_env_file
 file="${VIBE_ENV_FILE}"
 
-# Replace `KEY=...` in-place, or append it when absent. Preserves the file's
-# permissions and every unrelated line (writes back through the existing inode).
+# All edits are staged on a working copy that inherits the env file's mode and
+# owner (cp -p), then swapped in with a single atomic rename. The real env file
+# — which also holds the DB password and WP salts — is therefore never observed
+# truncated or half-written, and never has its 0600 permissions widened.
+work="${file}.vibe-apply.$$"
+line="${work}.line"
+trap 'rm -f "${work}" "${line}"' EXIT INT TERM
+if [ -f "${file}" ]; then
+  cp -p "${file}" "${work}"
+else
+  : > "${work}"
+fi
+
+# Replace `KEY=...` in place on the working copy, or append it when absent.
+# Writes through the working copy's existing inode so its mode is preserved.
 env_upsert() {
   key="$1"
   val="$2"
-  f="$3"
-  tmp="${f}.tmp.$$"
+  # Env files are sourced with `set -a; . file`; a newline would split the value
+  # into a second shell statement, so strip CR/LF defensively.
+  val="$(printf '%s' "${val}" | tr -d '\r\n')"
   found=0
-  if [ -f "${f}" ]; then
-    while IFS= read -r line || [ -n "${line}" ]; do
-      case "${line}" in
+  {
+    while IFS= read -r entry || [ -n "${entry}" ]; do
+      case "${entry}" in
         "${key}="*)
           printf '%s=%s\n' "${key}" "${val}"
           found=1
           ;;
-        *) printf '%s\n' "${line}" ;;
+        *) printf '%s\n' "${entry}" ;;
       esac
-    done < "${f}" > "${tmp}"
-  else
-    : > "${tmp}"
-  fi
-  [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${val}" >> "${tmp}"
-  cat "${tmp}" > "${f}"
-  rm -f "${tmp}"
+    done < "${work}"
+    [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${val}"
+  } > "${line}"
+  cat "${line}" > "${work}"
 }
 
 # VIBE_BACKUP_R2_ENABLED is authoritative on every apply (defaults to disabled).
-enabled="${VIBE_BACKUP_R2_ENABLED:-0}"
-env_upsert VIBE_BACKUP_R2_ENABLED "${enabled}" "${file}"
+env_upsert VIBE_BACKUP_R2_ENABLED "${VIBE_BACKUP_R2_ENABLED:-0}"
 
 # The remaining keys are only rewritten when the panel supplied them, so a
 # "preserve existing secret" save (which omits the secret) never blanks it.
@@ -60,7 +71,9 @@ for key in \
   RCLONE_CONFIG_R2_ENDPOINT; do
   eval "val=\${${key}:-__VIBE_UNSET__}"
   [ "${val}" = "__VIBE_UNSET__" ] && continue
-  env_upsert "${key}" "${val}" "${file}"
+  env_upsert "${key}" "${val}"
 done
 
+# Atomic, same-filesystem swap into place.
+mv -f "${work}" "${file}"
 echo "Backup configuration applied to ${file}"
