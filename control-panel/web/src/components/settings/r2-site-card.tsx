@@ -1,6 +1,6 @@
 /**
- * R2SiteCard — per-site off-site backup settings.
- * Credentials are inherited from the global R2 config card above.
+ * R2SiteBackupCard — per-site off-site backup settings, scoped to one site.
+ * Credentials are inherited from the global R2 config (Settings → Backups).
  */
 
 import { Label } from "@control-panel/ui/components/label";
@@ -15,8 +15,16 @@ import { Input } from "@/components/ui/input";
 import { backupConfigQuery, sitesQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
 
-export function R2SiteCard() {
+interface SiteSummary {
+	domain: string;
+	id: string;
+	name: string;
+}
+
+export function R2SiteBackupCard({ siteId }: { siteId: string }) {
 	const sites = useQuery(sitesQuery());
+	const site = sites.data?.find((s) => s.id === siteId);
+
 	return (
 		<QueryBoundary
 			errorMessage="Couldn't load site list."
@@ -26,17 +34,15 @@ export function R2SiteCard() {
 			onRetry={() => sites.refetch()}
 			skeletonClassName="h-48 w-full"
 		>
-			{sites.data && sites.data.length > 0 ? (
-				<R2SiteForm sites={sites.data} />
+			{site ? (
+				<R2SiteBackupForm site={site} />
 			) : (
 				<Card>
 					<CardHeader>
-						<CardTitle className="text-sm">
-							Off-site backups (R2) — per-site settings
-						</CardTitle>
+						<CardTitle className="text-sm">Off-site backups (R2)</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<p className="text-muted-foreground text-sm">No sites found.</p>
+						<p className="text-muted-foreground text-sm">Site not found.</p>
 					</CardContent>
 				</Card>
 			)}
@@ -44,48 +50,18 @@ export function R2SiteCard() {
 	);
 }
 
-interface SiteSummary {
-	domain: string;
-	id: string;
-	name: string;
-}
-
-// Caller guarantees sites is non-empty (length > 0 guard in R2SiteCard).
-const DEFAULT_SITE: SiteSummary = { id: "", name: "", domain: "" };
-
-function R2SiteForm({ sites }: { sites: SiteSummary[] }) {
-	const first = sites[0] ?? DEFAULT_SITE;
-	const [siteId, setSiteId] = useState(first.id);
-	const selectedSite: SiteSummary = sites.find((s) => s.id === siteId) ?? first;
-
+function R2SiteBackupForm({ site }: { site: SiteSummary }) {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle className="text-sm">
-					Off-site backups (R2) — per-site settings
-				</CardTitle>
+				<CardTitle className="text-sm">Off-site backups (R2)</CardTitle>
 			</CardHeader>
 			<CardContent className="grid gap-4">
-				<div className="grid gap-1.5">
-					<Label htmlFor="r2-site-selector">Site</Label>
-					<select
-						className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-						id="r2-site-selector"
-						onChange={(e) => setSiteId(e.target.value)}
-						value={siteId}
-					>
-						{sites.map((s) => (
-							<option key={s.id} value={s.id}>
-								{s.name} ({s.domain})
-							</option>
-						))}
-					</select>
-				</div>
 				<p className="text-muted-foreground text-xs">
-					Credentials (endpoint, access key, secret, bucket) are shared from the
-					global settings above.
+					Credentials (endpoint, access key, secret, bucket) come from the
+					global Settings → Backups tab.
 				</p>
-				<R2SiteFields key={siteId} site={selectedSite} />
+				<R2SiteFields site={site} />
 			</CardContent>
 		</Card>
 	);
