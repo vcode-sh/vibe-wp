@@ -21,3 +21,6 @@ export const stagingQuery = (siteId: string) =>
 
 export const siteStatusQuery = (siteId: string) =>
 	orpc.siteStatus.queryOptions({ input: { siteId } });
+
+export const updatesAvailableQuery = (siteId: string) =>
+	orpc.updatesAvailable.queryOptions({ input: { siteId } });

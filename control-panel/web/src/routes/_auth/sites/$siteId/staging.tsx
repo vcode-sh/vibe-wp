@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stagingQuery } from "@/data/queries";
+import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/staging")({
 	component: StagingPage,
@@ -18,11 +20,15 @@ export const Route = createFileRoute("/_auth/sites/$siteId/staging")({
 function StagingCard({
 	url,
 	noindex,
+	onRefresh,
 	onPublish,
+	refreshPending,
 }: {
 	url: string | null;
 	noindex: boolean;
+	onRefresh: () => void;
 	onPublish: () => void;
+	refreshPending: boolean;
 }) {
 	if (!url) {
 		return (
@@ -47,7 +53,7 @@ function StagingCard({
 				</CardTitle>
 			</CardHeader>
 			<CardContent className="flex flex-wrap gap-2">
-				<Button onClick={() => toast.success("Copy live → staging (mock)…")}>
+				<Button disabled={refreshPending} onClick={onRefresh}>
 					Copy live to staging
 				</Button>
 				<Button onClick={onPublish} variant="outline">
@@ -62,6 +68,35 @@ function StagingPage() {
 	const { siteId } = Route.useParams();
 	const staging = useQuery(stagingQuery(siteId));
 	const [publishing, setPublishing] = useState(false);
+	const [runnerOpen, setRunnerOpen] = useState(false);
+	const [jobId, setJobId] = useState<string | null>(null);
+	const [runnerTitle, setRunnerTitle] = useState("");
+
+	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
+	const promote = useMutation(orpc.stagingPromote.mutationOptions());
+
+	async function handleRefresh() {
+		try {
+			const result = await refresh.mutateAsync({ siteId });
+			setRunnerTitle("Copying live to staging…");
+			setJobId(result.jobId);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start staging refresh.");
+		}
+	}
+
+	async function handlePromote() {
+		try {
+			const result = await promote.mutateAsync({ siteId });
+			setRunnerTitle("Publishing staging to live…");
+			setJobId(result.jobId);
+			setPublishing(false);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start promote.");
+		}
+	}
 
 	return (
 		<>
@@ -83,6 +118,8 @@ function StagingPage() {
 						<StagingCard
 							noindex={staging.data.present ? staging.data.noindex : false}
 							onPublish={() => setPublishing(true)}
+							onRefresh={handleRefresh}
+							refreshPending={refresh.isPending}
 							url={staging.data.present ? staging.data.url : null}
 						/>
 					) : null}
@@ -91,15 +128,19 @@ function StagingPage() {
 
 			<SafetyConfirm
 				confirmLabel="Publish to live"
-				consequence="This copies your staging files over the live site. We back up live first."
-				onConfirm={() => {
-					toast.success("Publishing to live (mock)…");
-					setPublishing(false);
-				}}
+				consequence="This copies your staging files over the live site. Your live site will be replaced. We back up live first."
+				onConfirm={handlePromote}
 				onOpenChange={setPublishing}
 				open={publishing}
-				reversible
+				reversible={false}
 				title="Publish staging to live"
+			/>
+
+			<OperationRunner
+				jobId={jobId}
+				onOpenChange={setRunnerOpen}
+				open={runnerOpen}
+				title={runnerTitle}
 			/>
 		</>
 	);

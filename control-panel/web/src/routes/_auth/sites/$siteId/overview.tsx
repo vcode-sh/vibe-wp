@@ -1,15 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { DeveloperDetails } from "@/components/patterns/developer-details";
 import { NeedsYou } from "@/components/patterns/needs-you";
+import { OperationRunner } from "@/components/patterns/operation-runner";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyNet } from "@/components/patterns/safety-net";
 import { StatusHero } from "@/components/patterns/status-hero";
 import { VerdictTile } from "@/components/patterns/verdict-tile";
 import { TopBar } from "@/components/top-bar";
-import { siteOverviewQuery } from "@/data/queries";
+import { Button } from "@/components/ui/button";
+import { siteOverviewQuery, updatesAvailableQuery } from "@/data/queries";
+import type { NeedItem } from "@/data/types";
+import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/overview")({
 	component: OverviewPage,
@@ -18,6 +23,33 @@ export const Route = createFileRoute("/_auth/sites/$siteId/overview")({
 function OverviewPage() {
 	const { siteId } = Route.useParams();
 	const overview = useQuery(siteOverviewQuery(siteId));
+	const updatesAvailable = useQuery(updatesAvailableQuery(siteId));
+	const [runnerOpen, setRunnerOpen] = useState(false);
+	const [jobId, setJobId] = useState<string | null>(null);
+	const [runnerTitle, setRunnerTitle] = useState("");
+
+	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
+
+	async function handleApplyUpdates(what: "core" | "plugins" = "core") {
+		try {
+			const result = await applyUpdates.mutateAsync({ siteId, what });
+			setRunnerTitle("Running updates…");
+			setJobId(result.jobId);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start updates.");
+		}
+	}
+
+	async function handleAct(item: NeedItem) {
+		if (item.icon === "update") {
+			await handleApplyUpdates("plugins");
+		} else {
+			toast.success(`${item.actionLabel}: starting…`);
+		}
+	}
+
+	const pluginCount = updatesAvailable.data?.plugins ?? 0;
 
 	return (
 		<>
@@ -38,12 +70,23 @@ function OverviewPage() {
 								status={overview.data.status}
 								subline={overview.data.subline}
 							/>
-							<NeedsYou
-								items={overview.data.needs}
-								onAct={(item) =>
-									toast.success(`${item.actionLabel}: starting (mock)…`)
-								}
-							/>
+							<NeedsYou items={overview.data.needs} onAct={handleAct} />
+							{pluginCount > 0 ? (
+								<div className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3 text-sm">
+									<span className="text-muted-foreground">
+										{pluginCount} plugin update{pluginCount === 1 ? "" : "s"}{" "}
+										available
+									</span>
+									<Button
+										disabled={applyUpdates.isPending}
+										onClick={() => handleApplyUpdates("plugins")}
+										size="sm"
+										variant="outline"
+									>
+										Run updates
+									</Button>
+								</div>
+							) : null}
 							<div className="grid gap-3 lg:grid-cols-[1.55fr_1fr]">
 								<div className="grid grid-cols-2 gap-3 self-start sm:grid-cols-2">
 									{overview.data.tiles.map((tile) => (
@@ -67,6 +110,13 @@ function OverviewPage() {
 					) : null}
 				</QueryBoundary>
 			</div>
+
+			<OperationRunner
+				jobId={jobId}
+				onOpenChange={setRunnerOpen}
+				open={runnerOpen}
+				title={runnerTitle}
+			/>
 		</>
 	);
 }

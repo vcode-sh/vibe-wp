@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
@@ -9,6 +10,7 @@ import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { serverInfoQuery } from "@/data/queries";
+import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/server")({
 	component: ServerPage,
@@ -17,6 +19,22 @@ export const Route = createFileRoute("/_auth/server")({
 function ServerPage() {
 	const server = useQuery(serverInfoQuery());
 	const [stopping, setStopping] = useState(false);
+	const [runnerOpen, setRunnerOpen] = useState(false);
+	const [jobId, setJobId] = useState<string | null>(null);
+	const [runnerTitle, setRunnerTitle] = useState("");
+
+	const harden = useMutation(orpc.serverHarden.mutationOptions());
+
+	async function handleHarden() {
+		try {
+			const result = await harden.mutateAsync({});
+			setRunnerTitle("Securing the server…");
+			setJobId(result.jobId);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start server hardening.");
+		}
+	}
 
 	return (
 		<>
@@ -24,7 +42,7 @@ function ServerPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button onClick={() => toast.success("Hardening server (mock)…")}>
+						<Button disabled={harden.isPending} onClick={handleHarden}>
 							Secure the server
 						</Button>
 					}
@@ -62,6 +80,9 @@ function ServerPage() {
 						</Card>
 					</div>
 				</QueryBoundary>
+				{/* TODO: Stop a site — lifecycleDown({ siteId }) requires a site picker;
+				    add a <Select sites> + SafetyConfirm + OperationRunner once the
+				    site-list affordance is designed (follow-up task). */}
 				<Card className="border-destructive/40">
 					<CardContent className="flex items-center justify-between py-4">
 						<div className="text-sm">
@@ -77,17 +98,28 @@ function ServerPage() {
 				</Card>
 			</div>
 
+			{/* Stop-a-site is not yet fully wired: lifecycleDown needs a siteId that
+			    this server-level page does not have. The SafetyConfirm is kept in
+			    place; the confirm handler shows an informative toast until a site
+			    selector is added in a follow-up. */}
 			<SafetyConfirm
 				confirmLabel="Stop the site"
 				consequence="The site goes offline until you start it again. Your data and backups are untouched."
 				onConfirm={() => {
-					toast.success("Stopping the site (mock)…");
+					toast.info("Site stopping requires selecting a site — coming soon.");
 					setStopping(false);
 				}}
 				onOpenChange={setStopping}
 				open={stopping}
-				reversible
+				reversible={false}
 				title="Stop a site"
+			/>
+
+			<OperationRunner
+				jobId={jobId}
+				onOpenChange={setRunnerOpen}
+				open={runnerOpen}
+				title={runnerTitle}
 			/>
 		</>
 	);

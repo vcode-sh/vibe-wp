@@ -34,16 +34,37 @@ function BackupsPage() {
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
 	const [runnerOpen, setRunnerOpen] = useState(false);
 	const [jobId, setJobId] = useState<string | null>(null);
+	const [runnerTitle, setRunnerTitle] = useState("Backing up…");
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
+	const restore = useMutation(orpc.backupsRestore.mutationOptions());
 
 	async function handleBackupNow() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
+			setRunnerTitle(`Backing up ${siteId}`);
 			setJobId(result.jobId);
 			setRunnerOpen(true);
 		} catch {
 			toast.error("Failed to start backup.");
+		}
+	}
+
+	async function handleRestore() {
+		if (!restoring) {
+			return;
+		}
+		try {
+			const result = await restore.mutateAsync({
+				siteId,
+				backupId: restoring.id,
+			});
+			setRunnerTitle(`Restoring ${siteId}`);
+			setJobId(result.jobId);
+			setRestoring(null);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start restore.");
 		}
 	}
 
@@ -134,10 +155,7 @@ function BackupsPage() {
 						? `This replaces the live site with the backup from ${relativeTime(restoring.whenISO, now)}. We back up the current state first.`
 						: ""
 				}
-				onConfirm={() => {
-					toast.success("Restore: starting (mock)…");
-					setRestoring(null);
-				}}
+				onConfirm={handleRestore}
 				onOpenChange={(open) => !open && setRestoring(null)}
 				open={restoring !== null}
 				reversible
@@ -148,7 +166,7 @@ function BackupsPage() {
 				jobId={jobId}
 				onOpenChange={setRunnerOpen}
 				open={runnerOpen}
-				title={`Backing up ${siteId}`}
+				title={runnerTitle}
 			/>
 		</>
 	);
