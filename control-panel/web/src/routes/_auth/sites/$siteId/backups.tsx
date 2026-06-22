@@ -11,6 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { BackupMenu } from "@/components/backups/backup-menu";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
@@ -51,9 +52,9 @@ function BackupsPage() {
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
 
-	async function handleBackupNow() {
+	async function handleBackup(destination: "local" | "both") {
 		try {
-			const result = await runBackup.mutateAsync({ siteId });
+			const result = await runBackup.mutateAsync({ siteId, destination });
 			start({
 				jobId: result.jobId,
 				title: `Backing up ${siteId}`,
@@ -92,12 +93,11 @@ function BackupsPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button
-							disabled={runBackup.isPending || isRunning(siteId, "backup")}
-							onClick={handleBackupNow}
-						>
-							Back up now
-						</Button>
+						<BackupMenu
+							disabled={runBackup.isPending || backupRunning}
+							onSelect={handleBackup}
+							siteId={siteId}
+						/>
 					}
 					subtitle="Local and off-site copies, retention and restore."
 					title="Backups"

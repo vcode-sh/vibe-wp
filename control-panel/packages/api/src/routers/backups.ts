@@ -27,9 +27,18 @@ export const backupsRouter = {
 		}),
 
 	backupsRun: operatorProcedure
-		.input(z.object({ siteId: z.string() }))
+		.input(
+			z.object({
+				siteId: z.string(),
+				destination: z.enum(["local", "both"]).default("both"),
+			})
+		)
 		.handler(async ({ input, context }) => {
-			const extraEnv = await backupConfigEnv(input.siteId);
+			const env = await backupConfigEnv(input.siteId);
+			const runEnv =
+				input.destination === "local"
+					? { ...env, VIBE_BACKUP_R2_ENABLED: "0" }
+					: env;
 			return startJob({
 				op: "backup",
 				siteId: input.siteId,
@@ -37,7 +46,7 @@ export const backupsRouter = {
 				kind: "backup",
 				userId: context.session.user.id,
 				action: "backup",
-				extraEnv,
+				extraEnv: runEnv,
 			});
 		}),
 
