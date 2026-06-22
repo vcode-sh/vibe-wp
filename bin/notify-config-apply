@@ -1,0 +1,76 @@
+#!/usr/bin/env sh
+set -eu
+umask 077
+# Persist the monitor alert channel configuration into the selected
+# environment's env file.
+#
+# The control panel injects the resolved config as environment variables (from
+# its SQLite store) and runs this command. We write those values into the env
+# file so that BOTH the panel AND the unattended cron health monitor — which
+# runs `bin/vibe <env> monitor` with no injected env — read the same channels.
+#
+# Only the managed VIBE_MONITOR_* keys are touched; every other line is
+# preserved verbatim. Secrets are never printed.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+vibe_require_env_file
+file="${VIBE_ENV_FILE}"
+
+# All edits are staged on a working copy that inherits the env file's mode and
+# owner (cp -p), then swapped in with a single atomic rename. The real env file
+# — which also holds the DB password and WP salts — is therefore never observed
+# truncated or half-written, and never has its 0600 permissions widened.
+work="${file}.vibe-apply.$$"
+line="${work}.line"
+trap 'rm -f "${work}" "${line}"' EXIT INT TERM
+if [ -f "${file}" ]; then
+  cp -p "${file}" "${work}"
+else
+  : > "${work}"
+fi
+
+# Replace `KEY=...` in place on the working copy, or append it when absent.
+# Writes through the working copy's existing inode so its mode is preserved.
+env_upsert() {
+  key="$1"
+  val="$2"
+  # Env files are sourced with `set -a; . file`; a newline would split the value
+  # into a second shell statement, so strip CR/LF defensively.
+  val="$(printf '%s' "${val}" | tr -d '\r\n')"
+  found=0
+  {
+    while IFS= read -r entry || [ -n "${entry}" ]; do
+      case "${entry}" in
+        "${key}="*)
+          printf '%s=%s\n' "${key}" "${val}"
+          found=1
+          ;;
+        *) printf '%s\n' "${entry}" ;;
+      esac
+    done < "${work}"
+    [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${val}"
+  } > "${line}"
+  cat "${line}" > "${work}"
+}
+
+# VIBE_MONITOR_ALERT_ON_WARN is authoritative on every apply (defaults to off).
+env_upsert VIBE_MONITOR_ALERT_ON_WARN "${VIBE_MONITOR_ALERT_ON_WARN:-0}"
+
+# The channel keys are only rewritten when the panel supplied them, so a
+# "preserve existing token" save (which omits the token) never blanks it, and
+# clearing a channel is done by sending an empty value (which upserts "").
+for key in \
+  VIBE_MONITOR_TELEGRAM_TOKEN \
+  VIBE_MONITOR_TELEGRAM_CHAT_ID \
+  VIBE_MONITOR_WEBHOOK_URL \
+  VIBE_MONITOR_EMAIL_TO; do
+  eval "val=\${${key}:-__VIBE_UNSET__}"
+  [ "${val}" = "__VIBE_UNSET__" ] && continue
+  env_upsert "${key}" "${val}"
+done
+
+# Atomic, same-filesystem swap into place.
+mv -f "${work}" "${file}"
+echo "Notification configuration applied to ${file}"

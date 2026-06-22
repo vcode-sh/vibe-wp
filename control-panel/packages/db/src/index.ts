@@ -13,6 +13,7 @@ import {
 } from "./schema/auth";
 import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
+import { notifyConfig } from "./schema/notify";
 
 const schema = {
 	account,
@@ -25,6 +26,7 @@ const schema = {
 	auditLog,
 	jobs,
 	backupConfig,
+	notifyConfig,
 };
 
 export function createDb() {

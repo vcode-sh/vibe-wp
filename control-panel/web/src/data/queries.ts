@@ -28,6 +28,9 @@ export const updatesAvailableQuery = (siteId: string) =>
 export const backupConfigQuery = (siteId: string) =>
 	orpc.backupConfigGet.queryOptions({ input: { siteId } });
 
+export const notifyConfigQuery = (siteId: string) =>
+	orpc.notifyConfigGet.queryOptions({ input: { siteId } });
+
 export const healthPerfQuery = (siteId: string) =>
 	orpc.healthPerf.queryOptions({ input: { siteId } });
 

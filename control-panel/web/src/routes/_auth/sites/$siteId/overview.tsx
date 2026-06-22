@@ -9,6 +9,7 @@ import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyNet } from "@/components/patterns/safety-net";
 import { StatusHero } from "@/components/patterns/status-hero";
 import { VerdictTile } from "@/components/patterns/verdict-tile";
+import { SiteControls } from "@/components/sites/site-controls";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { siteOverviewQuery, updatesAvailableQuery } from "@/data/queries";
@@ -138,6 +139,7 @@ function OverviewPage() {
 									</Button>
 								</div>
 							) : null}
+							<SiteControls siteId={siteId} />
 							<div className="grid gap-3 lg:grid-cols-[1.55fr_1fr]">
 								<div className="grid grid-cols-2 gap-3 self-start sm:grid-cols-2">
 									{overview.data.tiles.map((tile) => (

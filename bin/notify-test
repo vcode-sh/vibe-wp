@@ -1,0 +1,58 @@
+#!/usr/bin/env sh
+set -eu
+# Send ONE test alert through whatever channels are configured in the selected
+# environment's env file, reusing the same senders the cron health monitor
+# uses (bin/lib/monitor.sh). This lets an operator confirm that Telegram,
+# webhook and/or email delivery actually work end to end.
+#
+# Each sender is a no-op when its required configuration is missing; we print a
+# short ok/skip summary per channel. Tokens are NEVER printed.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/monitor.sh"
+
+vibe_require_env_file
+
+site="$(vibe_wp_home)"
+[ -n "${site}" ] || site="(unknown)"
+status="test"
+summary="vibe-wp test alert (${VIBE_ENV}) for ${site}"
+body="$(printf 'vibe-wp test alert\nenvironment: %s\nsite: %s\n\nThis is a manual test of the configured alert channels.' \
+  "${VIBE_ENV}" "${site}")"
+subject="[vibe-wp] ${VIBE_ENV} test alert"
+
+sent=0
+
+# Telegram: configured when both token and chat id are present.
+if [ -n "$(vibe_env_value VIBE_MONITOR_TELEGRAM_TOKEN)" ] \
+  && [ -n "$(vibe_env_value VIBE_MONITOR_TELEGRAM_CHAT_ID)" ]; then
+  monitor_alert_telegram "${status}" "${body}"
+  sent=$((sent + 1))
+else
+  echo "skip: Telegram not configured (token + chat id required)"
+fi
+
+# Webhook: configured when a URL is present.
+if [ -n "$(vibe_env_value VIBE_MONITOR_WEBHOOK_URL)" ]; then
+  monitor_alert_webhook "${status}" "${summary}" "${body}"
+  sent=$((sent + 1))
+else
+  echo "skip: Webhook not configured (no URL)"
+fi
+
+# Email: configured when a recipient address is present.
+if [ -n "$(vibe_env_value VIBE_MONITOR_EMAIL_TO)" ]; then
+  monitor_alert_email "${status}" "${subject}" "${body}"
+  sent=$((sent + 1))
+else
+  echo "skip: Email not configured (no recipient)"
+fi
+
+if [ "${sent}" -eq 0 ]; then
+  echo "No alert channels are configured. Nothing was sent."
+else
+  echo "Test alert dispatched to ${sent} channel(s)."
+fi
+
+exit 0
