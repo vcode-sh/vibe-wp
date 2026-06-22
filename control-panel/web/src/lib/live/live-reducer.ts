@@ -4,6 +4,7 @@ export interface LiveState {
 	done: boolean;
 	lastEventAt: number;
 	lastLine: string;
+	lastLineAt: number;
 	lines: string[];
 	startedAt: number;
 	status: JobStatus;
@@ -16,6 +17,7 @@ export function initialLiveState(nowMs: number): LiveState {
 		done: false,
 		lastLine: "",
 		lastEventAt: nowMs,
+		lastLineAt: nowMs,
 		startedAt: nowMs,
 	};
 }
@@ -37,6 +39,7 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
 	if (event.line.length > 0) {
 		next.lines = [...state.lines, event.line];
 		next.lastLine = event.line;
+		next.lastLineAt = at;
 	}
 	return next;
 }

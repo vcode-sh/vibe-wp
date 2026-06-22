@@ -108,7 +108,9 @@ export function LiveOperation({
 			)
 		: rawSteps;
 	const progress = parseRcloneProgress(live.lastLine);
-	const idle = !live.done && now - live.lastEventAt > 6000;
+	// "Still working…" tracks the last real output line — heartbeats keep the
+	// connection alive but must not suppress the no-recent-output reassurance.
+	const idle = !live.done && now - live.lastLineAt > 5000;
 
 	async function cancel() {
 		if (!jobId || canceling) {
@@ -125,16 +127,14 @@ export function LiveOperation({
 
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent className="max-w-2xl">
+			<DialogContent className="sm:max-w-2xl">
 				<DialogHeader>
-					<DialogTitle className="flex items-center justify-between gap-3">
-						<span>{title}</span>
-						<span className="font-mono text-muted-foreground text-xs">
-							{elapsed(now - live.startedAt)}
+					<DialogTitle className="pr-8">{title}</DialogTitle>
+					<DialogDescription className="flex items-center gap-2">
+						<span>{live.done ? "Operation finished." : "Running…"}</span>
+						<span className="font-mono text-xs">
+							· {elapsed(now - live.startedAt)}
 						</span>
-					</DialogTitle>
-					<DialogDescription>
-						{live.done ? "Operation finished." : "Running…"}
 					</DialogDescription>
 				</DialogHeader>
 

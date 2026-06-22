@@ -16,6 +16,8 @@ describe("liveReducer", () => {
 		expect(s.lines).toEqual(["a"]);
 		expect(s.lastLine).toBe("a");
 		expect(s.lastEventAt).toBe(1200);
+		// heartbeat refreshes liveness but NOT the last-output marker
+		expect(s.lastLineAt).toBe(1100);
 	});
 
 	it("captures terminal status on done", () => {
