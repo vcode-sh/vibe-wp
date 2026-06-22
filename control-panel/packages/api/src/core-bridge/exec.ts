@@ -83,13 +83,18 @@ export async function runVibe(
 	siteDir: string,
 	env: VibeEnv,
 	op: VibeOp,
-	opts: { timeoutMs?: number; args?: string[] } = {}
+	opts: {
+		timeoutMs?: number;
+		args?: string[];
+		env?: Record<string, string>;
+	} = {}
 ): Promise<{ stdout: string; stderr: string; code: number }> {
 	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
 	const proc = Bun.spawn(argv, {
 		cwd: siteDir,
 		stdout: "pipe",
 		stderr: "pipe",
+		...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
 	});
 	const timer = setTimeout(() => proc.kill(), opts.timeoutMs ?? 60_000);
 	const [stdout, stderr] = await Promise.all([
@@ -105,7 +110,11 @@ export function streamVibe(
 	siteDir: string,
 	env: VibeEnv,
 	op: VibeOp,
-	opts: { timeoutMs?: number; args?: string[] } = {}
+	opts: {
+		timeoutMs?: number;
+		args?: string[];
+		env?: Record<string, string>;
+	} = {}
 ) {
 	const argv = buildVibeArgv(siteDir, env, op, opts.args ?? []);
 	// On Linux, spawn under setsid so the op gets its own session+group (pgid == pid).
@@ -116,6 +125,7 @@ export function streamVibe(
 		cwd: siteDir,
 		stdout: "pipe",
 		stderr: "pipe",
+		...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
 	});
 	const killTree = () => {
 		if (onLinux && child.pid && child.pid > 1) {

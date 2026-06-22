@@ -63,6 +63,8 @@ export interface StartJobInput {
 	action: string;
 	args?: string[];
 	env: VibeEnv;
+	/** Extra environment variables injected into the spawned process. */
+	extraEnv?: Record<string, string>;
 	kind: string;
 	op: VibeOp;
 	siteId: string;
@@ -155,6 +157,7 @@ export async function startJob(
 	const { proc, lines } = d.streamVibe(site.installDir, input.env, input.op, {
 		args: input.args,
 		timeoutMs: STREAM_TIMEOUT_MS,
+		env: input.extraEnv,
 	});
 	registry.set(jobId, { job, proc, stream });
 

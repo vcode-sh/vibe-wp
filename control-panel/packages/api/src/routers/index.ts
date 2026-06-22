@@ -7,6 +7,7 @@ import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
 import { serverRouter } from "./server";
+import { settingsRouter } from "./settings";
 import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
 import { updatesRouter } from "./updates";
@@ -22,6 +23,7 @@ export const appRouter = {
 	...stagingRouter,
 	...logsRouter,
 	...updatesRouter,
+	...settingsRouter,
 };
 
 export type AppRouter = typeof appRouter;

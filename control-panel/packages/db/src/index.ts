@@ -11,6 +11,7 @@ import {
 	userRelations,
 	verification,
 } from "./schema/auth";
+import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
 
 const schema = {
@@ -23,6 +24,7 @@ const schema = {
 	verification,
 	auditLog,
 	jobs,
+	backupConfig,
 };
 
 export function createDb() {
