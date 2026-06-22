@@ -1,10 +1,17 @@
+import { eventIterator } from "@orpc/server";
 import { z } from "zod";
 
-import type { LogLine } from "../contract";
-import { runVibe } from "../core-bridge/exec";
+import type { LogLine, StreamEvent } from "../contract";
+import { runVibe, STREAM_TIMEOUT_MS, streamVibe } from "../core-bridge/exec";
 import { parseLogLines } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
+
+const logStreamSchema = z.object({
+	line: z.string(),
+	status: z.enum(["queued", "running", "succeeded", "failed", "canceled"]),
+	done: z.boolean(),
+});
 
 export const logsRouter = {
 	logsRecent: protectedProcedure
@@ -20,5 +27,32 @@ export const logsRouter = {
 				(await runVibe(site.installDir, "prod", "logsRecent")).stdout,
 				input.source
 			);
+		}),
+
+	logsFollow: protectedProcedure
+		.input(z.object({ siteId: z.string() }))
+		.output(eventIterator(logStreamSchema))
+		.handler(async function* ({ input }): AsyncGenerator<StreamEvent> {
+			const site = await findSite(input.siteId);
+			if (!site) {
+				return;
+			}
+			const { proc, lines } = streamVibe(
+				site.installDir,
+				"prod",
+				"logsFollow",
+				{ timeoutMs: STREAM_TIMEOUT_MS }
+			);
+			try {
+				for await (const line of lines) {
+					if (line.length > 0) {
+						yield { line, status: "running", done: false };
+					}
+				}
+				yield { line: "", status: "succeeded", done: true };
+			} finally {
+				// Kill the `logs -f` process group when the client disconnects.
+				proc.kill();
+			}
 		}),
 };
