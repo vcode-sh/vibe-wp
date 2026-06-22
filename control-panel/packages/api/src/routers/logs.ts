@@ -1,4 +1,4 @@
-import { eventIterator } from "@orpc/server";
+import { eventIterator, ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import type { LogLine, StreamEvent } from "../contract";
@@ -6,6 +6,12 @@ import { runVibe, STREAM_TIMEOUT_MS, streamVibe } from "../core-bridge/exec";
 import { parseLogLines } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
+
+const GLOBAL_MAX = 8;
+const PER_USER_MAX = 3;
+
+let globalActiveStreams = 0;
+const perUserActiveStreams = new Map<string, number>();
 
 const logStreamSchema = z.object({
 	line: z.string(),
@@ -32,11 +38,36 @@ export const logsRouter = {
 	logsFollow: protectedProcedure
 		.input(z.object({ siteId: z.string() }))
 		.output(eventIterator(logStreamSchema))
-		.handler(async function* ({ input }): AsyncGenerator<StreamEvent> {
+		.handler(async function* ({ input, context }): AsyncGenerator<StreamEvent> {
+			const userId = context.session.user.id;
+
+			if (
+				globalActiveStreams >= GLOBAL_MAX ||
+				(perUserActiveStreams.get(userId) ?? 0) >= PER_USER_MAX
+			) {
+				throw new ORPCError("TOO_MANY_REQUESTS", {
+					message: "Too many concurrent log streams. Close one and retry.",
+				});
+			}
+
+			globalActiveStreams += 1;
+			perUserActiveStreams.set(
+				userId,
+				(perUserActiveStreams.get(userId) ?? 0) + 1
+			);
+
 			const site = await findSite(input.siteId);
 			if (!site) {
+				globalActiveStreams -= 1;
+				const prev = perUserActiveStreams.get(userId) ?? 1;
+				if (prev <= 1) {
+					perUserActiveStreams.delete(userId);
+				} else {
+					perUserActiveStreams.set(userId, prev - 1);
+				}
 				return;
 			}
+
 			const { proc, lines } = streamVibe(
 				site.installDir,
 				"prod",
@@ -51,8 +82,16 @@ export const logsRouter = {
 				}
 				yield { line: "", status: "succeeded", done: true };
 			} finally {
-				// Kill the `logs -f` process group when the client disconnects.
+				// Kill the `logs -f` process group when the client disconnects or the
+				// generator is garbage-collected via .return() on early consumer abort.
 				proc.kill();
+				globalActiveStreams -= 1;
+				const prev = perUserActiveStreams.get(userId) ?? 1;
+				if (prev <= 1) {
+					perUserActiveStreams.delete(userId);
+				} else {
+					perUserActiveStreams.set(userId, prev - 1);
+				}
 			}
 		}),
 };

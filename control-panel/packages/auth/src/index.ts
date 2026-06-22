@@ -8,12 +8,15 @@ import {
 import { env } from "@control-panel/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import { admin } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
+import { adminAc, defaultStatements } from "better-auth/plugins/admin/access";
 
 const authSchema = { account, session, user, verification };
 
 const ac = createAccessControl({
+	...defaultStatements,
 	site: ["read", "operate", "manage"],
 	server: ["read", "manage"],
 	team: ["manage"],
@@ -23,6 +26,7 @@ const roles = {
 	viewer: ac.newRole({ site: ["read"], server: ["read"] }),
 	operator: ac.newRole({ site: ["read", "operate"], server: ["read"] }),
 	admin: ac.newRole({
+		...adminAc.statements,
 		site: ["read", "operate", "manage"],
 		server: ["read", "manage"],
 		team: ["manage"],
@@ -51,10 +55,16 @@ export function createAuth() {
 							.select({ id: user.id })
 							.from(user)
 							.limit(1);
+						if (existing.length > 0) {
+							throw new APIError("FORBIDDEN", {
+								message:
+									"Registration is closed. Ask an admin to create your account.",
+							});
+						}
 						return {
 							data: {
 								...newUser,
-								role: existing.length === 0 ? "admin" : "viewer",
+								role: "admin",
 							},
 						};
 					},

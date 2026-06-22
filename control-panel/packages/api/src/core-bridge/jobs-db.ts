@@ -4,6 +4,23 @@ import { desc, eq } from "drizzle-orm";
 
 import type { JobStatus } from "../contract";
 
+/**
+ * Called once at server startup. Any job row still marked 'running' was left
+ * mid-flight by a previous process — the SSE stream is gone and the process
+ * is dead. Flip those rows to 'failed' so the UI does not show phantom active
+ * jobs indefinitely.
+ */
+export async function reconcileOrphanedJobs(): Promise<void> {
+	await db
+		.update(jobs)
+		.set({
+			status: "failed" satisfies JobStatus,
+			exitCode: null,
+			finishedAt: new Date(),
+		})
+		.where(eq(jobs.status, "running"));
+}
+
 export async function persistJobStart(
 	jobId: string,
 	kind: string,

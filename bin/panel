@@ -51,6 +51,10 @@ install_panel() {
     echo "WARN: $DOMAIN resolves to '$resolved', server is '$ip'. Add an A record."
   fi
 
+  # Preserve existing BETTER_AUTH_SECRET across reinstalls so sessions survive upgrades.
+  # Must be read BEFORE rm -rf "$PANEL_DIR/app" removes the old .env.
+  existing_secret="$($SUDO grep -m1 '^BETTER_AUTH_SECRET=' "$PANEL_DIR/app/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+
   # Build
   $SUDO install -d -m 0755 "$PANEL_DIR"
   $SUDO install -d -m 0700 "$PANEL_DIR/data"
@@ -61,7 +65,11 @@ install_panel() {
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
 
   # Env (contains BETTER_AUTH_SECRET — keep it root-only, never world-readable)
-  SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
+  if [ -n "$existing_secret" ]; then
+    SECRET="$existing_secret"
+  else
+    SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
+  fi
   ( umask 077 && printf '%s\n' \
     "DATABASE_URL=file:$PANEL_DIR/data/panel.db" \
     "BETTER_AUTH_SECRET=$SECRET" \

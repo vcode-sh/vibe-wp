@@ -46,6 +46,21 @@ const finalized = new Set<string>();
 
 const registry = new Map<string, JobEntry>();
 
+/**
+ * How long a finalized job entry stays in the in-memory registry after the
+ * job reaches a terminal state. Late SSE reconnects within this window can
+ * still read the final status from memory; after it the row is authoritative.
+ */
+const FINALIZED_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Evict a finalized job from the in-memory maps after the TTL expires. */
+function scheduleEviction(jobId: string): void {
+	setTimeout(() => {
+		registry.delete(jobId);
+		finalized.delete(jobId);
+	}, FINALIZED_TTL_MS);
+}
+
 export function hasRunningJob(siteId: string, kind: string): boolean {
 	for (const entry of registry.values()) {
 		if (
@@ -121,6 +136,7 @@ async function drainJob(
 	stream.end(job.status);
 	if (!finalized.has(jobId)) {
 		finalized.add(jobId);
+		scheduleEviction(jobId);
 		await deps.persistJobFinish(jobId, job.status, code);
 	}
 }
@@ -170,6 +186,7 @@ export async function startJob(
 		stream.end(job.status);
 		if (!finalized.has(jobId)) {
 			finalized.add(jobId);
+			scheduleEviction(jobId);
 			try {
 				await d.persistJobFinish(jobId, job.status, null);
 			} catch {
