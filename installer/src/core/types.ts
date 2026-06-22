@@ -180,3 +180,22 @@ export interface InstallPlan {
   version: string;
   warnings: string[];
 }
+
+// Mirrors task-runner's TaskStatus literals. Declared here (not imported) so the
+// JSON wire type stays free of a runtime import cycle (task-runner imports types).
+export type ProgressTaskStatus = "pending" | "running" | "done" | "failed" | "skipped";
+
+// One live per-task progress record emitted as a single NDJSON line by the
+// headless runPlan stream. JSON-serializable by design: a "start" event fires
+// before each task runs, a "result" event fires after it finishes (carrying the
+// final status and redacted output). index/total drive a deterministic UI rail.
+export interface ProgressEvent {
+  index: number;
+  kind: "progress";
+  name: string;
+  output?: string;
+  phase: "start" | "result";
+  status?: ProgressTaskStatus;
+  taskId: string;
+  total: number;
+}

@@ -6,7 +6,13 @@ import { buildOperationTask } from "./manage-tasks";
 import { runPlan } from "./plan-runner";
 import { redactPlan } from "./redaction";
 import { runTask, type TaskResult } from "./task-runner";
-import type { HostFacts, InstallerState, InstallMode, InstallPlan } from "./types";
+import type {
+  HostFacts,
+  InstallerState,
+  InstallMode,
+  InstallPlan,
+  ProgressEvent
+} from "./types";
 import { validateState } from "./validation";
 
 // Frontend-agnostic request/response surface. Any frontend (TUI, web, desktop,
@@ -57,6 +63,43 @@ export async function runHeadless(request: CoreRequest): Promise<CoreResponse> {
     default:
       return { kind: "error", message: "Unknown request kind." };
   }
+}
+
+// Streaming variant of the runPlan case. runHeadless stays the one-shot brain
+// for every kind; this is the ONLY entry that emits per-task progress, by
+// wiring plan-runner's RunPlanEvents to `emit`. It returns the SAME final
+// { kind: "runPlan", results } CoreResponse runHeadless would — the CLI prints
+// the progress events as NDJSON, then this terminal response as the last line.
+export async function runHeadlessRunPlan(
+  plan: InstallPlan,
+  apply: boolean,
+  emit: (event: ProgressEvent) => void
+): Promise<CoreResponse> {
+  const results = await runPlan(plan, apply, {
+    onTaskStart: (task, index, total) => {
+      emit({
+        kind: "progress",
+        phase: "start",
+        taskId: task.id,
+        name: task.title,
+        index,
+        total
+      });
+    },
+    onTaskResult: (task, result, index, total) => {
+      emit({
+        kind: "progress",
+        phase: "result",
+        taskId: task.id,
+        name: task.title,
+        index,
+        total,
+        status: result.status,
+        output: result.output
+      });
+    }
+  });
+  return { kind: "runPlan", results };
 }
 
 async function runOperation(

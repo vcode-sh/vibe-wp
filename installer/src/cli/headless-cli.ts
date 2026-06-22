@@ -1,4 +1,4 @@
-import { type CoreRequest, runHeadless } from "../core/headless";
+import { type CoreRequest, runHeadless, runHeadlessRunPlan } from "../core/headless";
 import { terminateActiveTask } from "../core/task-runner";
 
 // Reads a JSON CoreRequest from stdin and writes a JSON CoreResponse to stdout.
@@ -29,6 +29,17 @@ export async function runHeadlessJson(): Promise<void> {
     console.log(JSON.stringify({ kind: "error", message: "Invalid JSON request." }));
     return;
   }
+  // runPlan streams: one compact NDJSON line per progress event, then ONE compact
+  // line for the terminal CoreResponse. Compact (not pretty) so each event is a
+  // single, unambiguously framed line the panel bridge can read incrementally.
+  if (request.kind === "runPlan") {
+    const final = await runHeadlessRunPlan(request.plan, request.apply, (event) => {
+      console.log(JSON.stringify(event));
+    });
+    console.log(JSON.stringify(final));
+    return;
+  }
+  // Every other kind stays a single pretty-printed, fully parseable CoreResponse.
   const response = await runHeadless(request);
   console.log(JSON.stringify(response, null, 2));
 }
