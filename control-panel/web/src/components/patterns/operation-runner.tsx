@@ -1,6 +1,8 @@
 import { Progress } from "@control-panel/ui/components/progress";
-import { CheckCircle2 } from "lucide-react";
+import { Ban, CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -24,6 +26,10 @@ export function OperationRunner({
 }) {
 	const [lines, setLines] = useState<string[]>([]);
 	const [done, setDone] = useState(false);
+	const [result, setResult] = useState<
+		"succeeded" | "failed" | "canceled" | null
+	>(null);
+	const [canceling, setCanceling] = useState(false);
 
 	useEffect(() => {
 		if (!(open && jobId)) {
@@ -31,6 +37,8 @@ export function OperationRunner({
 		}
 		setLines([]);
 		setDone(false);
+		setResult(null);
+		setCanceling(false);
 		let active = true;
 		async function consume() {
 			const iterator = await client.operationsStream({
@@ -43,6 +51,13 @@ export function OperationRunner({
 				setLines((prev) => [...prev, ev.line].filter(Boolean));
 				if (ev.done) {
 					setDone(true);
+					setResult(
+						ev.status === "succeeded" ||
+							ev.status === "failed" ||
+							ev.status === "canceled"
+							? ev.status
+							: "succeeded"
+					);
 				}
 			}
 		}
@@ -56,8 +71,23 @@ export function OperationRunner({
 		if (!open) {
 			setLines([]);
 			setDone(false);
+			setResult(null);
+			setCanceling(false);
 		}
 	}, [open]);
+
+	async function handleCancel() {
+		if (!jobId || canceling) {
+			return;
+		}
+		setCanceling(true);
+		try {
+			await client.operationsCancel({ jobId });
+		} catch {
+			toast.error("Couldn't cancel the operation.");
+			setCanceling(false);
+		}
+	}
 
 	function getPercent() {
 		if (done) {
@@ -73,10 +103,24 @@ export function OperationRunner({
 		<Dialog onOpenChange={onOpenChange} open={open}>
 			<DialogContent className="max-w-lg">
 				<DialogHeader>
-					<DialogTitle>{title}</DialogTitle>
-					<DialogDescription>
-						Running operation — {lines.length} steps.
-					</DialogDescription>
+					<div className="flex items-center justify-between gap-2">
+						<div>
+							<DialogTitle>{title}</DialogTitle>
+							<DialogDescription>
+								Running operation — {lines.length} steps.
+							</DialogDescription>
+						</div>
+						{!done && jobId ? (
+							<Button
+								disabled={canceling}
+								onClick={handleCancel}
+								size="sm"
+								variant="ghost"
+							>
+								{canceling ? "Canceling…" : "Cancel"}
+							</Button>
+						) : null}
+					</div>
 				</DialogHeader>
 				<Progress value={getPercent()} />
 				<ScrollArea
@@ -88,10 +132,22 @@ export function OperationRunner({
 							{line}
 						</div>
 					))}
-					{done ? (
+					{done && result === "succeeded" ? (
 						<div className="flex items-center gap-1 text-success">
 							<CheckCircle2 aria-hidden="true" className="size-3.5" />
 							<span>Done</span>
+						</div>
+					) : null}
+					{done && result === "failed" ? (
+						<div className="flex items-center gap-1 text-destructive">
+							<XCircle aria-hidden="true" className="size-3.5" />
+							<span>Failed</span>
+						</div>
+					) : null}
+					{done && result === "canceled" ? (
+						<div className="flex items-center gap-1 text-muted-foreground">
+							<Ban aria-hidden="true" className="size-3.5" />
+							<span>Canceled</span>
 						</div>
 					) : null}
 				</ScrollArea>
