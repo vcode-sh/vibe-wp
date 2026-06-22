@@ -1,8 +1,11 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandMenuLauncher } from "@/components/command-menu-launcher";
+import { ActiveOperationDialog } from "@/components/patterns/active-operation-dialog";
+import { OperationsTray } from "@/components/patterns/operations-tray";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
+import { OperationsProvider } from "@/lib/operations/operations-provider";
 
 export const Route = createFileRoute("/_auth")({
 	component: AuthLayout,
@@ -17,12 +20,16 @@ export const Route = createFileRoute("/_auth")({
 
 function AuthLayout() {
 	return (
-		<SidebarProvider>
-			<AppSidebar />
-			<SidebarInset>
-				<CommandMenuLauncher />
-				<Outlet />
-			</SidebarInset>
-		</SidebarProvider>
+		<OperationsProvider>
+			<SidebarProvider>
+				<AppSidebar />
+				<SidebarInset>
+					<CommandMenuLauncher />
+					<Outlet />
+				</SidebarInset>
+			</SidebarProvider>
+			<OperationsTray />
+			<ActiveOperationDialog />
+		</OperationsProvider>
 	);
 }

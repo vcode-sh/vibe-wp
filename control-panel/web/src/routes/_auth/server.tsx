@@ -1,14 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { toast } from "sonner";
-import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { serverInfoQuery } from "@/data/queries";
+import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/server")({
@@ -17,18 +16,18 @@ export const Route = createFileRoute("/_auth/server")({
 
 function ServerPage() {
 	const server = useQuery(serverInfoQuery());
-	const [runnerOpen, setRunnerOpen] = useState(false);
-	const [jobId, setJobId] = useState<string | null>(null);
-	const [runnerTitle, setRunnerTitle] = useState("");
+	const { start } = useOperations();
 
 	const harden = useMutation(orpc.serverHarden.mutationOptions());
 
 	async function handleHarden() {
 		try {
 			const result = await harden.mutateAsync({});
-			setRunnerTitle("Securing the server…");
-			setJobId(result.jobId);
-			setRunnerOpen(true);
+			start({
+				jobId: result.jobId,
+				title: "Securing the server…",
+				kind: "harden",
+			});
 		} catch {
 			toast.error("Failed to start server hardening.");
 		}
@@ -80,13 +79,6 @@ function ServerPage() {
 				</QueryBoundary>
 				{/* Site lifecycle (stop/start/restart) needs a site-scoped UI — tracked as a follow-up. */}
 			</div>
-
-			<OperationRunner
-				jobId={jobId}
-				onOpenChange={setRunnerOpen}
-				open={runnerOpen}
-				title={runnerTitle}
-			/>
 		</>
 	);
 }

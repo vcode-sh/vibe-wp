@@ -2,7 +2,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
@@ -11,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stagingQuery } from "@/data/queries";
+import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/staging")({
@@ -70,9 +70,7 @@ function StagingPage() {
 	const { siteId } = Route.useParams();
 	const staging = useQuery(stagingQuery(siteId));
 	const [publishing, setPublishing] = useState(false);
-	const [runnerOpen, setRunnerOpen] = useState(false);
-	const [jobId, setJobId] = useState<string | null>(null);
-	const [runnerTitle, setRunnerTitle] = useState("");
+	const { start } = useOperations();
 
 	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
 	const promote = useMutation(orpc.stagingPromote.mutationOptions());
@@ -80,9 +78,11 @@ function StagingPage() {
 	async function handleRefresh() {
 		try {
 			const result = await refresh.mutateAsync({ siteId });
-			setRunnerTitle("Copying live to staging…");
-			setJobId(result.jobId);
-			setRunnerOpen(true);
+			start({
+				jobId: result.jobId,
+				title: "Copying live to staging…",
+				kind: "refresh",
+			});
 		} catch {
 			toast.error("Failed to start staging refresh.");
 		}
@@ -91,10 +91,12 @@ function StagingPage() {
 	async function handlePromote() {
 		try {
 			const result = await promote.mutateAsync({ siteId });
-			setRunnerTitle("Publishing staging to live…");
-			setJobId(result.jobId);
+			start({
+				jobId: result.jobId,
+				title: "Publishing staging to live…",
+				kind: "promote",
+			});
 			setPublishing(false);
-			setRunnerOpen(true);
 		} catch {
 			toast.error("Failed to start promote.");
 		}
@@ -136,13 +138,6 @@ function StagingPage() {
 				open={publishing}
 				reversible={false}
 				title="Publish staging to live"
-			/>
-
-			<OperationRunner
-				jobId={jobId}
-				onOpenChange={setRunnerOpen}
-				open={runnerOpen}
-				title={runnerTitle}
 			/>
 		</>
 	);

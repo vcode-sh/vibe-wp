@@ -1,11 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { toast } from "sonner";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
 import { DeveloperDetails } from "@/components/patterns/developer-details";
 import { NeedsYou } from "@/components/patterns/needs-you";
-import { OperationRunner } from "@/components/patterns/operation-runner";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyNet } from "@/components/patterns/safety-net";
 import { StatusHero } from "@/components/patterns/status-hero";
@@ -14,6 +12,7 @@ import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { siteOverviewQuery, updatesAvailableQuery } from "@/data/queries";
 import type { NeedItem } from "@/data/types";
+import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/overview")({
@@ -24,10 +23,7 @@ function OverviewPage() {
 	const { siteId } = Route.useParams();
 	const overview = useQuery(siteOverviewQuery(siteId));
 	const updatesAvailable = useQuery(updatesAvailableQuery(siteId));
-	const [runnerOpen, setRunnerOpen] = useState(false);
-	const [jobId, setJobId] = useState<string | null>(null);
-	const [runnerTitle, setRunnerTitle] = useState("");
-	const [runnerKind, setRunnerKind] = useState("backup");
+	const { start } = useOperations();
 
 	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
@@ -35,10 +31,11 @@ function OverviewPage() {
 	async function handleApplyUpdates(what: "core" | "plugins" = "core") {
 		try {
 			const result = await applyUpdates.mutateAsync({ siteId, what });
-			setRunnerTitle("Running updates…");
-			setRunnerKind("wpUpdate");
-			setJobId(result.jobId);
-			setRunnerOpen(true);
+			start({
+				jobId: result.jobId,
+				title: "Running updates…",
+				kind: "wpUpdate",
+			});
 		} catch {
 			toast.error("Failed to start updates.");
 		}
@@ -47,10 +44,7 @@ function OverviewPage() {
 	async function handleBackup() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
-			setRunnerTitle("Backing up…");
-			setRunnerKind("backup");
-			setJobId(result.jobId);
-			setRunnerOpen(true);
+			start({ jobId: result.jobId, title: "Backing up…", kind: "backup" });
 		} catch {
 			toast.error("Failed to start backup.");
 		}
@@ -123,14 +117,6 @@ function OverviewPage() {
 					) : null}
 				</QueryBoundary>
 			</div>
-
-			<OperationRunner
-				jobId={jobId}
-				kind={runnerKind}
-				onOpenChange={setRunnerOpen}
-				open={runnerOpen}
-				title={runnerTitle}
-			/>
 		</>
 	);
 }

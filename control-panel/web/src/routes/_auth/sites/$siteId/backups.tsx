@@ -11,7 +11,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
@@ -21,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/data/derive";
 import { backupsQuery } from "@/data/queries";
 import type { BackupRecord } from "@/data/types";
+import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/backups")({
@@ -32,10 +32,7 @@ function BackupsPage() {
 	const backups = useQuery(backupsQuery(siteId));
 	const now = new Date();
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
-	const [runnerOpen, setRunnerOpen] = useState(false);
-	const [jobId, setJobId] = useState<string | null>(null);
-	const [runnerTitle, setRunnerTitle] = useState("Backing up…");
-	const [runnerKind, setRunnerKind] = useState("backup");
+	const { start } = useOperations();
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
@@ -43,10 +40,11 @@ function BackupsPage() {
 	async function handleBackupNow() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
-			setRunnerTitle(`Backing up ${siteId}`);
-			setRunnerKind("backup");
-			setJobId(result.jobId);
-			setRunnerOpen(true);
+			start({
+				jobId: result.jobId,
+				title: `Backing up ${siteId}`,
+				kind: "backup",
+			});
 		} catch {
 			toast.error("Failed to start backup.");
 		}
@@ -61,11 +59,12 @@ function BackupsPage() {
 				siteId,
 				backupId: restoring.id,
 			});
-			setRunnerTitle(`Restoring ${siteId}`);
-			setRunnerKind("restore");
-			setJobId(result.jobId);
+			start({
+				jobId: result.jobId,
+				title: `Restoring ${siteId}`,
+				kind: "restore",
+			});
 			setRestoring(null);
-			setRunnerOpen(true);
 		} catch {
 			toast.error("Failed to start restore.");
 		}
@@ -163,14 +162,6 @@ function BackupsPage() {
 				open={restoring !== null}
 				reversible
 				title="Restore a backup"
-			/>
-
-			<OperationRunner
-				jobId={jobId}
-				kind={runnerKind}
-				onOpenChange={setRunnerOpen}
-				open={runnerOpen}
-				title={runnerTitle}
 			/>
 		</>
 	);
