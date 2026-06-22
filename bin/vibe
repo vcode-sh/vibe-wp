@@ -145,6 +145,9 @@ case "${command}" in
   backup)
     "${VIBE_BIN_DIR}/backup" "$@"
     ;;
+  backup-config-apply)
+    "${VIBE_BIN_DIR}/backup-config-apply" "$@"
+    ;;
   backup-verify)
     "${VIBE_BIN_DIR}/backup-verify" "$@"
     ;;

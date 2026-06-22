@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+set -eu
+# Persist the R2 backup configuration into the selected environment's env file.
+#
+# The control panel injects the resolved config as environment variables (from
+# its SQLite store) and runs this command. We write those values into the env
+# file so that BOTH the panel AND the unattended cron backup timer — which runs
+# `bin/vibe <env> backup` with no injected env — read the same configuration.
+#
+# Only the managed R2 keys are touched; every other line is preserved verbatim.
+# Secrets are never printed.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+. "${VIBE_BIN_DIR}/lib/backup.sh"
+
+vibe_require_env_file
+file="${VIBE_ENV_FILE}"
+
+# Replace `KEY=...` in-place, or append it when absent. Preserves the file's
+# permissions and every unrelated line (writes back through the existing inode).
+env_upsert() {
+  key="$1"
+  val="$2"
+  f="$3"
+  tmp="${f}.tmp.$$"
+  found=0
+  if [ -f "${f}" ]; then
+    while IFS= read -r line || [ -n "${line}" ]; do
+      case "${line}" in
+        "${key}="*)
+          printf '%s=%s\n' "${key}" "${val}"
+          found=1
+          ;;
+        *) printf '%s\n' "${line}" ;;
+      esac
+    done < "${f}" > "${tmp}"
+  else
+    : > "${tmp}"
+  fi
+  [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${val}" >> "${tmp}"
+  cat "${tmp}" > "${f}"
+  rm -f "${tmp}"
+}
+
+# VIBE_BACKUP_R2_ENABLED is authoritative on every apply (defaults to disabled).
+enabled="${VIBE_BACKUP_R2_ENABLED:-0}"
+env_upsert VIBE_BACKUP_R2_ENABLED "${enabled}" "${file}"
+
+# The remaining keys are only rewritten when the panel supplied them, so a
+# "preserve existing secret" save (which omits the secret) never blanks it.
+for key in \
+  VIBE_BACKUP_R2_BUCKET \
+  VIBE_BACKUP_R2_PREFIX \
+  VIBE_BACKUP_RETENTION \
+  RCLONE_CONFIG_R2_TYPE \
+  RCLONE_CONFIG_R2_PROVIDER \
+  RCLONE_CONFIG_R2_ACCESS_KEY_ID \
+  RCLONE_CONFIG_R2_SECRET_ACCESS_KEY \
+  RCLONE_CONFIG_R2_ENDPOINT; do
+  eval "val=\${${key}:-__VIBE_UNSET__}"
+  [ "${val}" = "__VIBE_UNSET__" ] && continue
+  env_upsert "${key}" "${val}" "${file}"
+done
+
+echo "Backup configuration applied to ${file}"

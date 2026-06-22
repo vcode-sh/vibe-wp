@@ -6,13 +6,14 @@
  */
 import { db } from "@control-panel/db";
 import { backupConfig } from "@control-panel/db/schema/backups";
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 
 import type {
 	BackupConfigRow,
 	EffectiveBackupConfig,
 } from "./backup-config-pure";
 import { GLOBAL_SITE_ID, mergeConfig, toEnv } from "./backup-config-pure";
+import { runVibe } from "./exec";
 import { findSite } from "./sites";
 
 export type BackupConfigPatch = Omit<Partial<BackupConfigRow>, "siteId">;
@@ -99,5 +100,36 @@ export async function backupConfigEnv(
 	siteId: string
 ): Promise<Record<string, string>> {
 	const cfg = await resolveBackupConfig(siteId);
-	return toEnv(cfg);
+	const env = toEnv(cfg);
+	// Retention is not part of the R2 enable/credentials gate, so it is mapped
+	// here rather than in `toEnv` — it applies to local pruning even off-site is
+	// disabled.
+	if (cfg.retention && cfg.retention > 0) {
+		env.VIBE_BACKUP_RETENTION = String(cfg.retention);
+	}
+	return env;
+}
+
+/** Per-site config rows the user has saved (excludes the global creds row). */
+export async function listConfiguredSiteIds(): Promise<string[]> {
+	const rows = await db
+		.select({ siteId: backupConfig.siteId })
+		.from(backupConfig)
+		.where(ne(backupConfig.siteId, GLOBAL_SITE_ID));
+	return rows.map((r) => r.siteId);
+}
+
+/**
+ * Writes the resolved R2 config into the site's `prod.env` via `bin/vibe`, so
+ * both the panel and the unattended cron backup timer read the same settings.
+ * Secrets travel as injected env (redacted in logs), never as argv. No-op when
+ * the site is not found in the registry.
+ */
+export async function applyBackupConfigToSite(siteId: string): Promise<void> {
+	const site = await findSite(siteId);
+	if (!site) {
+		return;
+	}
+	const env = await backupConfigEnv(siteId);
+	await runVibe(site.installDir, "prod", "backupConfigApply", { env });
 }

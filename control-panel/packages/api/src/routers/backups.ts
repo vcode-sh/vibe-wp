@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { BackupRecord } from "../contract";
-import { backupConfigEnv } from "../core-bridge/backup-config";
 import { runVibe } from "../core-bridge/exec";
 import { startJob } from "../core-bridge/jobs";
 import { parseBackups } from "../core-bridge/parse";
@@ -20,9 +19,10 @@ export const backupsRouter = {
 			if (!site) {
 				throw new Error("Unknown site");
 			}
-			const env = await backupConfigEnv(input.siteId);
+			// prod.env is the authoritative R2 source (written by the Settings save),
+			// so the listing reads it directly — no env injection.
 			return parseBackups(
-				(await runVibe(site.installDir, "prod", "backups", { env })).stdout
+				(await runVibe(site.installDir, "prod", "backups")).stdout
 			);
 		}),
 
@@ -33,22 +33,18 @@ export const backupsRouter = {
 				destination: z.enum(["local", "both"]).default("both"),
 			})
 		)
-		.handler(async ({ input, context }) => {
-			const env = await backupConfigEnv(input.siteId);
-			const runEnv =
-				input.destination === "local"
-					? { ...env, VIBE_BACKUP_R2_ENABLED: "0" }
-					: env;
-			return startJob({
-				op: "backup",
+		.handler(({ input, context }) =>
+			// "local" uses the --local-only CLI flag (env-immune); "both" relies on
+			// the site's prod.env R2 settings.
+			startJob({
+				op: input.destination === "local" ? "backupLocal" : "backup",
 				siteId: input.siteId,
 				env: "prod",
 				kind: "backup",
 				userId: context.session.user.id,
 				action: "backup",
-				extraEnv: runEnv,
-			});
-		}),
+			})
+		),
 
 	backupsVerify: operatorProcedure
 		.input(z.object({ siteId: z.string(), backupId: z.string() }))

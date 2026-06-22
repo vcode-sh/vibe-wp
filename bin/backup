@@ -6,6 +6,7 @@ VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/backup.sh"
 
 label=""
+local_only=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -13,15 +14,25 @@ while [ "$#" -gt 0 ]; do
       label="${2:-}"
       shift 2
       ;;
+    --local-only)
+      # Per-run override: keep the backup on disk even when R2 is enabled.
+      # This is a CLI flag (not an env var) so it cannot be clobbered by the
+      # env file that vibe_load_env sources with `set -a`.
+      local_only=1
+      shift
+      ;;
     -h|--help)
       cat <<'USAGE'
 Usage:
-  ./bin/backup [--label LABEL]
+  ./bin/backup [--label LABEL] [--local-only]
 
 Creates a backup for the selected VIBE_ENV. The archive is written under
 VIBE_BACKUP_DIR (default backups/<env>/) in a <timestamp>[-label]/ directory,
 then, when VIBE_BACKUP_R2_ENABLED=1, uploaded to Cloudflare R2 via rclone.
 Old local and remote backups beyond VIBE_BACKUP_RETENTION are pruned.
+
+--local-only keeps this one backup on disk only (no off-site upload or remote
+prune), regardless of VIBE_BACKUP_R2_ENABLED.
 USAGE
       exit 0
       ;;
@@ -84,10 +95,14 @@ echo "Backup written to ${target}"
 
 retention="$(vibe_env_value VIBE_BACKUP_RETENTION 2>/dev/null || true)"
 
-if backup_remote_enabled; then
+if [ "${local_only}" -eq 1 ]; then
+  echo "Local-only backup: skipping off-server upload."
+elif backup_remote_enabled; then
   backup_upload "${target}"
   echo "Backup uploaded to off-server storage."
 fi
 
 backup_prune_local "${backup_dir_root}" "${retention}"
-backup_prune_remote "${retention}"
+if [ "${local_only}" -eq 0 ]; then
+  backup_prune_remote "${retention}"
+fi

@@ -20,6 +20,8 @@ export const VIBE_OPS = {
 	doctorRuntime: { argv: ["doctor-runtime"], stream: false },
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
+	backupLocal: { argv: ["backup", "--local-only"], stream: true },
+	backupConfigApply: { argv: ["backup-config-apply"], stream: false },
 	logsRecent: { argv: ["logs-recent"], stream: false },
 	logsFollow: { argv: ["logs"], stream: true },
 	up: { argv: ["up"], stream: true },

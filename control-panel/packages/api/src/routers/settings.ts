@@ -5,7 +5,12 @@
  * requires an allowlisted rclone exec path that is not yet wired.
  */
 import { z } from "zod";
-import { getBackupConfig, setBackupConfig } from "../core-bridge/backup-config";
+import {
+	applyBackupConfigToSite,
+	getBackupConfig,
+	listConfiguredSiteIds,
+	setBackupConfig,
+} from "../core-bridge/backup-config";
 import type { BackupConfigRow } from "../core-bridge/backup-config-pure";
 import { GLOBAL_SITE_ID } from "../core-bridge/backup-config-pure";
 import { adminProcedure } from "../procedures";
@@ -48,6 +53,15 @@ export const settingsRouter = {
 		.handler(async ({ input }) => {
 			const { siteId, ...patch } = input;
 			await setBackupConfig(siteId, patch);
+			// Push the resolved config into each affected site's prod.env so it is
+			// authoritative for both the panel and the cron backup timer. Saving the
+			// global creds row re-applies to every configured site.
+			if (siteId === GLOBAL_SITE_ID) {
+				const ids = await listConfiguredSiteIds();
+				await Promise.all(ids.map(applyBackupConfigToSite));
+			} else {
+				await applyBackupConfigToSite(siteId);
+			}
 			return { ok: true };
 		}),
 };

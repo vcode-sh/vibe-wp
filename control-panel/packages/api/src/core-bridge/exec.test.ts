@@ -17,6 +17,8 @@ describe("buildVibeArgv", () => {
 	it("exposes the allowlisted read + operation ops", () => {
 		expect(Object.keys(VIBE_OPS).sort()).toEqual([
 			"backup",
+			"backupConfigApply",
+			"backupLocal",
 			"backupVerify",
 			"backups",
 			"cacheFlush",
@@ -46,6 +48,16 @@ describe("buildVibeArgv operations", () => {
 			"restore",
 			"/b/2026",
 			"--yes",
+		]);
+	});
+	it("carries the trusted --local-only flag for backupLocal", () => {
+		// The flag lives in the op's own argv (allowlisted), not in caller args,
+		// so it must not trip the leading-dash guard.
+		expect(buildVibeArgv("/opt/acme", "prod", "backupLocal")).toEqual([
+			"/opt/acme/bin/vibe",
+			"prod",
+			"backup",
+			"--local-only",
 		]);
 	});
 	it("runs staging refresh with --yes and no arg", () => {
