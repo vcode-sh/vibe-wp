@@ -184,7 +184,16 @@ vibe_wp_define('WP_CACHE', vibe_wp_env_bool('WP_CACHE', true));
 // unless WP_DEBUG is true. Default it to "on when either flag is enabled" so the
 // control panel's per-site debug toggles actually take effect; an explicit
 // WP_DEBUG env value still overrides (e.g. WP_DEBUG=0 forces debugging off).
-vibe_wp_define('WP_DEBUG', vibe_wp_env_bool('WP_DEBUG', vibe_wp_env_bool('WP_DEBUG_LOG') || vibe_wp_env_bool('WP_DEBUG_DISPLAY')));
+//
+// Treat a PRESENT-BUT-EMPTY WP_DEBUG as unset: vibe_wp_env_bool('') is false, so
+// a bare `WP_DEBUG=` in the env would otherwise force the master switch off and
+// silently neutralize WP_DEBUG_LOG / WP_DEBUG_DISPLAY. Only honor WP_DEBUG when
+// it has a real value; otherwise fall back to the computed default.
+$vibe_wp_debug_default = vibe_wp_env_bool('WP_DEBUG_LOG') || vibe_wp_env_bool('WP_DEBUG_DISPLAY');
+$vibe_wp_debug = vibe_wp_env('WP_DEBUG') !== ''
+    ? vibe_wp_env_bool('WP_DEBUG', $vibe_wp_debug_default)
+    : $vibe_wp_debug_default;
+vibe_wp_define('WP_DEBUG', $vibe_wp_debug);
 vibe_wp_define('WP_DEBUG_LOG', vibe_wp_env_bool('WP_DEBUG_LOG', false));
 vibe_wp_define('WP_DEBUG_DISPLAY', vibe_wp_env_bool('WP_DEBUG_DISPLAY', false));
 vibe_wp_define('SCRIPT_DEBUG', vibe_wp_env_bool('SCRIPT_DEBUG', false));

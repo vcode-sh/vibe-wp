@@ -53,7 +53,13 @@ if command -v systemctl >/dev/null 2>&1; then
       *) backup_schedule="off" ;;
     esac
   fi
-  if systemctl is-enabled "${monitor_unit}" >/dev/null 2>&1; then
+  # `is-enabled` returns 0 even for a stopped or static timer, so it alone would
+  # report "on" when no monitor run will ever fire. Require the timer to be BOTH
+  # enabled (will start on boot) AND active (loaded + counting down) before
+  # reporting "on" — otherwise the panel claims monitoring is running when it is
+  # not. Mirrors the backup path's intent of only surfacing a real, live schedule.
+  if systemctl is-enabled "${monitor_unit}" >/dev/null 2>&1 \
+    && systemctl is-active "${monitor_unit}" >/dev/null 2>&1; then
     monitor="on"
   fi
 fi

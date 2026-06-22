@@ -1,12 +1,26 @@
-import { Ban, CheckCircle2, Loader2, X, XCircle } from "lucide-react";
+import {
+	Ban,
+	CheckCircle2,
+	HelpCircle,
+	Loader2,
+	X,
+	XCircle,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { JobStatus } from "@/data/types";
 import { useLiveStream } from "@/lib/live/use-live-stream";
 import {
 	type Operation,
 	useOperations,
 } from "@/lib/operations/operations-provider";
 import { client } from "@/lib/orpc/client";
+
+// If a live stream for a not-yet-finished op produces no events for this long
+// after (re)subscribing, the server-side job record was likely evicted and the
+// stream closed without a terminal `done`. Treat that as unknown rather than a
+// perpetual "running" spinner.
+const STALE_STREAM_MS = 15_000;
 
 function elapsed(ms: number): string {
 	const s = Math.max(0, Math.floor(ms / 1000));
@@ -20,7 +34,7 @@ function TrayCardStatus({
 	now,
 }: {
 	done: boolean;
-	status: string;
+	status: JobStatus | "unknown";
 	startedAt: number;
 	now: number;
 }) {
@@ -48,30 +62,73 @@ function TrayCardStatus({
 			</span>
 		);
 	}
+	if (status === "canceled") {
+		return (
+			<span className="flex items-center gap-1 text-muted-foreground text-xs">
+				<Ban aria-hidden className="size-3" />
+				<span>Canceled</span>
+			</span>
+		);
+	}
+	// "queued"/"running" reported as terminal, or a stream that closed without a
+	// `done` event: we can't confirm the outcome, so say so rather than spin.
 	return (
 		<span className="flex items-center gap-1 text-muted-foreground text-xs">
-			<Ban aria-hidden className="size-3" />
-			<span>Canceled</span>
+			<HelpCircle aria-hidden className="size-3" />
+			<span>Unknown</span>
 		</span>
 	);
 }
 
 function TrayCard({ op }: { op: Operation }) {
-	const { expand, dismiss, finish } = useOperations();
+	const { expand, dismiss, finish, statusOf } = useOperations();
+	// Persisted terminal status is authoritative for an already-finished op (e.g.
+	// after a reload). When present we render from it and never (re)subscribe to a
+	// stream whose server-side job may have been evicted.
+	const persisted = statusOf(op.jobId);
 	const live = useLiveStream(
 		(signal) => client.operationsStream({ jobId: op.jobId }, { signal }),
-		true
+		persisted === null
 	);
 	const [now, setNow] = useState(() => Date.now());
 
 	useEffect(() => {
+		if (persisted !== null) {
+			return;
+		}
 		if (live.done) {
 			finish(op.jobId, live.status);
 			return;
 		}
 		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
-	}, [live.done, live.status, op.jobId, finish]);
+	}, [persisted, live.done, live.status, op.jobId, finish]);
+
+	// A stream that produced no events well past (re)subscription likely closed
+	// without a terminal `done` (evicted/gone job). Mark it finished so it shows a
+	// terminal state and doesn't re-stream forever on the next reload.
+	useEffect(() => {
+		if (persisted !== null || live.done) {
+			return;
+		}
+		const sinceLastEvent = STALE_STREAM_MS - (now - live.lastEventAt);
+		if (sinceLastEvent <= 0 && live.lines.length === 0) {
+			finish(op.jobId, "failed");
+			return;
+		}
+	}, [
+		persisted,
+		live.done,
+		live.lastEventAt,
+		live.lines.length,
+		now,
+		op.jobId,
+		finish,
+	]);
+
+	const done = persisted !== null || live.done;
+	const status: JobStatus | "unknown" =
+		persisted ?? (live.done ? live.status : "unknown");
 
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5 shadow-md">
@@ -82,10 +139,10 @@ function TrayCard({ op }: { op: Operation }) {
 			>
 				<span className="truncate font-medium text-sm">{op.title}</span>
 				<TrayCardStatus
-					done={live.done}
+					done={done}
 					now={now}
 					startedAt={op.startedAt}
-					status={live.status}
+					status={status}
 				/>
 			</button>
 			<Button

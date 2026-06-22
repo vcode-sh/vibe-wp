@@ -100,6 +100,13 @@ export function assertArgvSecretFree(argv: string[]): void {
 
 export interface RunHeadlessOpts {
 	bin?: string;
+	/**
+	 * Cancellation. When this signal aborts, the spawned installer child's whole
+	 * process tree is killed and the in-flight request rejects promptly — so a
+	 * user cancel actually stops the privileged subprocess instead of letting it
+	 * run to completion while the UI/DB report "canceled".
+	 */
+	signal?: AbortSignal;
 	/** Test seam: spawn implementation (defaults to Bun.spawn). */
 	spawn?: SpawnFn;
 	timeoutMs?: number;
@@ -109,11 +116,33 @@ export interface RunHeadlessOpts {
 interface SpawnedChild {
 	exited: Promise<number>;
 	kill: (signal?: number) => void;
+	/** Present for real spawns; used to kill the whole process group on Linux. */
+	pid?: number;
 	stderr: ReadableStream<Uint8Array>;
 	stdin: { write: (data: string) => void; end: () => void } | null;
 	stdout: ReadableStream<Uint8Array>;
 }
 export type SpawnFn = (argv: string[]) => SpawnedChild;
+
+/**
+ * Tear down the installer child's WHOLE process tree, matching exec.ts's
+ * spawnStream: defaultSpawn launches under `setsid` on Linux so the child leads
+ * its own session/group (pgid == pid). A group kill (process.kill(-pid)) then
+ * reaps the wrapper (sudo -n / setsid), the installer, and any docker/wp
+ * grandchildren in one shot instead of orphaning them. Falls back to the plain
+ * child.kill() off Linux or when the pid is unavailable (e.g. test seams).
+ */
+function killChildTree(child: SpawnedChild): void {
+	if (process.platform === "linux" && child.pid && child.pid > 1) {
+		try {
+			process.kill(-child.pid, "SIGTERM");
+			return;
+		} catch {
+			// Group already gone — fall through to a direct kill.
+		}
+	}
+	child.kill();
+}
 
 const DEFAULT_HEADLESS_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -136,7 +165,12 @@ function spawnArgvFor(canonical: string[]): string[] {
 }
 
 function defaultSpawn(argv: string[]): SpawnedChild {
-	return Bun.spawn(spawnArgvFor(argv), {
+	const spawnArgv = spawnArgvFor(argv);
+	// On Linux, lead a new session/group so killChildTree can reap the whole tree
+	// (the installer plus any docker/wp grandchildren) with one group signal —
+	// the same setsid kill-group contract exec.ts uses for streamVibe.
+	const onLinux = process.platform === "linux";
+	return Bun.spawn(onLinux ? ["setsid", ...spawnArgv] : spawnArgv, {
 		stdin: "pipe",
 		stdout: "pipe",
 		stderr: "pipe",
@@ -154,21 +188,48 @@ export async function runHeadlessRequest(
 ): Promise<CoreResponse> {
 	const argv = headlessArgv(opts.bin);
 	assertArgvSecretFree(argv);
+	if (opts.signal?.aborted) {
+		throw new Error("provision canceled");
+	}
 	const spawn = opts.spawn ?? defaultSpawn;
 	const child = spawn(argv);
 	const timer = setTimeout(
-		() => child.kill(),
+		() => killChildTree(child),
 		opts.timeoutMs ?? DEFAULT_HEADLESS_TIMEOUT_MS
 	);
+	// When the caller cancels, kill the child's whole process tree AND reject the
+	// await promptly (below) so the job finalizes now instead of blocking on the
+	// drain until the privileged subprocess finally exits on its own.
+	let abortReject: ((reason: Error) => void) | undefined;
+	const onAbort = () => {
+		killChildTree(child);
+		abortReject?.(new Error("provision canceled"));
+	};
+	if (opts.signal) {
+		opts.signal.addEventListener("abort", onAbort, { once: true });
+	}
 	// The request (with secrets) goes to STDIN only — never argv.
 	child.stdin?.write(JSON.stringify(request));
 	child.stdin?.end();
-	const [stdout, stderr, code] = await Promise.all([
+	const body = Promise.all([
 		new Response(child.stdout).text(),
 		new Response(child.stderr).text(),
 		child.exited,
 	]);
-	clearTimeout(timer);
+	let stdout: string;
+	let stderr: string;
+	let code: number;
+	try {
+		const aborted = new Promise<never>((_resolve, reject) => {
+			abortReject = reject;
+		});
+		[stdout, stderr, code] = await (opts.signal
+			? Promise.race([body, aborted])
+			: body);
+	} finally {
+		clearTimeout(timer);
+		opts.signal?.removeEventListener("abort", onAbort);
+	}
 	if (code !== 0) {
 		throw new Error(
 			`installer headless exited ${code}: ${redact(stderr).trim()}`

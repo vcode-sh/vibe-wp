@@ -190,6 +190,26 @@ export async function jobsHistory(
 	opts: JobsHistoryOptions = {}
 ): Promise<JobHistoryRow[]> {
 	const limit = Math.min(opts.limit ?? 100, 100);
+
+	// Pick the most-recent N DISTINCT job ids FIRST. The audit left-join below
+	// multiplies rows (launch + cancel etc.) per job, so limiting the joined set
+	// would truncate the multiplied rows — under-counting distinct jobs and, when
+	// a job's launch row falls outside the window but its cancel row is inside,
+	// dropping the launch actor. Limiting plain job rows here avoids both.
+	const limitedJobs = await db
+		.select({ id: jobs.id })
+		.from(jobs)
+		.where(opts.siteId ? eq(jobs.siteId, opts.siteId) : undefined)
+		.orderBy(desc(jobs.startedAt))
+		.limit(limit);
+
+	const jobIds = limitedJobs.map((j) => j.id);
+	if (jobIds.length === 0) {
+		return [];
+	}
+
+	// Now left-join audit rows for ONLY those job ids. No row limit here so every
+	// audit row per job survives for dedupeLaunchAudit to pick the launch actor.
 	const rows: JoinedAuditRow[] = await db
 		.select({
 			id: jobs.id,
@@ -207,8 +227,7 @@ export async function jobsHistory(
 		.from(jobs)
 		.leftJoin(auditLog, eq(auditLog.jobId, jobs.id))
 		.leftJoin(user, eq(user.id, auditLog.userId))
-		.where(opts.siteId ? eq(jobs.siteId, opts.siteId) : undefined)
-		.orderBy(desc(jobs.startedAt))
-		.limit(limit);
+		.where(inArray(jobs.id, jobIds))
+		.orderBy(desc(jobs.startedAt));
 	return dedupeLaunchAudit(rows);
 }

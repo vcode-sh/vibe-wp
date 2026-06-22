@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,10 +30,36 @@ export function StagingDialog({
 	onOpenChange: (next: boolean) => void;
 }) {
 	const queryClient = useQueryClient();
-	const { start } = useOperations();
+	const { start, getStatus } = useOperations();
 	const attach = useMutation(orpc.attachStaging.mutationOptions());
 	const [domain, setDomain] = useState("");
 	const [error, setError] = useState<string | undefined>(undefined);
+	const [attaching, setAttaching] = useState(false);
+	const handledRef = useRef(false);
+
+	// Gate on the attach job's terminal status: only refresh staging info on
+	// success so the card reflects the newly provisioned site; on failure/cancel
+	// surface an error and leave the prior state untouched. Reads the current
+	// status (no transition race) and fires at most once per job.
+	useEffect(() => {
+		if (!attaching || handledRef.current) {
+			return;
+		}
+		const status = getStatus(siteId, "attachStaging");
+		if (status === null) {
+			return;
+		}
+		handledRef.current = true;
+		setAttaching(false);
+		if (status === "succeeded") {
+			queryClient.invalidateQueries({
+				queryKey: stagingQuery(siteId).queryKey,
+			});
+			return;
+		}
+		const label = status === "canceled" ? "was canceled" : "failed";
+		toast.error(`Adding staging for ${siteId} ${label}.`);
+	}, [attaching, getStatus, siteId, queryClient]);
 
 	function check(value: string): string | undefined {
 		const domainError = validateDomain(value);
@@ -58,14 +84,13 @@ export function StagingDialog({
 		const stagingDomain = domain.trim().toLowerCase();
 		try {
 			const result = await attach.mutateAsync({ siteId, stagingDomain });
+			handledRef.current = false;
+			setAttaching(true);
 			start({
 				jobId: result.jobId,
 				title: `Add staging for ${siteId}`,
 				kind: "attachStaging",
 				siteId,
-			});
-			await queryClient.invalidateQueries({
-				queryKey: stagingQuery(siteId).queryKey,
 			});
 			onOpenChange(false);
 			setDomain("");
@@ -113,7 +138,9 @@ export function StagingDialog({
 						Cancel
 					</Button>
 					<Button
-						disabled={attach.isPending || domain.trim().length === 0}
+						disabled={
+							attach.isPending || attaching || domain.trim().length === 0
+						}
 						onClick={handleAttach}
 					>
 						Add staging

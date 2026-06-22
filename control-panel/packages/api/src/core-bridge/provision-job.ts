@@ -46,13 +46,22 @@ export function streamProvision(
 	});
 	async function* lines(): AsyncIterable<string> {
 		try {
-			const result = await provisionSequence(state, opts);
+			// Thread the cancel signal into the spawn chain: aborting it kills the
+			// installer child's whole process tree AND rejects the in-flight request
+			// promptly, so cancelJob actually stops the privileged subprocess and the
+			// drain finalizes immediately instead of blocking until natural exit.
+			const result = await provisionSequence(state, {
+				...opts,
+				signal: ac.signal,
+			});
 			for (const line of summarizeResults(result)) {
 				yield line;
 			}
 			exitResolve(result.ok ? 0 : 1);
 		} catch (error) {
-			if (!ac.signal.aborted) {
+			if (ac.signal.aborted) {
+				yield "Provision canceled.";
+			} else {
 				yield redact(error instanceof Error ? error.message : String(error));
 			}
 			exitResolve(1);

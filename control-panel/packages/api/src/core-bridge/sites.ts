@@ -138,23 +138,31 @@ async function detectSitesViaRunner(runner: string): Promise<DetectedSite[]> {
 	return sites;
 }
 
-/** Dev path: read the env files directly (panel runs as a user that can read them). */
-async function detectSitesDirect(): Promise<DetectedSite[]> {
-	const roots = env.PANEL_SITES_ROOTS.split(":").filter(Boolean).join(" ");
+/**
+ * Find bin/vibe marker files under one root via an argv `find` (no shell).
+ * `find` itself reports a missing/unreadable root on stderr and exits non-zero;
+ * we pipe stderr away and treat any failure as "no matches", matching the old
+ * `[ -d "$root" ] && ... 2>/dev/null` behavior.
+ */
+async function findVibeBinsUnder(root: string): Promise<string[]> {
 	const proc = Bun.spawn(
-		[
-			"sh",
-			"-lc",
-			`for root in ${roots}; do [ -d "$root" ] && find "$root" -maxdepth 4 -type f -path '*/bin/vibe' 2>/dev/null; done`,
-		],
-		{ stdout: "pipe" }
+		["find", root, "-maxdepth", "4", "-type", "f", "-path", "*/bin/vibe"],
+		{ stdout: "pipe", stderr: "ignore" }
 	);
 	const out = await new Response(proc.stdout).text();
-	const dirs = out
+	return out
 		.split("\n")
 		.map((l) => l.trim())
-		.filter(Boolean)
-		.map((p) => p.replace(STRIP_BIN_VIBE, ""));
+		.filter(Boolean);
+}
+
+/** Dev path: read the env files directly (panel runs as a user that can read them). */
+async function detectSitesDirect(): Promise<DetectedSite[]> {
+	// Iterate roots in TypeScript and spawn `find` per-root with an argv array.
+	// Never interpolate env-derived values into a shell string.
+	const roots = env.PANEL_SITES_ROOTS.split(":").filter(Boolean);
+	const found = await Promise.all(roots.map((root) => findVibeBinsUnder(root)));
+	const dirs = found.flat().map((p) => p.replace(STRIP_BIN_VIBE, ""));
 
 	const sites: DetectedSite[] = [];
 	for (const dir of dirs) {

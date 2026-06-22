@@ -1,4 +1,4 @@
-import { eventIterator } from "@orpc/server";
+import { eventIterator, ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import type { Job, JobHistoryEntry, JobStatus, StreamEvent } from "../contract";
@@ -18,7 +18,9 @@ export const operationsRouter = {
 		.handler(({ input }): Job => {
 			const job = getJob(input.jobId);
 			if (!job) {
-				throw new Error("Unknown job");
+				// Unknown or evicted (past FINALIZED_TTL_MS) — surface a typed
+				// NOT_FOUND like the other read handlers, not an opaque 500.
+				throw new ORPCError("NOT_FOUND");
 			}
 			return job;
 		}),
@@ -27,7 +29,19 @@ export const operationsRouter = {
 		.input(z.object({ jobId: z.string() }))
 		.output(eventIterator(streamEventSchema))
 		.handler(async function* ({ input }): AsyncGenerator<StreamEvent> {
-			for await (const ev of streamJob(input.jobId)) {
+			// An evicted-job reconnect (past FINALIZED_TTL_MS) has no registry
+			// entry; streamJob would throw a plain Error inside the generator and
+			// oRPC would mask it as a 500. Guard the lookup and surface NOT_FOUND so
+			// the client sees a typed error like every other read handler. The
+			// try/catch also covers the narrow race where eviction fires between
+			// the guard and the streamJob call.
+			let stream: AsyncIterable<StreamEvent>;
+			try {
+				stream = streamJob(input.jobId);
+			} catch {
+				throw new ORPCError("NOT_FOUND");
+			}
+			for await (const ev of stream) {
 				yield ev;
 			}
 		}),

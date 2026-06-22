@@ -65,8 +65,14 @@ export function createAuth() {
 		},
 		advanced: {
 			defaultCookieAttributes: {
-				sameSite: "none",
-				secure: true,
+				// Same-origin deployment: the web app and /rpc + /api/auth all live
+				// under one domain (BETTER_AUTH_URL === CORS_ORIGIN), so `lax` is
+				// correct — cookies still ride same-origin RPC/auth requests and
+				// top-level navigations, without the wider CSRF surface `none` opens
+				// on a privileged host-mutation panel. `secure` is gated on production
+				// so local HTTP dev (NODE_ENV !== "production") can still log in.
+				sameSite: "lax",
+				secure: env.NODE_ENV === "production",
 				httpOnly: true,
 			},
 		},

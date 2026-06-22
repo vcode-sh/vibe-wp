@@ -108,6 +108,10 @@ interface OperationsContextValue {
 	minimize: () => void;
 	ops: Operation[];
 	start: (op: Omit<Operation, "startedAt">) => void;
+	// Authoritative terminal status for a specific job once it has finished;
+	// null while still running or if the job is unknown. Lets the tray render a
+	// finished op from persisted state instead of re-streaming an evicted job.
+	statusOf: (jobId: string) => JobStatus | null;
 }
 
 const OperationsContext = createContext<OperationsContextValue | null>(null);
@@ -162,6 +166,8 @@ export function OperationsProvider({
 					o.kind === kind &&
 					!state.finished.includes(o.jobId)
 			),
+		statusOf: (jobId) =>
+			state.finished.includes(jobId) ? (state.statuses[jobId] ?? null) : null,
 	};
 
 	return (

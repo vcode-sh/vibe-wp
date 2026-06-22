@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { suggestedBackupDir } from "./backup";
 import { buildBaseState } from "./base-state";
 import { emptyHostFacts } from "./defaults";
 import { portPairFromSlug, siteSlugFromDomain } from "./site-profile";
@@ -6,7 +7,12 @@ import type { ExistingSite, HostFacts } from "./types";
 
 function siteAt(
   installDir: string,
-  ports: { production?: number | null; staging?: number | null } = {}
+  ports: {
+    production?: number | null;
+    staging?: number | null;
+    productionProject?: string | null;
+    stagingProject?: string | null;
+  } = {}
 ): ExistingSite {
   return {
     installDir,
@@ -14,8 +20,8 @@ function siteAt(
     stagingUrl: null,
     productionPort: ports.production ?? null,
     stagingPort: ports.staging ?? null,
-    productionProject: null,
-    stagingProject: null,
+    productionProject: ports.productionProject ?? null,
+    stagingProject: ports.stagingProject ?? null,
     hasStaging: false
   };
 }
@@ -90,5 +96,63 @@ describe("buildBaseState identity seeding", () => {
   test("missing domain falls back to a safe default slug", () => {
     const state = buildBaseState(emptyHostFacts(), { mode: "new-site" });
     expect(state.siteSlug).toBe("site");
+  });
+
+  test("slug avoids collision with an existing site's REAL compose project name", () => {
+    // The conventional first site lives at /opt/vibe-wp (basename "vibe-wp"),
+    // but its REAL slug is carried in COMPOSE_PROJECT_NAME = vibe-wp-shop-prod.
+    // A new "shop.io" provision must NOT reuse that slug, or both would share
+    // COMPOSE_PROJECT_NAME vibe-wp-shop-prod and clobber each other's containers.
+    const host = hostWith([siteAt("/opt/vibe-wp", { productionProject: "vibe-wp-shop-prod" })]);
+    const state = buildBaseState(host, { domain: "shop.io", mode: "new-site" });
+    expect(state.siteSlug).not.toBe("shop");
+  });
+
+  test("slug avoids collision with an existing site's staging project name", () => {
+    const host = hostWith([
+      siteAt("/opt/vibe-wp", {
+        productionProject: "vibe-wp-main-prod",
+        stagingProject: "vibe-wp-shop-stage"
+      })
+    ]);
+    const state = buildBaseState(host, { domain: "shop.io", mode: "new-site" });
+    expect(state.siteSlug).not.toBe("shop");
+  });
+
+  test("backupDir is per-slug, never the inherited example.com default", () => {
+    const state = buildBaseState(emptyHostFacts(), { domain: "shop.io", mode: "new-site" });
+    expect(state.backupDir).toBe(suggestedBackupDir(state.siteSlug));
+    // Must not inherit defaultState's literal example.com-derived backup dir.
+    expect(state.backupDir).not.toBe(suggestedBackupDir(siteSlugFromDomain("example.com")));
+  });
+
+  test("two sequential provisions get distinct slugs AND distinct backup dirs", () => {
+    const first = buildBaseState(emptyHostFacts(), { domain: "shop.io", mode: "new-site" });
+    // Simulate the first site now installed with its real compose project name.
+    const host = hostWith([
+      siteAt(first.installDir, { productionProject: `vibe-wp-${first.siteSlug}-prod` })
+    ]);
+    const second = buildBaseState(host, { domain: "shop.io", mode: "new-site" });
+    expect(second.siteSlug).not.toBe(first.siteSlug);
+    expect(second.backupDir).not.toBe(first.backupDir);
+  });
+
+  test("port exhaustion fails closed with an invalid pair, not a colliding one", () => {
+    // Reserve EVERY port from the slug's start to MAX so the 2-step walk can
+    // never find a free pair. The result must be out-of-range (rejected by
+    // validateState), never the original slug-derived colliding pair.
+    const slug = siteSlugFromDomain("shop.io");
+    const start = Number(portPairFromSlug(slug).production);
+    const sites: ExistingSite[] = [];
+    for (let port = start; port <= 65_535; port += 1) {
+      sites.push(siteAt(`/opt/vibe-wp-sites/r-${port}`, { production: port }));
+    }
+    const state = buildBaseState(hostWith(sites), { domain: "shop.io", mode: "new-site" });
+    const wouldPick = portPairFromSlug(state.siteSlug);
+    const prodNum = Number(state.productionHttpPort);
+    // Out of the valid 1024-65535 range => validateState rejects the provision.
+    expect(prodNum < 1024 || prodNum > 65_535).toBe(true);
+    // And it is NOT the original colliding pair.
+    expect(state.productionHttpPort).not.toBe(wouldPick.production);
   });
 });

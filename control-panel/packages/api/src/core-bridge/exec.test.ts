@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildVibeArgv, STREAM_TIMEOUT_MS, VIBE_OPS } from "./exec";
+import {
+	buildVibeArgv,
+	STREAM_TIMEOUT_MS,
+	VIBE_OPS,
+	wrapVibeArgv,
+} from "./exec";
 import {
 	assertArgvSecretFree,
 	type CoreResponse,
@@ -344,6 +349,114 @@ describe("buildVibeArgv operations", () => {
 		expect(() =>
 			buildVibeArgv("/opt/acme", "prod", "restore", ["--config=/etc/x"])
 		).toThrow();
+	});
+});
+
+describe("wrapVibeArgv (direct dev path, runner unset)", () => {
+	it("returns the buildVibeArgv argv unchanged when no runner is set", () => {
+		const prev = process.env.PANEL_PRIVILEGED_RUNNER;
+		delete process.env.PANEL_PRIVILEGED_RUNNER;
+		try {
+			const vibeArgv = buildVibeArgv("/opt/acme", "prod", "smoke");
+			expect(wrapVibeArgv("/opt/acme", vibeArgv)).toEqual(vibeArgv);
+		} finally {
+			if (prev === undefined) {
+				delete process.env.PANEL_PRIVILEGED_RUNNER;
+			} else {
+				process.env.PANEL_PRIVILEGED_RUNNER = prev;
+			}
+		}
+	});
+
+	it("treats an empty runner as unset (no sudo wrapping)", () => {
+		const prev = process.env.PANEL_PRIVILEGED_RUNNER;
+		process.env.PANEL_PRIVILEGED_RUNNER = "";
+		try {
+			const vibeArgv = buildVibeArgv("/opt/acme", "prod", "smoke");
+			expect(wrapVibeArgv("/opt/acme", vibeArgv)).toEqual(vibeArgv);
+		} finally {
+			if (prev === undefined) {
+				delete process.env.PANEL_PRIVILEGED_RUNNER;
+			} else {
+				process.env.PANEL_PRIVILEGED_RUNNER = prev;
+			}
+		}
+	});
+});
+
+describe("wrapVibeArgv (production path, runner set)", () => {
+	const RUNNER = "/opt/vibe-wp-panel/bin/vibe-panel-run";
+
+	it("sudo-wraps a plain op as [sudo, -n, runner, vibe, siteDir, env, ...rest]", () => {
+		const prev = process.env.PANEL_PRIVILEGED_RUNNER;
+		process.env.PANEL_PRIVILEGED_RUNNER = RUNNER;
+		try {
+			const vibeArgv = buildVibeArgv("/opt/acme", "prod", "smoke");
+			// siteDir's bin/vibe is dropped; the root wrapper owns path reconstruction.
+			expect(wrapVibeArgv("/opt/acme", vibeArgv)).toEqual([
+				"sudo",
+				"-n",
+				RUNNER,
+				"vibe",
+				"/opt/acme",
+				"prod",
+				"smoke",
+			]);
+		} finally {
+			if (prev === undefined) {
+				delete process.env.PANEL_PRIVILEGED_RUNNER;
+			} else {
+				process.env.PANEL_PRIVILEGED_RUNNER = prev;
+			}
+		}
+	});
+
+	it("preserves an op's own args + --yes inside the wrapped argv (restore)", () => {
+		const prev = process.env.PANEL_PRIVILEGED_RUNNER;
+		process.env.PANEL_PRIVILEGED_RUNNER = RUNNER;
+		try {
+			const vibeArgv = buildVibeArgv("/opt/acme", "prod", "restore", [
+				"/b/2026",
+			]);
+			expect(wrapVibeArgv("/opt/acme", vibeArgv)).toEqual([
+				"sudo",
+				"-n",
+				RUNNER,
+				"vibe",
+				"/opt/acme",
+				"prod",
+				"restore",
+				"/b/2026",
+				"--yes",
+			]);
+		} finally {
+			if (prev === undefined) {
+				delete process.env.PANEL_PRIVILEGED_RUNNER;
+			} else {
+				process.env.PANEL_PRIVILEGED_RUNNER = prev;
+			}
+		}
+	});
+
+	it("rejects leading-dash extraArgs before wrapping even on the runner path", () => {
+		const prev = process.env.PANEL_PRIVILEGED_RUNNER;
+		process.env.PANEL_PRIVILEGED_RUNNER = RUNNER;
+		try {
+			// The guard lives in buildVibeArgv, so a smuggled flag never reaches
+			// wrapVibeArgv — the sudo path inherits the same rejection.
+			expect(() =>
+				wrapVibeArgv(
+					"/opt/acme",
+					buildVibeArgv("/opt/acme", "prod", "restore", ["--config=/etc/x"])
+				)
+			).toThrow();
+		} finally {
+			if (prev === undefined) {
+				delete process.env.PANEL_PRIVILEGED_RUNNER;
+			} else {
+				process.env.PANEL_PRIVILEGED_RUNNER = prev;
+			}
+		}
 	});
 });
 

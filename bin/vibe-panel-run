@@ -217,6 +217,24 @@ validate_compose_args() {
   esac
 }
 
+# `env` is special: bin/vibe's `env` op prints the RAW value of ANY env-file key
+# (DB/Redis passwords, WP salts, R2/Anthropic secrets, the admin password, …),
+# so validate_arg's "no shell metacharacters" check is NOT enough — every secret
+# key name passes it. Restrict the op to EXACTLY ONE key, and that key must be in
+# a FIXED non-secret allowlist. This MUST mirror NON_SECRET_KEYS in the panel's
+# control-panel/packages/api/src/routers/devinfo.ts — the only place the panel
+# uses the env op (the Developer details panel reads exactly these keys). $@ here
+# is the args AFTER the `env` op token.
+ENV_KEY_ALLOWLIST="WP_HOME COMPOSE_PROJECT_NAME WP_ENVIRONMENT_TYPE WORDPRESS_IMAGE WP_MEMORY_LIMIT WP_MAX_MEMORY_LIMIT WP_CACHE WP_DEBUG_LOG HTTP_PORT"
+validate_env_key() {
+  [ "$#" -eq 1 ] || die "env op takes exactly one key argument"
+  key="$1"
+  for allowed in $ENV_KEY_ALLOWLIST; do
+    [ "$key" = "$allowed" ] && return 0
+  done
+  die "env key not allowed: $key"
+}
+
 # --- siteinfo: scan roots, print ONLY non-secret fields as TAB-separated rows.
 # Columns: installDir  slug  domain  prodPort  stagePort  hasStaging  stagingDomain
 # slug          = COMPOSE_PROJECT_NAME minus the vibe-wp- prefix and -prod/-stage suffix
@@ -328,6 +346,7 @@ case "$sub" in
     case "$op" in
       wp)      validate_wp_args "$@" ;;     # only the 3 exact panel wp forms
       compose) validate_compose_args "$@" ;; # only `compose ps --format json`
+      env)     validate_env_key "$@" ;;     # exactly one key, non-secret allowlist
       *)
         for a in "$@"; do
           validate_arg "$a"

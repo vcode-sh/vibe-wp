@@ -25,11 +25,13 @@ function HealthPage() {
 	let uptimeLabel = "—";
 	let uptimeClass = "";
 	if (health.data !== undefined) {
-		if (health.data.uptimePercent >= 100) {
-			uptimeLabel = "Up";
+		const pct = health.data.uptimePercent;
+		uptimeLabel = `${pct}%`;
+		if (pct >= 99.9) {
 			uptimeClass = "text-success";
+		} else if (pct >= 99) {
+			uptimeClass = "text-warning";
 		} else {
-			uptimeLabel = "Down";
 			uptimeClass = "text-destructive";
 		}
 	}

@@ -37,6 +37,16 @@ else
   : > "${work}"
 fi
 
+# Single-quote-escape a value for safe inclusion in an env file that is later
+# sourced (`set -a; . file`). Wraps in single quotes and rewrites each embedded
+# single quote as '\'' so no value content can be interpreted as shell. This is
+# defense in depth — managed values are also validated to 0/1 before reaching
+# here, but the writer must not depend on the caller (a sourced `KEY=$(cmd)` runs
+# as root via the WordPress image entrypoint / cron).
+sq_escape() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 # Replace `KEY=...` in place on the working copy, or append it when absent.
 env_upsert() {
   key="$1"
@@ -44,18 +54,20 @@ env_upsert() {
   # Env files are sourced with `set -a; . file`; a newline would split the value
   # into a second shell statement, so strip CR/LF defensively.
   val="$(printf '%s' "${val}" | tr -d '\r\n')"
+  # Single-quote-escape on write so a value can never be parsed as shell.
+  quoted="$(sq_escape "${val}")"
   found=0
   {
     while IFS= read -r entry || [ -n "${entry}" ]; do
       case "${entry}" in
         "${key}="*)
-          printf '%s=%s\n' "${key}" "${val}"
+          printf '%s=%s\n' "${key}" "${quoted}"
           found=1
           ;;
         *) printf '%s\n' "${entry}" ;;
       esac
     done < "${work}"
-    [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${val}"
+    [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${quoted}"
   } > "${line}"
   cat "${line}" > "${work}"
 }
@@ -86,6 +98,18 @@ for key in ${changed_keys}; do
   }
   eval "val=\${${key}:-__VIBE_UNSET__}"
   [ "${val}" = "__VIBE_UNSET__" ] && continue
+  # Every managed key is a boolean debug flag whose only accepted tokens are 0/1.
+  # Reject anything else BEFORE writing — the writer must not trust the caller's
+  # value (env files are sourced as root, so an unvalidated `WP_DEBUG_LOG=$(cmd)`
+  # would execute). The panel only ever sends 0/1; a non-0/1 value is a bug or an
+  # injection attempt and is fatal.
+  case "${val}" in
+    0|1) : ;;
+    *)
+      echo "Refusing to write non-boolean value for ${key}: ${val}" >&2
+      exit 2
+      ;;
+  esac
   env_upsert "${key}" "${val}"
 done
 

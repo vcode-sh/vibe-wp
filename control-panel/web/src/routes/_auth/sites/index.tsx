@@ -59,7 +59,13 @@ function ServerStatus({
 	return (
 		<Card>
 			<CardContent className="flex flex-wrap items-center gap-3 py-4 text-sm">
-				<span className="size-2 rounded-full bg-success" />
+				<span
+					aria-label={data.allHealthy ? "All healthy" : "Needs attention"}
+					className={`size-2 rounded-full ${
+						data.allHealthy ? "bg-success" : "bg-warning"
+					}`}
+					role="img"
+				/>
 				<span className="font-medium">{data.vps}</span>
 				<span className="text-muted-foreground">
 					{data.siteCount} sites · disk {data.diskPercent}%·
