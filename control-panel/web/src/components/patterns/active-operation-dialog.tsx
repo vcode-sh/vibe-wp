@@ -15,6 +15,7 @@ export function ActiveOperationDialog() {
 				}
 			}}
 			open={Boolean(expanded)}
+			startedAt={expanded?.startedAt}
 			title={expanded?.title ?? ""}
 		/>
 	);

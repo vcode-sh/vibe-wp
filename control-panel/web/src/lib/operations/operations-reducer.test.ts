@@ -2,8 +2,18 @@ import { describe, expect, it } from "vitest";
 import type { Operation } from "./operations-provider";
 import { operationsReducer } from "./operations-provider";
 
-const opA: Operation = { jobId: "job-a", title: "Backing up", kind: "backup" };
-const opB: Operation = { jobId: "job-b", title: "Restoring", kind: "restore" };
+const opA: Operation = {
+	jobId: "job-a",
+	title: "Backing up",
+	kind: "backup",
+	startedAt: 1000,
+};
+const opB: Operation = {
+	jobId: "job-b",
+	title: "Restoring",
+	kind: "restore",
+	startedAt: 2000,
+};
 
 describe("operationsReducer", () => {
 	it("start adds the op and sets expandedId", () => {
@@ -22,6 +32,15 @@ describe("operationsReducer", () => {
 			{ type: "start", op: opA }
 		);
 		expect(state.ops).toHaveLength(1);
+		expect(state.expandedId).toBe("job-a");
+	});
+
+	it("start re-targets expandedId when another op is already expanded", () => {
+		const state = operationsReducer(
+			{ ops: [opB], expandedId: "job-b" },
+			{ type: "start", op: opA }
+		);
+		expect(state.ops).toHaveLength(2);
 		expect(state.expandedId).toBe("job-a");
 	});
 

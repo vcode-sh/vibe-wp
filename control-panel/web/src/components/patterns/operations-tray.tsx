@@ -83,7 +83,7 @@ function TrayCard({ op }: { op: Operation }) {
 				<TrayCardStatus
 					done={live.done}
 					now={now}
-					startedAt={live.startedAt}
+					startedAt={op.startedAt}
 					status={live.status}
 				/>
 			</button>

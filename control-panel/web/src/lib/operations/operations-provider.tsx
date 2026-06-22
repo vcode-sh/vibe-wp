@@ -3,6 +3,7 @@ import { createContext, useContext, useReducer } from "react";
 export interface Operation {
 	jobId: string;
 	kind: string;
+	startedAt: number;
 	title: string;
 }
 
@@ -23,6 +24,8 @@ export function operationsReducer(
 ): OperationsState {
 	switch (action.type) {
 		case "start": {
+			// Dedup by jobId; op metadata (title/kind/startedAt) is immutable once
+			// registered. Re-surface the existing op by setting expandedId.
 			const exists = state.ops.some((o) => o.jobId === action.op.jobId);
 			return {
 				ops: exists ? state.ops : [...state.ops, action.op],
@@ -55,7 +58,7 @@ interface OperationsContextValue {
 	expandedId: string | null;
 	minimize: () => void;
 	ops: Operation[];
-	start: (op: Operation) => void;
+	start: (op: Omit<Operation, "startedAt">) => void;
 }
 
 const OperationsContext = createContext<OperationsContextValue | null>(null);
@@ -70,7 +73,8 @@ export function OperationsProvider({
 	const value: OperationsContextValue = {
 		ops: state.ops,
 		expandedId: state.expandedId,
-		start: (op) => dispatch({ type: "start", op }),
+		start: (op) =>
+			dispatch({ type: "start", op: { ...op, startedAt: Date.now() } }),
 		expand: (jobId) => dispatch({ type: "expand", jobId }),
 		minimize: () => dispatch({ type: "minimize" }),
 		dismiss: (jobId) => dispatch({ type: "dismiss", jobId }),

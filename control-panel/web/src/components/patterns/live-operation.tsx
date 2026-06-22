@@ -72,12 +72,14 @@ export function LiveOperation({
 	title,
 	kind,
 	jobId,
+	startedAt,
 }: {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
 	title: string;
 	kind: string;
 	jobId: string | null;
+	startedAt?: number;
 }) {
 	const [now, setNow] = useState(() => Date.now());
 	const [canceling, setCanceling] = useState(false);
@@ -136,7 +138,7 @@ export function LiveOperation({
 					<DialogDescription className="flex items-center gap-2">
 						<span>{live.done ? "Operation finished." : "Running…"}</span>
 						<span className="font-mono text-xs">
-							· {elapsed(now - live.startedAt)}
+							· {elapsed(now - (startedAt ?? live.startedAt))}
 						</span>
 					</DialogDescription>
 				</DialogHeader>
