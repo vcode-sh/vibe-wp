@@ -119,12 +119,27 @@ async function detectExistingSites(): Promise<ExistingSite[]> {
       stagingUrl: staging.WP_HOME ?? null,
       productionProject: project,
       stagingProject: staging.COMPOSE_PROJECT_NAME ?? null,
+      // Real bound ports recovered from each site's env (HTTP_PORT is
+      // "127.0.0.1:<port>"). These are authoritative — a site created after an
+      // earlier port collision runs on a walked port the slug no longer predicts.
+      productionPort: httpPortOf(production.HTTP_PORT),
+      stagingPort: httpPortOf(staging.HTTP_PORT),
       hasStaging: Boolean(staging.WP_HOME),
       running: Boolean(project && running.has(project))
     });
   }
 
   return sites;
+}
+
+// Extract the numeric TCP port from an HTTP_PORT env value, which may be
+// "127.0.0.1:18000", "0.0.0.0:18000", or a bare "18000".
+function httpPortOf(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const port = Number(value.trim().split(":").pop());
+  return Number.isInteger(port) && port > 0 ? port : null;
 }
 
 async function readEnv(path: string): Promise<Record<string, string>> {

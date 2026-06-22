@@ -1,9 +1,9 @@
 import { Checkbox } from "@control-panel/ui/components/checkbox";
 import { Label } from "@control-panel/ui/components/label";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,8 +21,9 @@ import { orpc } from "@/lib/orpc/client";
 
 /**
  * Destructive "Remove site" affordance. The confirm requires typing the site's
- * domain (or slug) exactly, plus an explicit purge checkbox to also delete all
- * data and backups. Admin-only on the server (adminProcedure).
+ * domain (or slug) exactly, plus an explicit purge checkbox to also delete the
+ * local install directory and Docker volumes. Purge does NOT touch off-site
+ * (R2) backups. Admin-only on the server (adminProcedure).
  */
 export function RemoveSiteCard({
 	siteId,
@@ -32,11 +33,14 @@ export function RemoveSiteCard({
 	confirmText: string;
 }) {
 	const navigate = useNavigate();
-	const { start } = useOperations();
+	const queryClient = useQueryClient();
+	const { start, getStatus } = useOperations();
 	const remove = useMutation(orpc.removeSite.mutationOptions());
 	const [open, setOpen] = useState(false);
 	const [typed, setTyped] = useState("");
 	const [purge, setPurge] = useState(false);
+	const [removing, setRemoving] = useState(false);
+	const handledRef = useRef(false);
 
 	const matches =
 		typed.trim().toLowerCase() === confirmText.trim().toLowerCase();
@@ -46,12 +50,38 @@ export function RemoveSiteCard({
 		setPurge(false);
 	}
 
+	// Gate on the remove job's terminal status: only refresh the sites list and
+	// navigate away on success; on failure/cancel surface an error and stay.
+	// Reads the current status (no transition race) and fires at most once.
+	useEffect(() => {
+		if (!removing || handledRef.current) {
+			return;
+		}
+		const status = getStatus(siteId, "removeSite");
+		if (status === null) {
+			return;
+		}
+		handledRef.current = true;
+		setRemoving(false);
+		if (status === "succeeded") {
+			queryClient.invalidateQueries({
+				queryKey: orpc.sitesList.queryOptions().queryKey,
+			});
+			navigate({ to: "/sites" });
+			return;
+		}
+		const label = status === "canceled" ? "was canceled" : "failed";
+		toast.error(`Removing ${confirmText} ${label}.`);
+	}, [removing, getStatus, siteId, confirmText, navigate, queryClient]);
+
 	async function handleRemove() {
 		if (!matches) {
 			return;
 		}
 		try {
 			const result = await remove.mutateAsync({ siteId, purge });
+			handledRef.current = false;
+			setRemoving(true);
 			start({
 				jobId: result.jobId,
 				title: `Remove ${confirmText}`,
@@ -60,7 +90,6 @@ export function RemoveSiteCard({
 			});
 			setOpen(false);
 			reset();
-			navigate({ to: "/sites" });
 		} catch (err) {
 			toast.error(
 				err instanceof Error
@@ -81,7 +110,7 @@ export function RemoveSiteCard({
 				<CardContent className="flex flex-wrap items-center justify-between gap-3">
 					<p className="max-w-prose text-muted-foreground text-sm">
 						Tears down this site's containers and configuration. Optionally also
-						deletes all of its data and backups. Admin access required.
+						deletes its local data and Docker volumes. Admin access required.
 					</p>
 					<Button onClick={() => setOpen(true)} variant="destructive">
 						<Trash2 className="mr-1.5 size-3.5" />
@@ -127,10 +156,12 @@ export function RemoveSiteCard({
 							/>
 							<span className="grid gap-0.5">
 								<span className="font-medium text-destructive">
-									Also delete all data and backups (purge)
+									Also delete local data &amp; Docker volumes (purge)
 								</span>
 								<span className="text-muted-foreground text-xs">
-									Irreversible. Local and off-site backups are deleted too.
+									Irreversible. Deletes the install directory, containers and
+									volumes. Off-site (R2) backups are kept — prune them
+									separately.
 								</span>
 							</span>
 						</Label>
@@ -141,7 +172,7 @@ export function RemoveSiteCard({
 							Cancel
 						</Button>
 						<Button
-							disabled={!matches || remove.isPending}
+							disabled={!matches || remove.isPending || removing}
 							onClick={handleRemove}
 							variant="destructive"
 						>

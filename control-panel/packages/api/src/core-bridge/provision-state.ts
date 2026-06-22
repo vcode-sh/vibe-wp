@@ -73,33 +73,62 @@ export function applyExternalOverrides(
 	};
 }
 
+/**
+ * The AUTHORITATIVE identity of an already-installed site, read from its env
+ * files (NOT recomputed by buildBaseState, whose new-site collision-avoidance
+ * would BUMP the slug — e.g. shop-com → shop-com-2 — and target a nonexistent
+ * Caddy snippet, leaving the deleted site's HTTPS route live). `slug` is the
+ * real Caddy/compose slug (`vibe-wp-<slug>.caddy`).
+ */
+export interface ExistingSiteTarget {
+	hasStaging: boolean;
+	installDir: string;
+	productionDomain: string;
+	slug: string;
+	stagingDomain: string | null;
+}
+
 /** Staging-only overrides for attaching staging to an existing site (pure). */
 export function applyAttachStagingOverrides(
 	base: InstallerStateLike,
-	installDir: string,
-	productionDomain: string,
+	site: ExistingSiteTarget,
 	stagingDomain: string
 ): InstallerStateLike {
 	return {
 		...base,
-		selectedSiteDir: installDir,
-		installDir,
-		productionDomain: productionDomain.trim().toLowerCase(),
+		// Pin the production site's REAL slug so the staging stack + Caddy snippet
+		// (vibe-wp-<slug>-stage.caddy) match the live production site.
+		siteSlug: site.slug,
+		selectedSiteDir: site.installDir,
+		installDir: site.installDir,
+		productionDomain: site.productionDomain.trim().toLowerCase(),
 		stagingDomain: stagingDomain.trim().toLowerCase(),
 		stagingEnabled: true,
 	};
 }
 
-/** Remove-existing overrides; `purge` maps to the installer's fullDelete (pure). */
+/**
+ * Remove-existing overrides; `purge` maps to the installer's fullDelete (pure).
+ * Pins the REAL slug + the site's real staging presence/domain so buildRemoveTasks
+ * tears down the right Caddy snippets (`vibe-wp-<slug>.caddy` + `-stage.caddy`)
+ * and emits stage-down when the site actually has staging.
+ */
 export function applyRemoveSiteOverrides(
 	base: InstallerStateLike,
-	installDir: string,
+	site: ExistingSiteTarget,
 	purge: boolean
 ): InstallerStateLike {
 	return {
 		...base,
-		selectedSiteDir: installDir,
-		installDir,
+		siteSlug: site.slug,
+		selectedSiteDir: site.installDir,
+		installDir: site.installDir,
+		productionDomain: site.productionDomain.trim().toLowerCase(),
+		stagingEnabled: site.hasStaging,
+		stagingDomain: (site.stagingDomain ?? base.stagingDomain ?? "")
+			.toString()
+			.trim()
+			.toLowerCase(),
 		fullDelete: purge,
 	};
 }
@@ -121,24 +150,17 @@ export async function buildCreateExternalState(
 }
 
 export async function buildAttachStagingState(
-	installDir: string,
-	productionDomain: string,
+	site: ExistingSiteTarget,
 	stagingDomain: string
 ): Promise<InstallerStateLike> {
-	const base = await fetchBaseState("staging-only", productionDomain);
-	return applyAttachStagingOverrides(
-		base,
-		installDir,
-		productionDomain,
-		stagingDomain
-	);
+	const base = await fetchBaseState("staging-only", site.productionDomain);
+	return applyAttachStagingOverrides(base, site, stagingDomain);
 }
 
 export async function buildRemoveSiteState(
-	installDir: string,
-	productionDomain: string,
+	site: ExistingSiteTarget,
 	purge: boolean
 ): Promise<InstallerStateLike> {
-	const base = await fetchBaseState("remove-existing", productionDomain);
-	return applyRemoveSiteOverrides(base, installDir, purge);
+	const base = await fetchBaseState("remove-existing", site.productionDomain);
+	return applyRemoveSiteOverrides(base, site, purge);
 }

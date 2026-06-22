@@ -87,14 +87,28 @@ describe("applyExternalOverrides", () => {
 	});
 });
 
+// Simulate buildBaseState's NEW-site collision bump: when staging-only /
+// remove-existing run against a live site, baseState sees the live site as
+// "taken" and BUMPS the slug. The overrides MUST pin the real slug back.
+function bumpedBase(): InstallerStateLike {
+	return { ...base(), siteSlug: "shop-io-2" };
+}
+
 describe("applyAttachStagingOverrides", () => {
-	it("targets the existing site dir and enables staging", () => {
+	it("pins the real slug, targets the existing site, enables staging", () => {
 		const next = applyAttachStagingOverrides(
-			base(),
-			"/opt/vibe-wp-sites/shop",
-			"shop.io",
+			bumpedBase(),
+			{
+				slug: "shop-io",
+				installDir: "/opt/vibe-wp-sites/shop",
+				productionDomain: "shop.io",
+				hasStaging: false,
+				stagingDomain: null,
+			},
 			"Stage.Shop.IO"
 		);
+		// Real slug pinned — NOT the bumped baseState slug.
+		expect(next.siteSlug).toBe("shop-io");
 		expect(next.selectedSiteDir).toBe("/opt/vibe-wp-sites/shop");
 		expect(next.installDir).toBe("/opt/vibe-wp-sites/shop");
 		expect(next.stagingDomain).toBe("stage.shop.io");
@@ -103,11 +117,41 @@ describe("applyAttachStagingOverrides", () => {
 });
 
 describe("applyRemoveSiteOverrides", () => {
-	it("maps purge to fullDelete and targets the existing site", () => {
-		const purge = applyRemoveSiteOverrides(base(), "/opt/vibe-wp", true);
-		expect(purge.fullDelete).toBe(true);
-		expect(purge.selectedSiteDir).toBe("/opt/vibe-wp");
-		const keep = applyRemoveSiteOverrides(base(), "/opt/vibe-wp", false);
-		expect(keep.fullDelete).toBe(false);
+	it("pins the real slug and the site's REAL staging presence", () => {
+		const next = applyRemoveSiteOverrides(
+			bumpedBase(),
+			{
+				slug: "shop-io",
+				installDir: "/opt/vibe-wp",
+				productionDomain: "shop.io",
+				hasStaging: true,
+				stagingDomain: "stage.shop.io",
+			},
+			true
+		);
+		// The Caddy snippet + compose project must use the real slug.
+		expect(next.siteSlug).toBe("shop-io");
+		expect(next.selectedSiteDir).toBe("/opt/vibe-wp");
+		// Real staging presence → buildRemoveTasks emits stage-down + -stage.caddy.
+		expect(next.stagingEnabled).toBe(true);
+		expect(next.stagingDomain).toBe("stage.shop.io");
+		expect(next.fullDelete).toBe(true);
+	});
+
+	it("skips staging teardown when the site has no staging", () => {
+		const next = applyRemoveSiteOverrides(
+			base(),
+			{
+				slug: "lonely",
+				installDir: "/opt/vibe-wp",
+				productionDomain: "lonely.io",
+				hasStaging: false,
+				stagingDomain: null,
+			},
+			false
+		);
+		expect(next.siteSlug).toBe("lonely");
+		expect(next.stagingEnabled).toBe(false);
+		expect(next.fullDelete).toBe(false);
 	});
 });

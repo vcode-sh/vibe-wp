@@ -13,9 +13,26 @@ import {
 	buildCreateExternalState,
 	buildCreateSiteState,
 	buildRemoveSiteState,
+	type ExistingSiteTarget,
 } from "../core-bridge/provision-state";
-import { findSite } from "../core-bridge/sites";
+import { type DetectedSite, findSite } from "../core-bridge/sites";
 import { adminProcedure } from "../procedures";
+
+/**
+ * Map a detected site to its AUTHORITATIVE provisioning identity. The slug comes
+ * from caddySlug (recovered from COMPOSE_PROJECT_NAME), NOT the install-dir tail,
+ * so teardown/staging target the real `vibe-wp-<slug>.caddy` snippet + compose
+ * project. hasStaging/stagingDomain come from the real env files.
+ */
+function targetOf(site: DetectedSite): ExistingSiteTarget {
+	return {
+		slug: site.caddySlug,
+		installDir: site.installDir,
+		productionDomain: site.domain,
+		hasStaging: site.hasStaging,
+		stagingDomain: site.stagingDomain,
+	};
+}
 
 /**
  * Provisioning router — the panel's reason for existing. Every procedure is
@@ -71,8 +88,7 @@ export const provisioningRouter = {
 				});
 			}
 			const state = await buildAttachStagingState(
-				site.installDir,
-				site.domain,
+				targetOf(site),
 				input.stagingDomain
 			);
 			return startProvisionJob({
@@ -92,11 +108,7 @@ export const provisioningRouter = {
 			if (!site) {
 				throw new ORPCError("NOT_FOUND");
 			}
-			const state = await buildRemoveSiteState(
-				site.installDir,
-				site.domain,
-				input.purge
-			);
+			const state = await buildRemoveSiteState(targetOf(site), input.purge);
 			return startProvisionJob({
 				action: input.purge ? "removeSite:purge" : "removeSite",
 				apply: true,

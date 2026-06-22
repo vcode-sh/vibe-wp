@@ -4,11 +4,16 @@ import { emptyHostFacts } from "./defaults";
 import { portPairFromSlug, siteSlugFromDomain } from "./site-profile";
 import type { ExistingSite, HostFacts } from "./types";
 
-function siteAt(installDir: string): ExistingSite {
+function siteAt(
+  installDir: string,
+  ports: { production?: number | null; staging?: number | null } = {}
+): ExistingSite {
   return {
     installDir,
     productionUrl: "https://example-prod.test",
     stagingUrl: null,
+    productionPort: ports.production ?? null,
+    stagingPort: ports.staging ?? null,
     productionProject: null,
     stagingProject: null,
     hasStaging: false
@@ -55,13 +60,22 @@ describe("buildBaseState identity seeding", () => {
     expect(state.siteSlug).not.toBe("shop");
   });
 
-  test("ports do not collide with an existing site's reserved pair", () => {
-    const existingSlug = siteSlugFromDomain("shop.io");
-    const reserved = portPairFromSlug(existingSlug);
-    const host = hostWith([siteAt("/opt/vibe-wp"), siteAt(`/opt/vibe-wp-sites/${existingSlug}`)]);
+  test("ports walk away from an existing site's REAL bound ports", () => {
+    // The new site's slug-derived pair is what an unconstrained host would pick;
+    // reserve exactly those real ports on a different existing site so the new
+    // provision is forced to walk forward. (Real ports, not slug-reconstructed —
+    // a site created after a prior collision runs on a walked port.)
+    const newSlug = siteSlugFromDomain("shop.io");
+    const wouldPick = portPairFromSlug(newSlug);
+    const host = hostWith([
+      siteAt("/opt/vibe-wp", {
+        production: Number(wouldPick.production),
+        staging: Number(wouldPick.staging)
+      })
+    ]);
     const state = buildBaseState(host, { domain: "shop.io", mode: "new-site" });
-    expect(state.productionHttpPort).not.toBe(reserved.production);
-    expect(state.stagingHttpPort).not.toBe(reserved.staging);
+    expect(state.productionHttpPort).not.toBe(wouldPick.production);
+    expect(state.stagingHttpPort).not.toBe(wouldPick.staging);
     expect(state.productionHttpPort).not.toBe(state.stagingHttpPort);
   });
 

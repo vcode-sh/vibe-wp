@@ -76,9 +76,11 @@ export interface HostFacts {
 export interface ExistingSite {
   hasStaging: boolean;
   installDir: string;
+  productionPort: number | null;
   productionProject: string | null;
   productionUrl: string | null;
   running?: boolean;
+  stagingPort: number | null;
   stagingProject: string | null;
   stagingUrl: string | null;
 }

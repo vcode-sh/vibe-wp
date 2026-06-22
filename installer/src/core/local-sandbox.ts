@@ -19,16 +19,20 @@ export function createLocalSandboxHostFacts(cwd = process.cwd()): HostFacts {
       {
         hasStaging: true,
         installDir: `${root}/sites/acme-studio`,
+        productionPort: 18_000,
         productionProject: "vibe_wp_acme_prod",
         productionUrl: "https://acme.vibe.local",
+        stagingPort: 18_001,
         stagingProject: "vibe_wp_acme_stage",
         stagingUrl: "https://stage.acme.vibe.local"
       },
       {
         hasStaging: false,
         installDir: `${root}/sites/portfolio`,
+        productionPort: 18_010,
         productionProject: "vibe_wp_portfolio_prod",
         productionUrl: "https://portfolio.vibe.local",
+        stagingPort: null,
         stagingProject: null,
         stagingUrl: null
       }

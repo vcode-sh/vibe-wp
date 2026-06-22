@@ -66,12 +66,12 @@ function TrayCard({ op }: { op: Operation }) {
 
 	useEffect(() => {
 		if (live.done) {
-			finish(op.jobId);
+			finish(op.jobId, live.status);
 			return;
 		}
 		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
-	}, [live.done, op.jobId, finish]);
+	}, [live.done, live.status, op.jobId, finish]);
 
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5 shadow-md">

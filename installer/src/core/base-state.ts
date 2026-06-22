@@ -59,17 +59,20 @@ function existingDirs(host: HostFacts): Set<string> {
   return new Set(host.existingSites.map((site) => site.installDir));
 }
 
-// Ports already implied by existing sites: each installed site would have been
-// seeded from its own slug, so reserve the deterministic pair for each so a new
-// site never lands on the same loopback port. Existing ports are not stored in
-// HostFacts, so this reservation mirrors how they were originally allocated.
+// Ports actually in use by existing sites, read from their env files
+// (ExistingSite.productionPort/stagingPort). This is authoritative: a site
+// created after an earlier collision runs on a WALKED port the slug no longer
+// predicts, so reconstructing the pair from the slug would miss it and let a
+// new provision collide. We reserve the real bound ports instead.
 function reservedPorts(host: HostFacts): Set<number> {
   const used = new Set<number>();
   for (const site of host.existingSites) {
-    const slug = installDirSlug(site.installDir);
-    const pair = portPairFromSlug(slug);
-    used.add(Number(pair.production));
-    used.add(Number(pair.staging));
+    if (site.productionPort !== null) {
+      used.add(site.productionPort);
+    }
+    if (site.stagingPort !== null) {
+      used.add(site.stagingPort);
+    }
   }
   return used;
 }

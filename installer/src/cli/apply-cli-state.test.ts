@@ -67,8 +67,10 @@ describe("applyCliState", () => {
         {
           installDir: "/opt/vibe-wp",
           hasStaging: false,
+          productionPort: 18_000,
           productionProject: "p",
           productionUrl: "https://live.com",
+          stagingPort: null,
           stagingProject: null,
           stagingUrl: null
         }
@@ -137,8 +139,10 @@ describe("applyCliState", () => {
         {
           installDir: "/opt/vibe-wp-sites/shop-example",
           hasStaging: false,
+          productionPort: 18_020,
           productionProject: "p",
           productionUrl: "https://shop.example.io",
+          stagingPort: null,
           stagingProject: null,
           stagingUrl: null
         }

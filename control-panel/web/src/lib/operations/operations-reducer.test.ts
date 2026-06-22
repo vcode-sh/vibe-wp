@@ -17,29 +17,40 @@ const opB: Operation = {
 	startedAt: 2000,
 };
 
+/** Build an OperationsState with sensible defaults for the fields under test. */
+function makeState(partial: Partial<OperationsState>): OperationsState {
+	return {
+		ops: [],
+		expandedId: null,
+		finished: [],
+		statuses: {},
+		...partial,
+	};
+}
+
 describe("operationsReducer", () => {
 	it("start adds the op and sets expandedId", () => {
-		const state = operationsReducer(
-			{ ops: [], expandedId: null, finished: [] },
-			{ type: "start", op: opA }
-		);
+		const state = operationsReducer(makeState({}), {
+			type: "start",
+			op: opA,
+		});
 		expect(state.ops).toHaveLength(1);
 		expect(state.ops[0]).toEqual(opA);
 		expect(state.expandedId).toBe("job-a");
 	});
 
 	it("start does not duplicate an existing op", () => {
-		const state = operationsReducer(
-			{ ops: [opA], expandedId: null, finished: [] },
-			{ type: "start", op: opA }
-		);
+		const state = operationsReducer(makeState({ ops: [opA] }), {
+			type: "start",
+			op: opA,
+		});
 		expect(state.ops).toHaveLength(1);
 		expect(state.expandedId).toBe("job-a");
 	});
 
 	it("start re-targets expandedId when another op is already expanded", () => {
 		const state = operationsReducer(
-			{ ops: [opB], expandedId: "job-b", finished: [] },
+			makeState({ ops: [opB], expandedId: "job-b" }),
 			{ type: "start", op: opA }
 		);
 		expect(state.ops).toHaveLength(2);
@@ -48,7 +59,7 @@ describe("operationsReducer", () => {
 
 	it("minimize clears expandedId but keeps the op", () => {
 		const state = operationsReducer(
-			{ ops: [opA], expandedId: "job-a", finished: [] },
+			makeState({ ops: [opA], expandedId: "job-a" }),
 			{ type: "minimize" }
 		);
 		expect(state.ops).toHaveLength(1);
@@ -57,7 +68,7 @@ describe("operationsReducer", () => {
 
 	it("expand sets expandedId", () => {
 		const state = operationsReducer(
-			{ ops: [opA, opB], expandedId: "job-a", finished: [] },
+			makeState({ ops: [opA, opB], expandedId: "job-a" }),
 			{ type: "expand", jobId: "job-b" }
 		);
 		expect(state.expandedId).toBe("job-b");
@@ -66,7 +77,7 @@ describe("operationsReducer", () => {
 
 	it("dismiss removes the op and clears expandedId if it was expanded", () => {
 		const state = operationsReducer(
-			{ ops: [opA, opB], expandedId: "job-a", finished: [] },
+			makeState({ ops: [opA, opB], expandedId: "job-a" }),
 			{ type: "dismiss", jobId: "job-a" }
 		);
 		expect(state.ops).toHaveLength(1);
@@ -76,45 +87,67 @@ describe("operationsReducer", () => {
 
 	it("dismiss does not clear expandedId when a different op is dismissed", () => {
 		const state = operationsReducer(
-			{ ops: [opA, opB], expandedId: "job-b", finished: [] },
+			makeState({ ops: [opA, opB], expandedId: "job-b" }),
 			{ type: "dismiss", jobId: "job-a" }
 		);
 		expect(state.ops).toHaveLength(1);
 		expect(state.expandedId).toBe("job-b");
 	});
 
-	it("finish marks an op as finished", () => {
-		const state = operationsReducer(
-			{ ops: [opA], expandedId: null, finished: [] },
-			{ type: "finish", jobId: "job-a" }
-		);
+	it("finish marks an op as finished and records its terminal status", () => {
+		const state = operationsReducer(makeState({ ops: [opA] }), {
+			type: "finish",
+			jobId: "job-a",
+			status: "succeeded",
+		});
 		expect(state.finished).toContain("job-a");
+		expect(state.statuses["job-a"]).toBe("succeeded");
 		expect(state.ops).toHaveLength(1);
 	});
 
-	it("finish is idempotent", () => {
+	it("finish is idempotent for `finished` but updates the recorded status", () => {
 		const state = operationsReducer(
-			{ ops: [opA], expandedId: null, finished: ["job-a"] },
-			{ type: "finish", jobId: "job-a" }
+			makeState({
+				ops: [opA],
+				finished: ["job-a"],
+				statuses: { "job-a": "running" },
+			}),
+			{ type: "finish", jobId: "job-a", status: "failed" }
 		);
 		expect(state.finished).toHaveLength(1);
+		expect(state.statuses["job-a"]).toBe("failed");
 	});
 
-	it("dismiss also removes jobId from finished", () => {
+	it("dismiss removes jobId from finished and drops its status", () => {
 		const state = operationsReducer(
-			{ ops: [opA], expandedId: null, finished: ["job-a"] },
+			makeState({
+				ops: [opA],
+				finished: ["job-a"],
+				statuses: { "job-a": "succeeded" },
+			}),
 			{ type: "dismiss", jobId: "job-a" }
 		);
 		expect(state.ops).toHaveLength(0);
 		expect(state.finished).not.toContain("job-a");
+		expect(state.statuses["job-a"]).toBeUndefined();
+	});
+
+	it("rehydrate restores ops, finished and statuses", () => {
+		const state = operationsReducer(makeState({}), {
+			type: "rehydrate",
+			state: {
+				ops: [opA],
+				finished: ["job-a"],
+				statuses: { "job-a": "canceled" },
+			},
+		});
+		expect(state.ops).toEqual([opA]);
+		expect(state.finished).toEqual(["job-a"]);
+		expect(state.statuses["job-a"]).toBe("canceled");
 	});
 
 	it("isRunning-style: op without siteId+kind match in finished is running", () => {
-		const state: OperationsState = {
-			ops: [opA, opB],
-			expandedId: null,
-			finished: ["job-b"],
-		};
+		const state = makeState({ ops: [opA, opB], finished: ["job-b"] });
 		const backupRunning = state.ops.some(
 			(o) =>
 				o.siteId === "site-1" &&

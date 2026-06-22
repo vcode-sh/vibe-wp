@@ -3,13 +3,31 @@ import { env } from "@control-panel/env/server";
 import { hostFromUrl, parseEnvFile } from "./parse";
 
 const STRIP_BIN_VIBE = /\/bin\/vibe$/;
+const COMPOSE_PROJECT_PREFIX = /^vibe-wp-/;
+const COMPOSE_PROJECT_PROD_SUFFIX = /-prod$/;
 
 export interface DetectedSite {
+	/**
+	 * The AUTHORITATIVE site slug, recovered from the production
+	 * COMPOSE_PROJECT_NAME (`vibe-wp-<slug>-prod`). This is what the installer's
+	 * env-writer, the Caddy snippet (`/etc/caddy/sites-enabled/vibe-wp-<slug>.caddy`,
+	 * `-stage.caddy`), and the compose project are all named after — so it is the
+	 * only correct slug for provisioning ops on an existing site. The install-dir
+	 * tail (`slug`) can differ and MUST NOT be used for teardown.
+	 */
+	caddySlug: string;
 	domain: string;
 	hasStaging: boolean;
 	id: string;
 	installDir: string;
+	/** Real production HTTP port from prod.env (HTTP_PORT), or null. */
+	prodPort: number | null;
+	/** Display slug = install-dir tail; the panel's stable addressing id too. */
 	slug: string;
+	/** Real staging HTTP port from stage.env (HTTP_PORT), or null. */
+	stagePort: number | null;
+	/** Staging hostname from stage.env WP_HOME, or null when no staging. */
+	stagingDomain: string | null;
 }
 
 async function readFileSafe(path: string): Promise<string> {
@@ -18,6 +36,29 @@ async function readFileSafe(path: string): Promise<string> {
 	} catch {
 		return "";
 	}
+}
+
+/** Recover the authoritative slug from `vibe-wp-<slug>-prod`. */
+function slugFromComposeProject(
+	project: string | undefined,
+	fallback: string
+): string {
+	if (!project) {
+		return fallback;
+	}
+	const slug = project
+		.replace(COMPOSE_PROJECT_PREFIX, "")
+		.replace(COMPOSE_PROJECT_PROD_SUFFIX, "");
+	return slug.length > 0 ? slug : fallback;
+}
+
+/** Parse the numeric port from an HTTP_PORT value like "127.0.0.1:18000". */
+function httpPortOf(value: string | undefined): number | null {
+	if (!value) {
+		return null;
+	}
+	const port = Number(value.trim().split(":").pop());
+	return Number.isInteger(port) && port > 0 ? port : null;
 }
 
 export async function detectSites(): Promise<DetectedSite[]> {
@@ -49,9 +90,13 @@ export async function detectSites(): Promise<DetectedSite[]> {
 		sites.push({
 			id: slug,
 			slug,
+			caddySlug: slugFromComposeProject(prod.COMPOSE_PROJECT_NAME, slug),
 			installDir: dir,
 			domain: hostFromUrl(home),
 			hasStaging: Boolean(stage.WP_HOME),
+			stagingDomain: stage.WP_HOME ? hostFromUrl(stage.WP_HOME) : null,
+			prodPort: httpPortOf(prod.HTTP_PORT),
+			stagePort: httpPortOf(stage.HTTP_PORT),
 		});
 	}
 	return sites;

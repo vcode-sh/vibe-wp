@@ -15,6 +15,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import type { JobStatus } from "@/data/types";
 import { GENERIC_STEPS, OP_STEPS } from "@/lib/live/op-steps";
 import { parseRcloneProgress } from "@/lib/live/progress";
 import { deriveSteps, type Step } from "@/lib/live/steps";
@@ -90,7 +91,7 @@ export function LiveOperation({
 	kind: string;
 	jobId: string | null;
 	startedAt?: number;
-	onDone?: () => void;
+	onDone?: (status: JobStatus) => void;
 }) {
 	const [now, setNow] = useState(() => Date.now());
 	const [canceling, setCanceling] = useState(false);
@@ -115,9 +116,9 @@ export function LiveOperation({
 
 	useEffect(() => {
 		if (open && live.done && onDone) {
-			onDone();
+			onDone(live.status);
 		}
-	}, [open, live.done, onDone]);
+	}, [open, live.done, live.status, onDone]);
 
 	// Auto-scroll the raw-log pane as lines arrive; only follows when pinned.
 	const logRef = useAutoScroll<HTMLDivElement>(live.lines.length);

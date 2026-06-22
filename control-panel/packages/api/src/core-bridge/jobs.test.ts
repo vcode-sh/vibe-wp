@@ -9,11 +9,15 @@ import type { DetectedSite } from "./sites";
 // ---------------------------------------------------------------------------
 
 const FAKE_SITE: DetectedSite = {
+	caddySlug: "test-site",
 	domain: "test.local",
 	hasStaging: false,
 	id: "test-site",
 	installDir: "/opt/test-site",
+	prodPort: 18_000,
 	slug: "test-site",
+	stagePort: null,
+	stagingDomain: null,
 };
 
 function noop(): Promise<void> {

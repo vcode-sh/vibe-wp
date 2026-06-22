@@ -9,7 +9,7 @@ export function ActiveOperationDialog() {
 		<LiveOperation
 			jobId={expanded?.jobId ?? null}
 			kind={expanded?.kind ?? "generic"}
-			onDone={expanded ? () => finish(expanded.jobId) : undefined}
+			onDone={expanded ? (status) => finish(expanded.jobId, status) : undefined}
 			onOpenChange={(open) => {
 				if (!open) {
 					minimize();

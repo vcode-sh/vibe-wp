@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -46,15 +46,19 @@ function toCreateExternalInput(form: WizardForm): CreateExternalInput {
 
 export function useProvisionWizard(mode: ProvisionMode) {
 	const navigate = useNavigate();
-	const { start, isRunning } = useOperations();
+	const queryClient = useQueryClient();
+	const { start, getStatus } = useOperations();
 	const steps = stepsFor(mode);
 
 	const [form, setForm] = useState<WizardForm>(emptyForm);
 	const [index, setIndex] = useState(0);
 	const [errors, setErrors] = useState<Errors>({});
 	// Synthetic siteId for the ops tray: the real site does not exist yet, so we
-	// key the provision job on the domain we are about to create.
-	const trackedRef = useRef<string | null>(null);
+	// key the provision job on the domain we are about to create. Stored in
+	// state so the watcher effect re-runs and the UI reflects the in-flight job.
+	const [tracked, setTracked] = useState<string | null>(null);
+	// Guards against handling the same terminal status more than once.
+	const handledRef = useRef(false);
 
 	const createSite = useMutation(orpc.createSite.mutationOptions());
 	const createExternal = useMutation(orpc.createExternal.mutationOptions());
@@ -100,7 +104,8 @@ export function useProvisionWizard(mode: ProvisionMode) {
 				mode === "external"
 					? await createExternal.mutateAsync(toCreateExternalInput(form))
 					: await createSite.mutateAsync(toCreateSiteInput(form));
-			trackedRef.current = domain;
+			handledRef.current = false;
+			setTracked(domain);
 			start({
 				jobId: result.jobId,
 				title: `Create ${domain}`,
@@ -114,18 +119,31 @@ export function useProvisionWizard(mode: ProvisionMode) {
 		}
 	}, [createExternal, createSite, form, mode, start]);
 
-	// Once the tracked provision job finishes, leave the wizard for the list.
+	// Watch the tracked provision job's TERMINAL status. We read the current
+	// status (not a transition) so there is no race if the job finishes before
+	// this effect mounts. Only navigate on success; on failure/cancel we stay on
+	// the wizard so the user can retry. `handledRef` makes this fire once.
 	useEffect(() => {
-		const domain = trackedRef.current;
-		if (!domain) {
+		if (!tracked || handledRef.current) {
 			return;
 		}
-		if (!isRunning(domain, "provision")) {
-			toast.success(`Provisioning ${domain} finished.`);
-			trackedRef.current = null;
-			navigate({ to: "/sites" });
+		const status = getStatus(tracked, "provision");
+		if (status === null) {
+			return;
 		}
-	}, [isRunning, navigate]);
+		handledRef.current = true;
+		if (status === "succeeded") {
+			toast.success(`Provisioning ${tracked} finished.`);
+			queryClient.invalidateQueries({
+				queryKey: orpc.sitesList.queryOptions().queryKey,
+			});
+			navigate({ to: "/sites" });
+			return;
+		}
+		const label = status === "canceled" ? "was canceled" : "failed";
+		toast.error(`Provisioning ${tracked} ${label}. Review and try again.`);
+		setTracked(null);
+	}, [tracked, getStatus, navigate, queryClient]);
 
 	return {
 		back,
@@ -139,7 +157,7 @@ export function useProvisionWizard(mode: ProvisionMode) {
 		steps,
 		submit,
 		submitting,
-		started: trackedRef.current !== null,
+		started: tracked !== null,
 		valid: isFormValid(form, mode),
 	};
 }

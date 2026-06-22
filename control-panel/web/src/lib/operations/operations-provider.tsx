@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useReducer } from "react";
+import type { JobStatus } from "@/data/types";
+import { loadFromStorage, saveToStorage } from "./operations-storage";
 
 export interface Operation {
 	jobId: string;
@@ -12,6 +14,9 @@ export interface OperationsState {
 	expandedId: string | null;
 	finished: string[];
 	ops: Operation[];
+	// Terminal status keyed by jobId, recorded when an op finishes. Lets callers
+	// distinguish a successful completion from a failure/cancel after the fact.
+	statuses: Record<string, JobStatus>;
 }
 
 type OperationsAction =
@@ -19,8 +24,11 @@ type OperationsAction =
 	| { type: "expand"; jobId: string }
 	| { type: "minimize" }
 	| { type: "dismiss"; jobId: string }
-	| { type: "finish"; jobId: string }
-	| { type: "rehydrate"; state: Pick<OperationsState, "ops" | "finished"> };
+	| { type: "finish"; jobId: string; status: JobStatus }
+	| {
+			type: "rehydrate";
+			state: Pick<OperationsState, "ops" | "finished" | "statuses">;
+	  };
 
 export function operationsReducer(
 	state: OperationsState,
@@ -44,23 +52,35 @@ export function operationsReducer(
 			return { ...state, expandedId: null };
 		}
 		case "dismiss": {
+			const statuses = Object.fromEntries(
+				Object.entries(state.statuses).filter(([id]) => id !== action.jobId)
+			);
 			return {
 				ops: state.ops.filter((o) => o.jobId !== action.jobId),
 				finished: state.finished.filter((id) => id !== action.jobId),
 				expandedId: state.expandedId === action.jobId ? null : state.expandedId,
+				statuses,
 			};
 		}
 		case "finish": {
+			// Record the terminal status even when the job was already marked
+			// finished (e.g. tray + expanded dialog both fire) — last write wins.
+			const statuses = { ...state.statuses, [action.jobId]: action.status };
 			if (state.finished.includes(action.jobId)) {
-				return state;
+				return { ...state, statuses };
 			}
-			return { ...state, finished: [...state.finished, action.jobId] };
+			return {
+				...state,
+				finished: [...state.finished, action.jobId],
+				statuses,
+			};
 		}
 		case "rehydrate": {
 			return {
 				...state,
 				ops: action.state.ops,
 				finished: action.state.finished,
+				statuses: action.state.statuses,
 			};
 		}
 		default: {
@@ -69,45 +89,21 @@ export function operationsReducer(
 	}
 }
 
-const STORAGE_KEY = "vibe:operations";
-
-function loadFromStorage(): Pick<OperationsState, "ops" | "finished"> | null {
-	if (typeof window === "undefined") {
-		return null;
-	}
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (!raw) {
-			return null;
-		}
-		const parsed = JSON.parse(raw) as unknown;
-		if (
-			parsed !== null &&
-			typeof parsed === "object" &&
-			"ops" in parsed &&
-			"finished" in parsed &&
-			Array.isArray((parsed as { ops: unknown }).ops) &&
-			Array.isArray((parsed as { finished: unknown }).finished)
-		) {
-			return parsed as Pick<OperationsState, "ops" | "finished">;
-		}
-		return null;
-	} catch {
-		return null;
-	}
-}
-
 const initialState: OperationsState = {
 	ops: [],
 	expandedId: null,
 	finished: [],
+	statuses: {},
 };
 
 interface OperationsContextValue {
 	dismiss: (jobId: string) => void;
 	expand: (jobId: string) => void;
 	expandedId: string | null;
-	finish: (jobId: string) => void;
+	finish: (jobId: string, status: JobStatus) => void;
+	// Terminal status of the most recently started op for (siteId, kind), once it
+	// has finished; null while still running or if no such op exists.
+	getStatus: (siteId: string, kind: string) => JobStatus | null;
 	isRunning: (siteId: string, kind: string) => boolean;
 	minimize: () => void;
 	ops: Operation[];
@@ -131,20 +127,14 @@ export function OperationsProvider({
 		}
 	}, []);
 
-	// Persist ops + finished whenever they change (skip expandedId — reopen collapsed).
+	// Persist ops + finished + statuses on change (skip expandedId — reopen collapsed).
 	useEffect(() => {
-		if (typeof window === "undefined") {
-			return;
-		}
-		try {
-			localStorage.setItem(
-				STORAGE_KEY,
-				JSON.stringify({ ops: state.ops, finished: state.finished })
-			);
-		} catch {
-			// Storage quota exceeded or private-mode restriction — ignore.
-		}
-	}, [state.ops, state.finished]);
+		saveToStorage({
+			ops: state.ops,
+			finished: state.finished,
+			statuses: state.statuses,
+		});
+	}, [state.ops, state.finished, state.statuses]);
 
 	const value: OperationsContextValue = {
 		ops: state.ops,
@@ -154,7 +144,17 @@ export function OperationsProvider({
 		expand: (jobId) => dispatch({ type: "expand", jobId }),
 		minimize: () => dispatch({ type: "minimize" }),
 		dismiss: (jobId) => dispatch({ type: "dismiss", jobId }),
-		finish: (jobId) => dispatch({ type: "finish", jobId }),
+		finish: (jobId, status) => dispatch({ type: "finish", jobId, status }),
+		getStatus: (siteId, kind) => {
+			// The newest matching op (ops are appended in start order).
+			const op = [...state.ops]
+				.reverse()
+				.find((o) => o.siteId === siteId && o.kind === kind);
+			if (!(op && state.finished.includes(op.jobId))) {
+				return null;
+			}
+			return state.statuses[op.jobId] ?? null;
+		},
 		isRunning: (siteId, kind) =>
 			state.ops.some(
 				(o) =>
