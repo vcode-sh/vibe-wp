@@ -30,8 +30,9 @@ describe("buildVibeArgv", () => {
 			"restore",
 			"smoke",
 			"up",
-			"wpList",
-			"wpUpdate",
+			"wpCoreUpdate",
+			"wpPluginUpdateAll",
+			"wpPluginUpdates",
 		]);
 	});
 });
@@ -56,6 +57,11 @@ describe("buildVibeArgv operations", () => {
 	});
 	it("rejects args for an op that does not take them", () => {
 		expect(() => buildVibeArgv("/opt/acme", "prod", "up", ["x"])).toThrow();
+	});
+	it("rejects flag-like args (no smuggled flags)", () => {
+		expect(() =>
+			buildVibeArgv("/opt/acme", "prod", "restore", ["--config=/etc/x"])
+		).toThrow();
 	});
 });
 

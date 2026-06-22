@@ -29,8 +29,15 @@ export const VIBE_OPS = {
 	refresh: { argv: ["refresh-from-prod"], stream: true, yes: true },
 	promote: { argv: ["promote-files-to-prod"], stream: true, yes: true },
 	harden: { argv: ["harden"], stream: true },
-	wpUpdate: { argv: ["wp"], stream: true, takesArg: true },
-	wpList: { argv: ["wp"], stream: false, takesArg: true },
+	wpCoreUpdate: { argv: ["wp", "core", "update"], stream: true },
+	wpPluginUpdateAll: {
+		argv: ["wp", "plugin", "update", "--all"],
+		stream: true,
+	},
+	wpPluginUpdates: {
+		argv: ["wp", "plugin", "list", "--update=available", "--format=json"],
+		stream: false,
+	},
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;
@@ -55,6 +62,11 @@ export function buildVibeArgv(
 	}
 	if (extraArgs.length > 0 && !spec.takesArg) {
 		throw new Error(`Op ${String(op)} does not accept arguments`);
+	}
+	for (const arg of extraArgs) {
+		if (arg.startsWith("-")) {
+			throw new Error(`Refusing flag-like argument for ${String(op)}: ${arg}`);
+		}
 	}
 	return [
 		`${siteDir}/bin/vibe`,
