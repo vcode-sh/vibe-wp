@@ -20,10 +20,14 @@ export function initialLiveState(nowMs: number): LiveState {
 	};
 }
 
-export function liveReducer(
-	state: LiveState,
-	action: { event: StreamEvent; at: number }
-): LiveState {
+export type LiveAction =
+	| { reset: true; at: number }
+	| { event: StreamEvent; at: number };
+
+export function liveReducer(state: LiveState, action: LiveAction): LiveState {
+	if ("reset" in action) {
+		return initialLiveState(action.at);
+	}
 	const { event, at } = action;
 	const next: LiveState = { ...state, lastEventAt: at, status: event.status };
 	if (event.done) {

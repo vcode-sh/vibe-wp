@@ -27,6 +27,7 @@ function OverviewPage() {
 	const [runnerOpen, setRunnerOpen] = useState(false);
 	const [jobId, setJobId] = useState<string | null>(null);
 	const [runnerTitle, setRunnerTitle] = useState("");
+	const [runnerKind, setRunnerKind] = useState("backup");
 
 	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
@@ -35,6 +36,7 @@ function OverviewPage() {
 		try {
 			const result = await applyUpdates.mutateAsync({ siteId, what });
 			setRunnerTitle("Running updates…");
+			setRunnerKind("wpUpdate");
 			setJobId(result.jobId);
 			setRunnerOpen(true);
 		} catch {
@@ -46,6 +48,7 @@ function OverviewPage() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
 			setRunnerTitle("Backing up…");
+			setRunnerKind("backup");
 			setJobId(result.jobId);
 			setRunnerOpen(true);
 		} catch {
@@ -123,6 +126,7 @@ function OverviewPage() {
 
 			<OperationRunner
 				jobId={jobId}
+				kind={runnerKind}
 				onOpenChange={setRunnerOpen}
 				open={runnerOpen}
 				title={runnerTitle}

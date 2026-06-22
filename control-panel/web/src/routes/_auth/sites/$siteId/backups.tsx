@@ -35,6 +35,7 @@ function BackupsPage() {
 	const [runnerOpen, setRunnerOpen] = useState(false);
 	const [jobId, setJobId] = useState<string | null>(null);
 	const [runnerTitle, setRunnerTitle] = useState("Backing up…");
+	const [runnerKind, setRunnerKind] = useState("backup");
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
@@ -43,6 +44,7 @@ function BackupsPage() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
 			setRunnerTitle(`Backing up ${siteId}`);
+			setRunnerKind("backup");
 			setJobId(result.jobId);
 			setRunnerOpen(true);
 		} catch {
@@ -60,6 +62,7 @@ function BackupsPage() {
 				backupId: restoring.id,
 			});
 			setRunnerTitle(`Restoring ${siteId}`);
+			setRunnerKind("restore");
 			setJobId(result.jobId);
 			setRestoring(null);
 			setRunnerOpen(true);
@@ -164,6 +167,7 @@ function BackupsPage() {
 
 			<OperationRunner
 				jobId={jobId}
+				kind={runnerKind}
 				onOpenChange={setRunnerOpen}
 				open={runnerOpen}
 				title={runnerTitle}

@@ -23,6 +23,9 @@ export function useLiveStream(source: Source, active: boolean): LiveState {
 		if (!active) {
 			return;
 		}
+		// Reset state for a fresh (re)subscription so a reused, still-mounted
+		// runner doesn't show the previous operation's lines.
+		dispatch({ reset: true, at: Date.now() });
 		let on = true;
 		(async () => {
 			const iter = await sourceRef.current();
