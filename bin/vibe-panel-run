@@ -5,12 +5,23 @@
 # may `sudo` is this wrapper (see /etc/sudoers.d/vibe-wp-panel), so this script is
 # the single host-exec chokepoint and MUST validate every input before acting.
 #
-# SAFETY INVARIANTS (the controller validates these on the VPS):
+# SAFETY INVARIANTS (ENFORCED here at the root boundary — NOT assumptions about
+# the unprivileged caller. A compromised panel must not gain anything beyond the
+# narrow surface below, even though the panel-side already allowlists too):
 #   - This file is installed root:root 0755 and is NEVER writable by vibe-panel.
 #     If vibe-panel could rewrite it, the sudoers gate would be worthless.
 #   - It never eval/execs arbitrary caller input. Subcommands are fixed; site
 #     paths are validated against the PANEL_SITES_ROOTS allowlist; the env token
 #     is checked against a fixed set; installer args must be exactly --headless-json.
+#   - EXEC-TARGET OWNERSHIP (assert_root_owned): before running a site bin/vibe,
+#     both the site dir and the bin/vibe file (and its symlink target, if any)
+#     MUST be owned by root (uid 0) and NOT group/other-writable. Otherwise a
+#     panel that could write into /opt|/srv could plant a malicious bin/vibe and
+#     get root. We do NOT trust that the install tree is well-permissioned.
+#   - OP RE-VALIDATION (validate_op / validate_arg): the op and every argument are
+#     re-checked here against a FIXED allowlist mirroring exec.ts VIBE_OPS — we do
+#     NOT trust the caller's allowlist. `wp` is restricted to the exact panel
+#     subcommands (no eval/eval-file/db/etc). Flags + path-like args are bounded.
 #   - `siteinfo` prints ONLY non-secret fields. It NEVER prints DB/Redis
 #     passwords, WP salts, R2/monitor secrets, or any other env value.
 set -eu
@@ -78,6 +89,131 @@ validate_env() {
   case "$1" in
     local|stage|prod|external) : ;;
     *) die "invalid env: $1" ;;
+  esac
+}
+
+# Require that a filesystem path is owned by root (uid 0) and not group/other-
+# writable. Deployed wrapper runs on Linux, so GNU `stat -c '%u'` and
+# `find -perm /022` are available. Either check failing is fatal: an attacker
+# who can write the exec target (or a dir letting them replace it) could get root.
+assert_root_owned() {
+  target="$1"
+  what="$2"
+  owner="$(stat -c '%u' -- "$target" 2>/dev/null || echo "")"
+  [ "$owner" = "0" ] || die "$what is not root-owned (refusing to exec as root)"
+  # -perm /022 matches if group-write OR other-write is set; any match -> reject.
+  if [ -n "$(find "$target" -prune -perm /022 2>/dev/null)" ]; then
+    die "$what is group/other-writable (refusing to exec as root)"
+  fi
+}
+
+# Assert the site's bin/vibe is a safe, root-owned exec target. Guards against a
+# panel that can write into /opt|/srv planting a malicious entrypoint. Resolves a
+# symlinked bin/vibe and re-confirms the real target is root-owned and under the
+# allowed roots too.
+assert_safe_entrypoint() {
+  dir="$1"                       # already-canonical site dir (SITE_DIR_REAL)
+  entry="$dir/bin/vibe"
+  [ -e "$entry" ] || die "site has no bin/vibe entrypoint"
+  # The site dir itself must be root-owned + not group/other-writable, else the
+  # bin/ subtree (or bin/vibe) could be swapped out underneath us.
+  assert_root_owned "$dir" "site dir"
+  assert_root_owned "$dir/bin" "site bin dir"
+  assert_root_owned "$entry" "site bin/vibe"
+  # If bin/vibe is a symlink, resolve it and re-validate the real file: it must
+  # also be root-owned, not group/other-writable, and live under the roots.
+  if [ -L "$entry" ]; then
+    real_entry_dir="$(canonical_dir "$(dirname -- "$entry")")"
+    target_name="$(readlink -- "$entry")"
+    case "$target_name" in
+      /*) resolved="$target_name" ;;
+      *)  resolved="$real_entry_dir/$target_name" ;;
+    esac
+    resolved_dir="$(canonical_dir "$(dirname -- "$resolved")")"
+    [ -n "$resolved_dir" ] || die "bin/vibe symlink target is missing"
+    real_target="$resolved_dir/$(basename -- "$resolved")"
+    [ -f "$real_target" ] || die "bin/vibe symlink target is not a regular file"
+    under_allowed_root "$real_target" \
+      || die "bin/vibe symlink target is outside the allowed roots"
+    assert_root_owned "$resolved_dir" "bin/vibe symlink target dir"
+    assert_root_owned "$real_target" "bin/vibe symlink target"
+  fi
+  [ -x "$entry" ] || die "site bin/vibe is not executable"
+}
+
+# --- Op + argument allowlist. Re-validated HERE at the root boundary so a
+# compromised panel cannot reach the full bin/vibe surface (restore, harden,
+# wp eval-file, db, …) by passing an op the panel-side would have rejected.
+# This set mirrors the first argv token of EVERY exec.ts VIBE_OPS entry
+# (spec.argv[0]); keep it in sync with control-panel exec.ts VIBE_OPS.
+#   smoke doctor-runtime monitor perf-report security-status compose env
+#   backups backup backup-config-apply backup-test backup-verify
+#   backup-schedule-apply monitor-schedule-apply schedule-status site-config-apply
+#   notify-config-apply notify-test logs-recent logs up down restart cache-flush
+#   restore refresh-from-prod promote-files-to-prod harden wp
+OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-schedule-apply monitor-schedule-apply schedule-status site-config-apply notify-config-apply notify-test logs-recent logs up down restart cache-flush restore refresh-from-prod promote-files-to-prod harden wp"
+
+# Free-form (caller-supplied) args reach only a few ops: restore/backup-verify
+# take a backup path; the schedule/notify/site/backup-config-apply ops take a
+# single keyword token; the rest take fixed in-image argv we allowlist below.
+# Anything beginning with '-' is allowed only if it is a known panel flag — this
+# is exactly the set of flags exec.ts VIBE_OPS bake into their argv (plus --yes):
+#   monitor --json --no-notify | perf-report --json | backup --local-only | *--yes
+FLAG_ALLOWLIST="--local-only --yes --json --no-notify"
+
+validate_op() {
+  op="$1"
+  for allowed in $OP_ALLOWLIST; do
+    [ "$op" = "$allowed" ] && return 0
+  done
+  die "op not allowed: $op"
+}
+
+# Validate a single non-op argument. Flags must be in the allowlist; non-flag
+# args must not contain shell metacharacters, '..', or whitespace. We do NOT
+# reject a leading '/' (restore/backup-verify take absolute backup paths), but
+# such paths still go through the metachar + '..' guard.
+validate_arg() {
+  arg="$1"
+  case "$arg" in
+    -*)
+      for allowed in $FLAG_ALLOWLIST; do
+        [ "$arg" = "$allowed" ] && return 0
+      done
+      die "flag not allowed: $arg"
+      ;;
+  esac
+  case "$arg" in
+    *..*) die "argument contains '..': $arg" ;;
+    *[\;\|\&\$\`\<\>\(\)\{\}\*\?\!]*) die "argument contains shell metacharacters: $arg" ;;
+    *' '*) die "argument contains whitespace: $arg" ;;
+  esac
+}
+
+# `wp` is special: the panel only ever runs three exact forms. Reject everything
+# else (especially eval / eval-file / db / shell / config). $@ here is the args
+# AFTER the `wp` op token.
+validate_wp_args() {
+  # Accepted: `wp core update`
+  #           `wp plugin update --all`
+  #           `wp plugin list --update=available --format=json`
+  joined="$*"
+  case "$joined" in
+    "core update") return 0 ;;
+    "plugin update --all") return 0 ;;
+    "plugin list --update=available --format=json") return 0 ;;
+    *) die "wp subcommand not allowed: wp $joined" ;;
+  esac
+}
+
+# `compose` is special too: the panel's only compose op is the read-only
+# `compose ps --format json` (psJson). Reject any other compose surface
+# (up/down/exec/run/cp/… as a compose op would bypass the dedicated ops).
+validate_compose_args() {
+  joined="$*"
+  case "$joined" in
+    "ps --format json") return 0 ;;
+    *) die "compose subcommand not allowed: compose $joined" ;;
   esac
 }
 
@@ -180,20 +316,36 @@ shift || true
 case "$sub" in
   vibe)
     # vibe <siteDir> <env> <op> [args...]
-    [ $# -ge 2 ] || die "usage: vibe <siteDir> <env> <op> [args...]"
+    [ $# -ge 3 ] || die "usage: vibe <siteDir> <env> <op> [args...]"
     site_dir="$1"; shift
     env_tok="$1"; shift
-    validate_site_dir "$site_dir"
-    validate_env "$env_tok"
-    # Reconstruct and exec the site's own entrypoint. The panel already
-    # allowlists the op via buildVibeArgv; we additionally guarded the path+env.
-    exec "$SITE_DIR_REAL/bin/vibe" "$env_tok" "$@"
+    op="$1"; shift
+    validate_site_dir "$site_dir"          # absolute, under roots, no '..'
+    validate_env "$env_tok"                # in {local,stage,prod,external}
+    assert_safe_entrypoint "$SITE_DIR_REAL" # root-owned, not world-writable
+    validate_op "$op"                      # op in the fixed allowlist
+    # Argument re-validation at the root boundary (do NOT trust the caller).
+    case "$op" in
+      wp)      validate_wp_args "$@" ;;     # only the 3 exact panel wp forms
+      compose) validate_compose_args "$@" ;; # only `compose ps --format json`
+      *)
+        for a in "$@"; do
+          validate_arg "$a"
+        done
+        ;;
+    esac
+    # Reconstruct and exec the site's own (verified) entrypoint.
+    exec "$SITE_DIR_REAL/bin/vibe" "$env_tok" "$op" "$@"
     ;;
   installer)
     # installer --headless-json  (NOTHING else is permitted)
     [ $# -eq 1 ] || die "installer takes exactly one arg"
     [ "$1" = "--headless-json" ] || die "installer arg must be --headless-json"
     [ -x "$PANEL_INSTALLER_BIN" ] || die "installer binary not executable"
+    # Same root-exec hygiene as the site entrypoint: refuse to run a non-root or
+    # group/other-writable installer binary (else a panel that could rewrite it
+    # would get root). The binary is installed root-owned by bin/panel.
+    assert_root_owned "$PANEL_INSTALLER_BIN" "installer binary"
     exec "$PANEL_INSTALLER_BIN" --headless-json
     ;;
   siteinfo)

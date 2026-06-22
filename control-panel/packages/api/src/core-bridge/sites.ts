@@ -1,6 +1,7 @@
 import { env } from "@control-panel/env/server";
 
 import { hostFromUrl, parseEnvFile } from "./parse";
+import { redact } from "./redact";
 
 const STRIP_BIN_VIBE = /\/bin\/vibe$/;
 const COMPOSE_PROJECT_PREFIX = /^vibe-wp-/;
@@ -114,8 +115,19 @@ async function detectSitesViaRunner(runner: string): Promise<DetectedSite[]> {
 		stdout: "pipe",
 		stderr: "pipe",
 	});
-	const out = await new Response(proc.stdout).text();
-	await proc.exited;
+	const [out, err, code] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	// A non-zero exit means sudo/the wrapper itself failed (e.g. the sudoers rule
+	// is missing or the wrapper is gone). Surfacing an empty list here would make
+	// the panel wrongly report "no sites", so THROW with the captured stderr.
+	if (code !== 0) {
+		throw new Error(
+			`privileged site listing failed (exit ${code}): ${redact(err).trim()}`
+		);
+	}
 	const sites: DetectedSite[] = [];
 	for (const raw of out.split("\n")) {
 		const site = parseSiteinfoRow(raw);

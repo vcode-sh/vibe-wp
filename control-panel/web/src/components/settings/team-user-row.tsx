@@ -197,7 +197,7 @@ export function TeamUserRow({
 								title="Ban user"
 								variant="ghost"
 							>
-								<Ban className="size-4 text-amber-500" />
+								<Ban className="size-4 text-warning" />
 							</Button>
 						)}
 						<Button

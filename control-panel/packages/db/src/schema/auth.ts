@@ -94,12 +94,18 @@ export const verification = sqliteTable(
 
 /**
  * Rate-limit counters for better-auth's DB-backed rate limiter.
- * Fields mirror BaseRateLimit: key (string), count (integer), lastRequest (ms epoch).
- * The drizzle adapter looks this up as schema["rateLimit"].
+ *
+ * Mirrors better-auth's generated `rateLimit` model (verified against
+ * @better-auth/core get-tables.mjs in node_modules): the drizzle adapter
+ * reads/writes columns by the model's field names, so the property keys must
+ * match exactly — `id` (PK, supplied by better-auth), `key` (unique), `count`,
+ * and `lastRequest` (ms epoch). The drizzle adapter looks this table up as
+ * schema["rateLimit"].
  */
 export const rateLimit = sqliteTable("rateLimit", {
-	key: text("key").primaryKey(),
-	count: integer("count").notNull().default(0),
+	id: text("id").primaryKey(),
+	key: text("key").notNull().unique(),
+	count: integer("count").notNull(),
 	lastRequest: integer("last_request").notNull(),
 });
 

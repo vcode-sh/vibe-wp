@@ -165,6 +165,12 @@ deploy_panel() {
   # executable so the unprivileged vibe-panel service can read+run them (but not
   # rewrite them — that is what keeps the sudoers gate meaningful).
   $SUDO chmod -R a+rX "$PANEL_DIR/app" 2>/dev/null || true
+  # CRITICAL: the recursive a+rX above re-widens server/.env to world-readable,
+  # which would expose BETTER_AUTH_SECRET + DATABASE_URL on the host. Re-tighten
+  # it back to 0600 IMMEDIATELY (it is owned by vibe-panel, so the service still
+  # reads it). This MUST be the last thing that touches server/.env's mode — no
+  # later recursive chmod may re-widen it.
+  $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
   # Ensure the Bun runtime itself is executable by vibe-panel.
   $SUDO chmod a+rx "$BUN" 2>/dev/null || true
 
