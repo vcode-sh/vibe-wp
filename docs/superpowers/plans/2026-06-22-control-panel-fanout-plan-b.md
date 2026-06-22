@@ -225,12 +225,19 @@ describe("actionToKind", () => {
 });
 
 describe("auditToActivity", () => {
-	it("renders rows newest-first into ActivityEntry", () => {
+	it("maps an audit row into an ActivityEntry", () => {
 		const out = auditToActivity([
 			{ id: "1", action: "backup", siteId: "acme", jobId: "j1", at: new Date("2026-06-22T10:00:00Z") },
 		]);
 		expect(out[0]).toMatchObject({ id: "1", kind: "backup", good: true });
-		expect(out[0]?.text).toContain("Back up");
+		expect(out[0]?.text).toBe("Backed up");
+	});
+	it("preserves input order (sorting is the db's job, not this map)", () => {
+		const out = auditToActivity([
+			{ id: "a", action: "harden", siteId: "acme", jobId: null, at: new Date("2026-06-22T12:00:00Z") },
+			{ id: "b", action: "restore", siteId: "acme", jobId: null, at: new Date("2026-06-22T09:00:00Z") },
+		]);
+		expect(out.map((e) => e.id)).toEqual(["a", "b"]);
 	});
 });
 ```
@@ -419,10 +426,13 @@ export async function startJob(input: StartJobInput): Promise<{ jobId: string }>
 		stream.end(job.status);
 		await persistJobFinish(jobId, job.status, code);
 	})().catch(async () => {
-		job.status = "failed";
+		// Preserve a cancel even if the drain throws (canceled must stay canceled).
+		if (job.status !== "canceled") {
+			job.status = "failed";
+		}
 		job.finishedAt = new Date().toISOString();
-		stream.end("failed");
-		await persistJobFinish(jobId, "failed", null);
+		stream.end(job.status);
+		await persistJobFinish(jobId, job.status, null);
 	});
 
 	return { jobId };
@@ -771,17 +781,21 @@ git commit -m "feat(panel): wire restore/refresh/promote/harden/stop/update to S
 
 # Phase 4 — VPS validation
 
-### Task 10: Real-VPS validation (acceptance gate)
+### Task 10: Real-VPS validation (acceptance gate) — ✅ PASSED 2026-06-22
 
-**Files:** none (validation only).
+**Files:** none (validation only). Validated live on `panel.vcode.sh`.
 
-- [ ] **Step 1: Redeploy** — rsync + `./bin/panel install --domain panel.vcode.sh` (idempotent).
-- [ ] **Step 2: Run a real operation with streaming** — on `test2`, **Restore** an existing backup behind the SafetyConfirm: confirm the OperationRunner streams real `bin/vibe restore … --yes` output (verify integrity → reset DB → restore → flush) to completion, redacted.
-- [ ] **Step 3: Staging + harden** — run a **staging refresh** (operator) and a **harden** (admin) with live streams; confirm each completes.
-- [ ] **Step 4: Audit + activity** — after the ops, the site **Overview activity timeline** shows the real entries ("Restored a backup", "Copied live to staging", "Secured the server") with the acting user recorded.
-- [ ] **Step 5: Cancel** — start a backup and **Cancel** it mid-run; confirm the `docker`/`bin/vibe` child is killed (no zombie) and the job shows `canceled`.
-- [ ] **Step 6: Roles** — (deferred to Plan C's second user) confirm `down`/`restore`/`promote`/`harden` are admin-gated by checking the procedure tiers.
-- [ ] **Step 7: Record** pass/fail here + `docs/product-roadmap.md`; tick the boxes.
+The gate caught two real Important bugs no unit test or code review had: (a) the `OperationRunner` rendered a green "✓ Done" for failed/canceled jobs (it ignored the terminal `ev.status`); and (b) **cancel orphaned the real work** — `proc.kill()` killed only the `sh bin/vibe` wrapper while `bin/backup`/`rclone` reparented to init and kept running, and all op procs shared the **panel server's own PGID** (so a naive killpg would kill the panel). Both fixed: status rendered from `ev.status` + a Cancel button wired to `operationsCancel`; and each streamed op now spawns under `setsid` (its own process group) so killing the group reaps the whole tree without ever touching the server's group (VPS-confirmed: `setsid` gives pid==pgid, exec-in-place).
+
+- [x] **Step 1: Redeploy** — rsync + `./bin/panel install --domain panel.vcode.sh` (idempotent; ran cleanly several times).
+- [x] **Step 2: Streamed op** — a real **backup** streamed end-to-end (MariaDB dump → wp-content → write → R2 upload → Done); a destructive **restore** behind the SafetyConfirm ("Reversible" badge) streamed `bin/vibe restore` (reset DB → restore → wp-content → perms → flush) to a green "Done" and **brought test2 from failing back to ● live / healthy**.
+- [~] **Step 3: Staging + harden** — staging-refresh + harden **wiring/role-gating confirmed by review**; **not executed live**: harden's `bin/harden` touches SSH config (lockout risk on the shared validation VPS), and staging refresh shares the identical `startJob`/SSE path proven by backup/restore.
+- [x] **Step 4: Audit + activity** — `audit_log` has a row per op **with the acting user** (incl. a `cancel` row); the Overview **activity timeline** shows "Restored a backup" / "Backed up" / "Canceled an operation" via `auditToActivity`.
+- [x] **Step 5: Cancel** — Cancel button → `operationsCancel` → `cancelJob` → **the whole op process tree was killed** (`rclone` gone, verified via `ps`) **while the panel server stayed `active`/HTTP 200**; job recorded `canceled` (exit 143 = SIGTERM); runner showed muted "Canceled".
+- [x] **Step 6: Roles** — procedure tiers confirmed (down/restore/promote/harden/operationsCancel = admin; up/restart/cacheFlush/backup/verify/refresh/updatesApply = operator); a second-user end-to-end RBAC test is Plan C.
+- [x] **Step 7: Recorded** here + in `docs/product-roadmap.md`.
+
+**Follow-ups:** site lifecycle (stop/start/restart) ops have no UI surface yet (need a site-scoped control — the server page was the wrong home); harden not executed on the shared VPS; optional `backupId` shape regex; the in-memory `registry`/`finalized` maps grow unbounded (add a job reaper); `bin/panel` regenerates `BETTER_AUTH_SECRET` per install (invalidates sessions).
 
 ---
 

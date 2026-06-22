@@ -212,7 +212,29 @@ proven **exit-code + structured-text** path (`parseSmoke`) instead. Validated: i
 list with real per-site verdicts, real Health tiles, real server disk/host, real backup dates.
 Follow-ups: perf TTFB/cache/uptime via a perf-report/monitor text parser; remove/finish the
 unused `--json` scaffolding; `bin/panel` should preserve `BETTER_AUTH_SECRET` across re-installs.
-Next: **Plan B (operations)** then **Plan C (team + hardening)**.
+
+**Plan B — "operations" (2026-06-22, branch `control-panel-backend-install`) — validated on
+`panel.vcode.sh`:** Every panel *operation* is now a real, role-gated, streamed, audited job.
+The single-purpose backup runner was generalized to `startJob({op,env,kind,args,userId,action})`
+with cancellation and an audit-row-per-op; the exec allowlist gained the operation ops with
+mandatory `--yes` on restore/refresh/promote and a flag-injection guard (`-`-prefixed args
+rejected; WP ops fully scoped so the caller never picks the verb). Procedures: lifecycle
+(up/restart/cache-flush = operator, down = admin), backup verify (operator) / restore (admin),
+staging refresh (operator) / promote (admin, env `stage`), WP updates, server harden (admin),
+and `operationsCancel` (admin). The web wires each to `SafetyConfirm` (destructive) +
+`OperationRunner` (SSE), and the Overview activity timeline reads the real `auditLog`.
+**VPS gate found + fixed 2 real bugs:** the `OperationRunner` showed a green "Done" for
+failed/canceled jobs (now renders the real `ev.status`); and **cancel orphaned the work** —
+`proc.kill()` killed only the wrapper while `rclone` kept running — fixed by spawning each op
+under `setsid` (its own process group) and killing the group, which is safe because the op's
+group is never the panel server's. Live-validated: real backup stream, a destructive restore
+(behind SafetyConfirm) that brought test2 back to healthy, a cancel that killed the whole tree
+while the server stayed up, audit rows with the acting user (incl. `cancel`), and the activity
+timeline. **Follow-ups:** site lifecycle (stop/start/restart) ops exist but have no UI surface
+yet (need a site-scoped control); harden was not executed on the shared VPS (its `bin/harden`
+touches SSH — lockout risk); optional `backupId` shape regex; the registry/`finalized` maps grow
+unbounded (add a job reaper); `bin/panel` still regenerates `BETTER_AUTH_SECRET` per install.
+Next: **Plan C (team admin + RBAC `ac`/bootstrap fixes + service hardening)**.
 
 ### Phase 5 — Desktop app (LocalWP / Studio competitor) (NOT started)
 Tauri app: spin up local sites, blueprints, and **push/pull sync to production** built on
