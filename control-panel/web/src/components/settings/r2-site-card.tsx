@@ -39,7 +39,9 @@ export function R2SiteBackupCard({ siteId }: { siteId: string }) {
 			) : (
 				<Card>
 					<CardHeader>
-						<CardTitle className="text-sm">Off-site backups (R2)</CardTitle>
+						<CardTitle className="text-sm">
+							Off-site backups (R2) — this site
+						</CardTitle>
 					</CardHeader>
 					<CardContent>
 						<p className="text-muted-foreground text-sm">Site not found.</p>
@@ -160,6 +162,10 @@ function R2SiteFieldsForm({
 					type="number"
 					value={retention}
 				/>
+				<p className="text-muted-foreground text-xs">
+					Older off-site backups beyond this count are pruned. Leave blank to
+					keep all.
+				</p>
 			</div>
 			<Button
 				className="justify-self-start"
