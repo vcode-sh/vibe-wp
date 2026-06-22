@@ -21,7 +21,11 @@ export function createAuth() {
 	return betterAuth({
 		database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
 		trustedOrigins: [env.CORS_ORIGIN],
-		emailAndPassword: { enabled: true },
+		emailAndPassword: {
+			enabled: true,
+			minPasswordLength: 8,
+			maxPasswordLength: 128,
+		},
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,
 		user: {
@@ -61,7 +65,11 @@ export function createAuth() {
 		rateLimit: {
 			enabled: true,
 			storage: "database",
-			customRules: { "/sign-in/email": { window: 10, max: 5 } },
+			customRules: {
+				"/sign-in/email": { window: 10, max: 5 },
+				// Throttle current-password brute force on self-service change.
+				"/change-password": { window: 10, max: 5 },
+			},
 		},
 		advanced: {
 			defaultCookieAttributes: {
