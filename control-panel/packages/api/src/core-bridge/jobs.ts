@@ -96,10 +96,13 @@ export async function startJob(
 	await writeAudit(input.userId, input.action, input.siteId, jobId);
 
 	drainJob(job, stream, proc, lines, jobId).catch(async () => {
-		job.status = "failed";
+		// Preserve a cancel even if the drain throws (canceled must stay canceled).
+		if (job.status !== "canceled") {
+			job.status = "failed";
+		}
 		job.finishedAt = new Date().toISOString();
-		stream.end("failed");
-		await persistJobFinish(jobId, "failed", null);
+		stream.end(job.status);
+		await persistJobFinish(jobId, job.status, null);
 	});
 
 	return { jobId };
