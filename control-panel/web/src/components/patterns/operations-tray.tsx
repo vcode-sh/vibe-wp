@@ -57,7 +57,7 @@ function TrayCardStatus({
 }
 
 function TrayCard({ op }: { op: Operation }) {
-	const { expand, dismiss } = useOperations();
+	const { expand, dismiss, finish } = useOperations();
 	const live = useLiveStream(
 		() => client.operationsStream({ jobId: op.jobId }),
 		true
@@ -66,11 +66,12 @@ function TrayCard({ op }: { op: Operation }) {
 
 	useEffect(() => {
 		if (live.done) {
+			finish(op.jobId);
 			return;
 		}
 		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
-	}, [live.done]);
+	}, [live.done, op.jobId, finish]);
 
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5 shadow-md">

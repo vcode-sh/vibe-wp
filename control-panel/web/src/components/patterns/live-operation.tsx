@@ -73,6 +73,7 @@ export function LiveOperation({
 	kind,
 	jobId,
 	startedAt,
+	onDone,
 }: {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
@@ -80,6 +81,7 @@ export function LiveOperation({
 	kind: string;
 	jobId: string | null;
 	startedAt?: number;
+	onDone?: () => void;
 }) {
 	const [now, setNow] = useState(() => Date.now());
 	const [canceling, setCanceling] = useState(false);
@@ -101,6 +103,12 @@ export function LiveOperation({
 			setCanceling(false);
 		}
 	}, [open]);
+
+	useEffect(() => {
+		if (open && live.done && onDone) {
+			onDone();
+		}
+	}, [open, live.done, onDone]);
 
 	// Auto-scroll the raw-log pane as lines arrive; only follows when pinned.
 	const logRef = useAutoScroll<HTMLDivElement>(live.lines.length);

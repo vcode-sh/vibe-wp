@@ -2,13 +2,14 @@ import { LiveOperation } from "@/components/patterns/live-operation";
 import { useOperations } from "@/lib/operations/operations-provider";
 
 export function ActiveOperationDialog() {
-	const { ops, expandedId, minimize } = useOperations();
+	const { ops, expandedId, minimize, finish } = useOperations();
 	const expanded = ops.find((o) => o.jobId === expandedId);
 
 	return (
 		<LiveOperation
 			jobId={expanded?.jobId ?? null}
 			kind={expanded?.kind ?? "generic"}
+			onDone={expanded ? () => finish(expanded.jobId) : undefined}
 			onOpenChange={(open) => {
 				if (!open) {
 					minimize();

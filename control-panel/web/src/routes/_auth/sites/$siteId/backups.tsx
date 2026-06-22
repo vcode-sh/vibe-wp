@@ -32,7 +32,7 @@ function BackupsPage() {
 	const backups = useQuery(backupsQuery(siteId));
 	const now = new Date();
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
-	const { start } = useOperations();
+	const { start, isRunning } = useOperations();
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
@@ -44,6 +44,7 @@ function BackupsPage() {
 				jobId: result.jobId,
 				title: `Backing up ${siteId}`,
 				kind: "backup",
+				siteId,
 			});
 		} catch {
 			toast.error("Failed to start backup.");
@@ -63,6 +64,7 @@ function BackupsPage() {
 				jobId: result.jobId,
 				title: `Restoring ${siteId}`,
 				kind: "restore",
+				siteId,
 			});
 			setRestoring(null);
 		} catch {
@@ -76,7 +78,7 @@ function BackupsPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button disabled={runBackup.isPending} onClick={handleBackupNow}>
+						<Button disabled={runBackup.isPending || isRunning(siteId, "backup")} onClick={handleBackupNow}>
 							Back up now
 						</Button>
 					}
@@ -129,6 +131,7 @@ function BackupsPage() {
 											</TableCell>
 											<TableCell className="text-right">
 												<Button
+													disabled={isRunning(siteId, "restore")}
 													onClick={() => setRestoring(b)}
 													size="sm"
 													variant="ghost"

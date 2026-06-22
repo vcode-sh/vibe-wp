@@ -46,6 +46,19 @@ const finalized = new Set<string>();
 
 const registry = new Map<string, JobEntry>();
 
+export function hasRunningJob(siteId: string, kind: string): boolean {
+	for (const entry of registry.values()) {
+		if (
+			entry.job.status === "running" &&
+			entry.job.siteId === siteId &&
+			entry.job.kind === kind
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export interface StartJobInput {
 	action: string;
 	args?: string[];
@@ -118,6 +131,9 @@ export async function startJob(
 	const site = await d.findSite(input.siteId);
 	if (!site) {
 		throw new Error("Unknown site");
+	}
+	if (hasRunningJob(input.siteId, input.kind)) {
+		throw new Error("An operation of this type is already running for this site.");
 	}
 	const jobId = crypto.randomUUID();
 	const stream = new LineStream();

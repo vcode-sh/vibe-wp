@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_auth/server")({
 
 function ServerPage() {
 	const server = useQuery(serverInfoQuery());
-	const { start } = useOperations();
+	const { start, isRunning } = useOperations();
 
 	const harden = useMutation(orpc.serverHarden.mutationOptions());
 
@@ -27,6 +27,7 @@ function ServerPage() {
 				jobId: result.jobId,
 				title: "Securing the server…",
 				kind: "harden",
+				siteId: "server",
 			});
 		} catch {
 			toast.error("Failed to start server hardening.");
@@ -39,7 +40,7 @@ function ServerPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button disabled={harden.isPending} onClick={handleHarden}>
+						<Button disabled={harden.isPending || isRunning("server", "harden")} onClick={handleHarden}>
 							Secure the server
 						</Button>
 					}

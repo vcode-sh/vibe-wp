@@ -23,7 +23,7 @@ function OverviewPage() {
 	const { siteId } = Route.useParams();
 	const overview = useQuery(siteOverviewQuery(siteId));
 	const updatesAvailable = useQuery(updatesAvailableQuery(siteId));
-	const { start } = useOperations();
+	const { start, isRunning } = useOperations();
 
 	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
@@ -35,6 +35,7 @@ function OverviewPage() {
 				jobId: result.jobId,
 				title: "Running updates…",
 				kind: "wpUpdate",
+				siteId,
 			});
 		} catch {
 			toast.error("Failed to start updates.");
@@ -44,7 +45,7 @@ function OverviewPage() {
 	async function handleBackup() {
 		try {
 			const result = await runBackup.mutateAsync({ siteId });
-			start({ jobId: result.jobId, title: "Backing up…", kind: "backup" });
+			start({ jobId: result.jobId, title: "Backing up…", kind: "backup", siteId });
 		} catch {
 			toast.error("Failed to start backup.");
 		}
@@ -87,7 +88,7 @@ function OverviewPage() {
 										available
 									</span>
 									<Button
-										disabled={applyUpdates.isPending}
+										disabled={applyUpdates.isPending || isRunning(siteId, "wpUpdate")}
 										onClick={() => handleApplyUpdates("plugins")}
 										size="sm"
 										variant="outline"

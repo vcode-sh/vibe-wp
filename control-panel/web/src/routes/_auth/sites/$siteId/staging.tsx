@@ -70,7 +70,7 @@ function StagingPage() {
 	const { siteId } = Route.useParams();
 	const staging = useQuery(stagingQuery(siteId));
 	const [publishing, setPublishing] = useState(false);
-	const { start } = useOperations();
+	const { start, isRunning } = useOperations();
 
 	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
 	const promote = useMutation(orpc.stagingPromote.mutationOptions());
@@ -82,6 +82,7 @@ function StagingPage() {
 				jobId: result.jobId,
 				title: "Copying live to staging…",
 				kind: "refresh",
+				siteId,
 			});
 		} catch {
 			toast.error("Failed to start staging refresh.");
@@ -95,6 +96,7 @@ function StagingPage() {
 				jobId: result.jobId,
 				title: "Publishing staging to live…",
 				kind: "promote",
+				siteId,
 			});
 			setPublishing(false);
 		} catch {
@@ -123,7 +125,7 @@ function StagingPage() {
 							noindex={staging.data.present ? staging.data.noindex : false}
 							onPublish={() => setPublishing(true)}
 							onRefresh={handleRefresh}
-							refreshPending={refresh.isPending}
+							refreshPending={refresh.isPending || isRunning(siteId, "refresh")}
 							url={staging.data.present ? staging.data.url : null}
 						/>
 					) : null}
