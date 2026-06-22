@@ -10,6 +10,13 @@ umask 077
 # its SQLite store) and runs this command. Only the managed keys below are
 # touched; every other line is preserved verbatim. No secrets are involved or
 # printed (these are boolean debug flags).
+#
+# The caller MUST declare which managed keys it is changing this call via
+# VIBE_SITE_CONFIG_KEYS (space-separated). We only upsert keys that are BOTH in
+# the fixed managed allowlist AND named in VIBE_SITE_CONFIG_KEYS — so a managed
+# key that merely happens to be present in the inherited process environment
+# (e.g. WP_DEBUG_LOG exported in the panel's own env) is never rewritten unless
+# the caller explicitly asked to change it this call.
 
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
@@ -53,13 +60,30 @@ env_upsert() {
   cat "${line}" > "${work}"
 }
 
-# Only rewrite keys the panel actually supplied, so an unrelated save never
-# blanks a value the user did not touch. Each managed key maps onto a
-# vibe_wp_env_bool() lookup in the WordPress image entrypoint.
-for key in \
-  WP_DEBUG_LOG \
-  WP_DEBUG_DISPLAY \
-  SCRIPT_DEBUG; do
+# The fixed allowlist of keys this command is permitted to write. Each maps onto
+# a vibe_wp_env_bool() lookup in the WordPress image entrypoint.
+managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG"
+
+# Membership test against a space-separated list (POSIX-safe, no arrays).
+in_list() {
+  needle="$1"
+  list="$2"
+  for item in ${list}; do
+    [ "${item}" = "${needle}" ] && return 0
+  done
+  return 1
+}
+
+# Only rewrite keys that are BOTH managed AND explicitly named by the caller in
+# VIBE_SITE_CONFIG_KEYS. A managed key that is only present via the inherited
+# process environment (but not named) is left untouched. An unsupplied value is
+# skipped too, so a partial save never blanks a flag the user did not change.
+changed_keys="${VIBE_SITE_CONFIG_KEYS:-}"
+for key in ${changed_keys}; do
+  in_list "${key}" "${managed_keys}" || {
+    echo "Refusing to write unmanaged key: ${key}" >&2
+    exit 2
+  }
   eval "val=\${${key}:-__VIBE_UNSET__}"
   [ "${val}" = "__VIBE_UNSET__" ] && continue
   env_upsert "${key}" "${val}"

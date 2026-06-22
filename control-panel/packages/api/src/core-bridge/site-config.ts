@@ -7,6 +7,8 @@
  *
  * Pure parsing/mapping lives in site-config-pure.ts for DB/IO-free testing.
  */
+import { ORPCError } from "@orpc/server";
+
 import { runVibe } from "./exec";
 import type {
 	BackupCadence,
@@ -48,15 +50,24 @@ function ensureOk(
 	}
 }
 
+/**
+ * Resolve a site for a mutating operation, or throw NOT_FOUND so the admin sees
+ * a real error instead of a silent success on an unknown siteId.
+ */
+async function requireSite(siteId: string) {
+	const site = await findSite(siteId);
+	if (!site) {
+		throw new ORPCError("NOT_FOUND");
+	}
+	return site;
+}
+
 /** Install/remove the scheduled-backup timer for the site. */
 export async function applyBackupSchedule(
 	siteId: string,
 	cadence: BackupCadence
 ): Promise<void> {
-	const site = await findSite(siteId);
-	if (!site) {
-		return;
-	}
+	const site = await requireSite(siteId);
 	const result = await runVibe(site.installDir, "prod", "backupScheduleApply", {
 		args: [cadence],
 		timeoutMs: 30_000,
@@ -69,10 +80,7 @@ export async function applyMonitorState(
 	siteId: string,
 	state: MonitorState
 ): Promise<void> {
-	const site = await findSite(siteId);
-	if (!site) {
-		return;
-	}
+	const site = await requireSite(siteId);
 	const result = await runVibe(
 		site.installDir,
 		"prod",
@@ -98,10 +106,7 @@ export async function applyDebugFlags(
 	if (Object.keys(env).length === 0) {
 		return { restartRequired: false };
 	}
-	const site = await findSite(siteId);
-	if (!site) {
-		return { restartRequired: false };
-	}
+	const site = await requireSite(siteId);
 	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
 		env,
 	});

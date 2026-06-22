@@ -32,8 +32,10 @@ esac
 # (vibe-wp-<slug>-prod) — the same value the installer named the unit after.
 project="$(vibe_env_value COMPOSE_PROJECT_NAME)"
 slug="${project#vibe-wp-}"
-slug="${slug%-prod}"
-slug="${slug%-stage}"
+# Strip only the suffix matching the current env, so a slug that itself ends in
+# -prod/-stage is not over-stripped (which would diverge from the installer
+# unit name vibe-wp-<slug>-<env>).
+slug="${slug%-${VIBE_ENV}}"
 if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
   slug="$(basename -- "${VIBE_ROOT}")"
 fi
@@ -55,7 +57,9 @@ fi
 
 if [ "${state}" = "off" ]; then
   ${SUDO} systemctl disable --now "${unit}.timer" >/dev/null 2>&1 || true
-  ${SUDO} rm -f "${timer_path}"
+  # The installer writes BOTH <unit>.service and <unit>.timer, so a clean
+  # uninstall must remove both — otherwise the orphaned .service lingers.
+  ${SUDO} rm -f "${timer_path}" "${service_path}"
   ${SUDO} systemctl daemon-reload
   echo "Health monitor disabled for ${slug} (${VIBE_ENV})."
   exit 0

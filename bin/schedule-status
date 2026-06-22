@@ -19,8 +19,10 @@ VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 project="$(vibe_env_value COMPOSE_PROJECT_NAME)"
 slug="${project#vibe-wp-}"
-slug="${slug%-prod}"
-slug="${slug%-stage}"
+# Strip only the suffix matching the current env, so a slug that itself ends in
+# -prod/-stage is not over-stripped (which would diverge from the installer
+# unit name vibe-wp-<slug>-<env>).
+slug="${slug%-${VIBE_ENV}}"
 if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
   slug="$(basename -- "${VIBE_ROOT}")"
 fi
@@ -33,13 +35,22 @@ monitor="off"
 
 if command -v systemctl >/dev/null 2>&1; then
   if systemctl is-enabled "${backup_unit}" >/dev/null 2>&1; then
-    # Recover the cadence from the timer's OnCalendar expression.
-    oncalendar="$(systemctl show -p TimersCalendar --value "${backup_unit}" 2>/dev/null || true)"
-    case "${oncalendar}" in
-      *Sun*) backup_schedule="weekly" ;;
+    # Recover the cadence from the timer's OnCalendar expression. The --value of
+    # TimersCalendar is a blob like:
+    #   { OnCalendar=Sun *-*-* 03:30:00 ; next_elapse=Sun 2026-06-28 03:30:00 ... }
+    # next_elapse also carries a weekday, so we MUST isolate the OnCalendar value
+    # before matching — otherwise a daily timer whose next run lands on a Sunday
+    # would be misreported as weekly. Match anchored at the start of OnCalendar.
+    raw="$(systemctl show -p TimersCalendar --value "${backup_unit}" 2>/dev/null || true)"
+    oncal="${raw#*OnCalendar=}"
+    oncal="${oncal%% ;*}"
+    case "${oncal}" in
+      Sun*) backup_schedule="weekly" ;;
       *03:30:00*) backup_schedule="daily" ;;
       "") backup_schedule="off" ;;
-      *) backup_schedule="daily" ;;
+      # An enabled timer with an unrecognized OnCalendar reports "off" rather
+      # than guessing "daily" — never claim an active daily backup we can't read.
+      *) backup_schedule="off" ;;
     esac
   fi
   if systemctl is-enabled "${monitor_unit}" >/dev/null 2>&1; then

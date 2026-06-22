@@ -59,14 +59,21 @@ describe("parseScheduleStatus", () => {
 });
 
 describe("debugPatchToEnv", () => {
-	it("maps only the supplied flags to 1/0 env values", () => {
-		expect(debugPatchToEnv({ debugLog: true })).toEqual({ WP_DEBUG_LOG: "1" });
+	it("maps only supplied flags and names them in VIBE_SITE_CONFIG_KEYS", () => {
+		expect(debugPatchToEnv({ debugLog: true })).toEqual({
+			WP_DEBUG_LOG: "1",
+			VIBE_SITE_CONFIG_KEYS: "WP_DEBUG_LOG",
+		});
 		expect(debugPatchToEnv({ debugDisplay: false, scriptDebug: true })).toEqual(
-			{ WP_DEBUG_DISPLAY: "0", SCRIPT_DEBUG: "1" }
+			{
+				WP_DEBUG_DISPLAY: "0",
+				SCRIPT_DEBUG: "1",
+				VIBE_SITE_CONFIG_KEYS: "WP_DEBUG_DISPLAY SCRIPT_DEBUG",
+			}
 		);
 	});
 
-	it("returns an empty map when nothing is supplied", () => {
+	it("returns an empty map (no key list) when nothing is supplied", () => {
 		expect(debugPatchToEnv({})).toEqual({});
 	});
 });

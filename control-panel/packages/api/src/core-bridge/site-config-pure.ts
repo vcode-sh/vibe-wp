@@ -68,21 +68,34 @@ export function parseScheduleStatus(stdout: string): SiteSettings {
 	return settings;
 }
 
-/** Map a WP-debug patch to the env vars site-config-apply consumes. */
+/**
+ * Map a WP-debug patch to the env vars site-config-apply consumes. Only the
+ * keys the caller actually changed are emitted, and VIBE_SITE_CONFIG_KEYS names
+ * exactly those keys so the writer rewrites ONLY them — never a managed key that
+ * merely happens to be inherited in the process environment. Returns an empty
+ * map (and no VIBE_SITE_CONFIG_KEYS) when nothing changed.
+ */
 export function debugPatchToEnv(patch: {
 	debugLog?: boolean;
 	debugDisplay?: boolean;
 	scriptDebug?: boolean;
 }): Record<string, string> {
 	const env: Record<string, string> = {};
+	const keys: string[] = [];
 	if (patch.debugLog !== undefined) {
 		env.WP_DEBUG_LOG = patch.debugLog ? "1" : "0";
+		keys.push("WP_DEBUG_LOG");
 	}
 	if (patch.debugDisplay !== undefined) {
 		env.WP_DEBUG_DISPLAY = patch.debugDisplay ? "1" : "0";
+		keys.push("WP_DEBUG_DISPLAY");
 	}
 	if (patch.scriptDebug !== undefined) {
 		env.SCRIPT_DEBUG = patch.scriptDebug ? "1" : "0";
+		keys.push("SCRIPT_DEBUG");
+	}
+	if (keys.length > 0) {
+		env.VIBE_SITE_CONFIG_KEYS = keys.join(" ");
 	}
 	return env;
 }

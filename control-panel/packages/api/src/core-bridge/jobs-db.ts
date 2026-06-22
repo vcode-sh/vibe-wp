@@ -4,6 +4,13 @@ import { auditLog, jobs } from "@control-panel/db/schema/jobs";
 import { desc, eq } from "drizzle-orm";
 
 import type { JobStatus } from "../contract";
+import {
+	dedupeLaunchAudit,
+	type JobHistoryRow,
+	type JoinedAuditRow,
+} from "./jobs-history-pure";
+
+export type { JobHistoryRow, JoinedAuditRow } from "./jobs-history-pure";
 
 /**
  * Called once at server startup. Any job row still marked 'running' was left
@@ -75,31 +82,18 @@ export interface JobsHistoryOptions {
 	siteId?: string;
 }
 
-export interface JobHistoryRow {
-	action: string | null;
-	actorId: string | null;
-	actorName: string | null;
-	exitCode: number | null;
-	finishedAt: Date | null;
-	id: string;
-	kind: string;
-	siteId: string;
-	startedAt: Date;
-	status: string;
-}
-
 /**
- * Recent persisted jobs enriched with their audit actor. Each job left-joins
- * its audit row (action + actor id) and the actor's display name. A job has at
- * most one audit row (written once at launch in `launchJob`), so the join does
- * not multiply rows. Newest-first, capped at 100. Pass `siteId` to scope to one
- * site; omit it for a server-wide view.
+ * Recent persisted jobs enriched with their LAUNCH audit actor. A job may have
+ * several audit rows (launch + later cancel), so the raw left-join multiplies
+ * rows; `dedupeLaunchAudit` collapses each job to a single entry that shows the
+ * launch actor/action. Newest-first, capped at 100. Pass `siteId` to scope to
+ * one site; omit it for a server-wide view.
  */
 export async function jobsHistory(
 	opts: JobsHistoryOptions = {}
 ): Promise<JobHistoryRow[]> {
 	const limit = Math.min(opts.limit ?? 100, 100);
-	return await db
+	const rows: JoinedAuditRow[] = await db
 		.select({
 			id: jobs.id,
 			siteId: jobs.siteId,
@@ -111,6 +105,7 @@ export async function jobsHistory(
 			action: auditLog.action,
 			actorId: auditLog.userId,
 			actorName: user.name,
+			auditAt: auditLog.at,
 		})
 		.from(jobs)
 		.leftJoin(auditLog, eq(auditLog.jobId, jobs.id))
@@ -118,4 +113,5 @@ export async function jobsHistory(
 		.where(opts.siteId ? eq(jobs.siteId, opts.siteId) : undefined)
 		.orderBy(desc(jobs.startedAt))
 		.limit(limit);
+	return dedupeLaunchAudit(rows);
 }

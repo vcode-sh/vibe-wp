@@ -180,6 +180,11 @@ if (($max_memory_limit = vibe_wp_env('WP_MAX_MEMORY_LIMIT')) !== '') {
 }
 
 vibe_wp_define('WP_CACHE', vibe_wp_env_bool('WP_CACHE', true));
+// WP_DEBUG is the master switch: WordPress ignores WP_DEBUG_LOG / WP_DEBUG_DISPLAY
+// unless WP_DEBUG is true. Default it to "on when either flag is enabled" so the
+// control panel's per-site debug toggles actually take effect; an explicit
+// WP_DEBUG env value still overrides (e.g. WP_DEBUG=0 forces debugging off).
+vibe_wp_define('WP_DEBUG', vibe_wp_env_bool('WP_DEBUG', vibe_wp_env_bool('WP_DEBUG_LOG') || vibe_wp_env_bool('WP_DEBUG_DISPLAY')));
 vibe_wp_define('WP_DEBUG_LOG', vibe_wp_env_bool('WP_DEBUG_LOG', false));
 vibe_wp_define('WP_DEBUG_DISPLAY', vibe_wp_env_bool('WP_DEBUG_DISPLAY', false));
 vibe_wp_define('SCRIPT_DEBUG', vibe_wp_env_bool('SCRIPT_DEBUG', false));
