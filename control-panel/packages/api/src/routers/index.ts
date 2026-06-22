@@ -3,6 +3,7 @@ import type { RouterClient } from "@orpc/server";
 import { backupsRouter } from "./backups";
 import { controlOverviewRouter } from "./control-overview";
 import { healthRouter } from "./health";
+import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
 import { serverRouter } from "./server";
@@ -12,6 +13,7 @@ import { stagingRouter } from "./staging";
 export const appRouter = {
 	...healthRouter,
 	...controlOverviewRouter,
+	...lifecycleRouter,
 	...sitesRouter,
 	...backupsRouter,
 	...operationsRouter,
