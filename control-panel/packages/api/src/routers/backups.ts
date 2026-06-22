@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { BackupRecord } from "../contract";
 import { runVibe } from "../core-bridge/exec";
-import { startBackupJob } from "../core-bridge/jobs";
+import { startJob } from "../core-bridge/jobs";
 import { parseBackups } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { operatorProcedure, protectedProcedure } from "../procedures";
@@ -22,7 +22,14 @@ export const backupsRouter = {
 
 	backupsRun: operatorProcedure
 		.input(z.object({ siteId: z.string() }))
-		.handler(
-			({ input }): Promise<{ jobId: string }> => startBackupJob(input.siteId)
+		.handler(({ input, context }) =>
+			startJob({
+				op: "backup",
+				siteId: input.siteId,
+				env: "prod",
+				kind: "backup",
+				userId: context.session.user.id,
+				action: "backup",
+			})
 		),
 };
