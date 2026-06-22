@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { SiteSwitcher } from "@/components/site-switcher";
-import { authClient } from "@/lib/auth-client";
 import {
 	Sidebar,
 	SidebarContent,
@@ -26,6 +25,7 @@ import {
 	SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/user-menu";
+import { authClient } from "@/lib/auth-client";
 
 interface SiteLink {
 	icon: ComponentType<{ className?: string }>;
@@ -62,7 +62,11 @@ export function AppSidebar() {
 	const isAdmin = session?.user.role === "admin";
 	// Users is admin-only; insert it before Settings for admins.
 	const serverLinks = isAdmin
-		? [...SERVER_LINKS.slice(0, -1), ADMIN_LINK, SERVER_LINKS.at(-1) as SiteLink]
+		? [
+				...SERVER_LINKS.slice(0, -1),
+				ADMIN_LINK,
+				SERVER_LINKS.at(-1) as SiteLink,
+			]
 		: SERVER_LINKS;
 
 	return (

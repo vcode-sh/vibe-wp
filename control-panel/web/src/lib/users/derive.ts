@@ -6,13 +6,13 @@
 import type { PanelRole } from "@/lib/roles";
 
 export interface PanelUser {
-	id: string;
-	email: string;
-	name: string;
-	role: string;
 	banned: boolean;
 	banReason: string | null;
 	createdAt: number;
+	email: string;
+	id: string;
+	name: string;
+	role: string;
 }
 
 export interface UserFilter {
