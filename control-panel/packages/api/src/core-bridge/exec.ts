@@ -134,6 +134,12 @@ export function streamVibe(
 	// Return a facade so callers' proc.kill() always kills the whole group,
 	// while proc.exited still resolves when the direct child exits.
 	const proc = { exited: child.exited, kill: killTree, pid: child.pid };
+	// After the process exits, give a short grace for final buffered lines to
+	// flush, then force the merge to end — so an orphaned grandchild holding a
+	// pipe open can never wedge the stream open forever.
+	const stopSignal = child.exited.then(
+		() => new Promise((res) => setTimeout(res, 1500))
+	);
 	async function* lines(): AsyncIterable<string> {
 		try {
 			for await (const line of mergeLineStreams(
@@ -141,7 +147,8 @@ export function streamVibe(
 					child.stdout as ReadableStream<Uint8Array>,
 					child.stderr as ReadableStream<Uint8Array>,
 				],
-				redact
+				redact,
+				stopSignal
 			)) {
 				yield line;
 			}
