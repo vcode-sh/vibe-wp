@@ -8,6 +8,7 @@ import type {
 	Verdict,
 } from "../contract";
 import { runVibe } from "../core-bridge/exec";
+import { resolveNotifyConfig } from "../core-bridge/notify-config";
 import { parseMonitorJson, parsePerfJson } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
@@ -41,18 +42,31 @@ export const healthRouter = {
 				throw new ORPCError("NOT_FOUND");
 			}
 			// monitor exits 1 when a check fails; still parse stdout for the report.
-			const { stdout } = await runVibe(site.installDir, "prod", "monitor", {
-				timeoutMs: 90_000,
-			});
+			const [{ stdout }, notifyCfg] = await Promise.all([
+				runVibe(site.installDir, "prod", "monitor", { timeoutMs: 90_000 }),
+				resolveNotifyConfig(input.siteId),
+			]);
 			const monitor = parseMonitorJson(stdout);
+
+			// Derive channel names from the resolved config — never include secret values.
+			const alertChannels: string[] = [];
+			if (notifyCfg.telegramToken && notifyCfg.telegramChatId) {
+				alertChannels.push("Telegram");
+			}
+			if (notifyCfg.webhookUrl) {
+				alertChannels.push("Webhook");
+			}
+			if (notifyCfg.email) {
+				alertChannels.push("Email");
+			}
+
 			return {
 				// Each monitor check (HTTP, disk, TLS, backup freshness, containers)
 				// becomes a tile. TLS is surfaced here as a check tile rather than a
 				// fabricated days-to-expiry number.
 				tiles: monitor.checks.map((c) => tile(c.name, c.name, c.ok, c.name)),
 				uptimePercent: monitor.uptimePercent,
-				// Notification wiring lands in Phase 3.
-				alertChannels: [],
+				alertChannels,
 			};
 		}),
 

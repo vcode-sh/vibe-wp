@@ -1,93 +1,44 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import type { NeedItem, SiteOverview, SiteSummary, Verdict } from "../contract";
+import type {
+	NeedItem,
+	SecurityStatus,
+	SiteOverview,
+	SiteSummary,
+	Verdict,
+} from "../contract";
 import { auditToActivity } from "../core-bridge/audit";
 import { runVibe } from "../core-bridge/exec";
 import { recentAudit } from "../core-bridge/jobs-db";
 import {
 	parseBackups,
+	parseMonitorJson,
+	parseSecurityStatus,
 	parseSmoke,
 	parseWpUpdateCount,
 } from "../core-bridge/parse";
+import {
+	backupSignal,
+	certNeed,
+	diskNeed,
+	securityNeed,
+	securitySafety,
+	updatesNeed,
+} from "../core-bridge/site-needs";
 import { detectSites, findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
-// Match bin/monitor's backup-freshness default (VIBE_MONITOR_BACKUP_MAX_AGE_HOURS).
-const BACKUP_STALE_HOURS = 26;
-
-/** Honest, dependency-free relative age (e.g. "3h ago", "2d ago"). */
-function relativeAge(iso: string, nowMs: number): string {
-	const then = Date.parse(iso);
-	if (Number.isNaN(then)) {
-		return "unknown";
-	}
-	const diff = Math.max(0, nowMs - then);
-	if (diff < HOUR_MS) {
-		return "under 1h ago";
-	}
-	if (diff < DAY_MS) {
-		return `${Math.floor(diff / HOUR_MS)}h ago`;
-	}
-	return `${Math.floor(diff / DAY_MS)}d ago`;
-}
-
-/** Backup-derived safety copy + an optional NeedItem, from the real latest backup. */
-function backupSignal(
-	lastBackupISO: string,
-	nowMs: number
-): { text: string; detail: string; need: NeedItem | null } {
-	const then = Date.parse(lastBackupISO);
-	if (!lastBackupISO || Number.isNaN(then)) {
-		return {
-			text: "No backups yet",
-			detail: "Create the first backup from the Backups tab.",
-			need: {
-				id: "backup-missing",
-				icon: "backup",
-				title: "No backups yet",
-				detail: "This site has never been backed up.",
-				actionLabel: "Back up now",
-				reversible: false,
-			},
-		};
-	}
-	const ageHours = (nowMs - then) / HOUR_MS;
-	const stale = ageHours > BACKUP_STALE_HOURS;
-	return {
-		text: `Last backup ${relativeAge(lastBackupISO, nowMs)}`,
-		detail: stale
-			? `Newest backup is older than ${BACKUP_STALE_HOURS}h.`
-			: "Backups are current.",
-		need: stale
-			? {
-					id: "backup-stale",
-					icon: "backup",
-					title: "Backup is stale",
-					detail: `Newest backup ${relativeAge(lastBackupISO, nowMs)}.`,
-					actionLabel: "Back up now",
-					reversible: false,
-				}
-			: null,
-	};
-}
-
-/** A NeedItem for pending plugin updates, or null when nothing is pending. */
-function updatesNeed(pluginUpdates: number): NeedItem | null {
-	if (pluginUpdates <= 0) {
+/**
+ * Parse the host security posture. The parse throws on unreadable output; treat
+ * "couldn't determine" as null ("omit the need"), never as a fake all-off posture.
+ */
+function readSecurity(stdout: string): SecurityStatus | null {
+	try {
+		return parseSecurityStatus(stdout);
+	} catch {
 		return null;
 	}
-	const plural = pluginUpdates === 1 ? "" : "s";
-	return {
-		id: "plugin-updates",
-		icon: "update",
-		title: `${pluginUpdates} plugin update${plural} available`,
-		detail: "Apply pending plugin updates to stay patched.",
-		actionLabel: "Update plugins",
-		reversible: false,
-	};
 }
 
 export const sitesRouter = {
@@ -131,31 +82,38 @@ export const sitesRouter = {
 			const nowMs = Date.now();
 			// Run the read-only signals concurrently so latency does not stack:
 			// smoke (health tiles), backups (freshness), plugin updates (count),
-			// and the local audit (DB). No per-overview heavy host probes.
-			const [smokeRes, backupsRes, updatesRes, audit] = await Promise.all([
-				runVibe(site.installDir, "prod", "smoke", { timeoutMs: 90_000 }),
-				runVibe(site.installDir, "prod", "backups"),
-				// `compose run --rm wp` can be slow; match smoke's budget so a slow
-				// run is not killed → empty stdout → updates need silently suppressed.
-				runVibe(site.installDir, "prod", "wpPluginUpdates", {
-					timeoutMs: 90_000,
-				}),
-				recentAudit(site.id),
-			]);
+			// monitor (one bounded host probe that also yields TLS-expiry + disk),
+			// security-status (firewall/fail2ban/auto-updates), and the local audit.
+			// All in one bounded fan-out — no stacked or repeated heavy host calls.
+			const [smokeRes, backupsRes, updatesRes, monitorRes, securityRes, audit] =
+				await Promise.all([
+					runVibe(site.installDir, "prod", "smoke", { timeoutMs: 90_000 }),
+					runVibe(site.installDir, "prod", "backups"),
+					// `compose run --rm wp` can be slow; match smoke's budget so a slow
+					// run is not killed → empty stdout → updates need silently suppressed.
+					runVibe(site.installDir, "prod", "wpPluginUpdates", {
+						timeoutMs: 90_000,
+					}),
+					runVibe(site.installDir, "prod", "monitor", { timeoutMs: 90_000 }),
+					runVibe(site.installDir, "prod", "securityStatus"),
+					recentAudit(site.id),
+				]);
 			const smoke = parseSmoke(smokeRes.stdout);
 			const status = smoke.passed ? "good" : ("act" as Verdict);
 			const lastBackupISO = parseBackups(backupsRes.stdout)[0]?.whenISO ?? "";
 			const backup = backupSignal(lastBackupISO, nowMs);
-			const pluginUpdates = parseWpUpdateCount(updatesRes.stdout);
+			const monitorChecks = parseMonitorJson(monitorRes.stdout).checks;
+			const security = readSecurity(securityRes.stdout);
 
-			const needs: NeedItem[] = [];
-			const updNeed = updatesNeed(pluginUpdates);
-			if (updNeed) {
-				needs.push(updNeed);
-			}
-			if (backup.need) {
-				needs.push(backup.need);
-			}
+			// Each NeedItem reflects a real signal; nulls (no condition / not
+			// cheaply knowable) are filtered out.
+			const needs: NeedItem[] = [
+				updatesNeed(parseWpUpdateCount(updatesRes.stdout)),
+				backup.need,
+				certNeed(monitorChecks),
+				diskNeed(monitorChecks),
+				securityNeed(security),
+			].filter((n): n is NeedItem => n !== null);
 
 			return {
 				siteId: site.id,
@@ -178,12 +136,11 @@ export const sitesRouter = {
 				safety: {
 					backupText: backup.text,
 					backupDetail: backup.detail,
-					// Security posture is host-wide, not per-site, and the dedicated
-					// host check (server.securityStatus) belongs on the Server page.
-					// Surface an honest neutral pointer here rather than a false green
-					// claim, and avoid a host-wide probe on every per-site overview load.
-					securityText: "See Server & security",
-					securityDetail: "Firewall, fail2ban and auto-updates are host-wide.",
+					// Security posture is host-wide, not per-site. We already read the
+					// real status above, so reflect it honestly: a neutral pointer when
+					// it couldn't be determined, otherwise an on/off summary. Never a
+					// fabricated green claim.
+					...securitySafety(security),
 				},
 				activity: auditToActivity(
 					audit.map((r) => ({

@@ -3,6 +3,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@control-panel/ui/components/collapsible";
+import { useNavigate } from "@tanstack/react-router";
 import { Check, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,13 +12,34 @@ import type { NeedItem } from "@/data/types";
 
 export function NeedsYou({
 	items,
+	siteId,
 	onAct,
 	onLater,
 }: {
 	items: NeedItem[];
+	siteId: string;
 	onAct: (item: NeedItem) => void;
 	onLater: (id: string) => void;
 }) {
+	const navigate = useNavigate();
+
+	// Most needs resolve on a dedicated page that already has the real, reviewed
+	// flow. Route there; only plugin updates run inline via the parent's mutation.
+	function handleAct(item: NeedItem) {
+		if (item.icon === "backup") {
+			navigate({ to: "/sites/$siteId/backups", params: { siteId } });
+			return;
+		}
+		if (item.icon === "cert" || item.icon === "disk") {
+			navigate({ to: "/sites/$siteId/health", params: { siteId } });
+			return;
+		}
+		if (item.icon === "security") {
+			navigate({ to: "/server" });
+			return;
+		}
+		onAct(item);
+	}
 	if (items.length === 0) {
 		return (
 			<Card className="flex items-center gap-3 border-success/40 p-4 text-sm">
@@ -62,7 +84,7 @@ export function NeedsYou({
 									>
 										Later
 									</Button>
-									<Button onClick={() => onAct(item)} size="sm">
+									<Button onClick={() => handleAct(item)} size="sm">
 										{item.actionLabel}
 									</Button>
 								</div>

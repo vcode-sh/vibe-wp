@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ActivityTimeline } from "@/components/patterns/activity-timeline";
@@ -23,9 +23,14 @@ export const Route = createFileRoute("/_auth/sites/$siteId/overview")({
 
 function OverviewPage() {
 	const { siteId } = Route.useParams();
+	const navigate = useNavigate();
 	const overview = useQuery(siteOverviewQuery(siteId));
 	const updatesAvailable = useQuery(updatesAvailableQuery(siteId));
 	const { start, isRunning } = useOperations();
+
+	function goToBackups() {
+		navigate({ to: "/sites/$siteId/backups", params: { siteId } });
+	}
 
 	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
@@ -87,11 +92,13 @@ function OverviewPage() {
 		}
 	}
 
+	// NeedsYou routes backup/cert/disk/security needs to their own pages; only
+	// the inline plugin-update action reaches this handler.
 	async function handleAct(item: NeedItem) {
 		if (item.icon === "update") {
 			await handleApplyUpdates("plugins");
 		} else {
-			toast.info(`${item.actionLabel} isn't available yet.`);
+			goToBackups();
 		}
 	}
 
@@ -120,6 +127,7 @@ function OverviewPage() {
 								items={visibleNeeds}
 								onAct={handleAct}
 								onLater={handleLater}
+								siteId={siteId}
 							/>
 							{pluginCount > 0 ? (
 								<div className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3 text-sm">
@@ -148,7 +156,7 @@ function OverviewPage() {
 								</div>
 								<SafetyNet
 									onBackup={handleBackup}
-									onRestore={() => toast("Open Backups to restore")}
+									onRestore={goToBackups}
 									safety={overview.data.safety}
 								/>
 							</div>

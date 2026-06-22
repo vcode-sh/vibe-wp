@@ -90,9 +90,19 @@ function HealthPage() {
 										<CardTitle className="text-sm">Alerts</CardTitle>
 									</CardHeader>
 									<CardContent className="text-sm">
-										{health.data.alertChannels.length > 0
-											? `Channels: ${health.data.alertChannels.join(" · ")}`
-											: "No alert channels configured."}
+										{health.data.alertChannels.length > 0 ? (
+											<ul className="flex flex-col gap-1">
+												{health.data.alertChannels.map((ch) => (
+													<li className="font-medium text-foreground" key={ch}>
+														{ch}
+													</li>
+												))}
+											</ul>
+										) : (
+											<p className="text-muted-foreground">
+												No alert channels configured.
+											</p>
+										)}
 									</CardContent>
 								</Card>
 							</div>

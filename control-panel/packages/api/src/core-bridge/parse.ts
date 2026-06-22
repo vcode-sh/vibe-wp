@@ -213,19 +213,54 @@ export function parseWpUpdateCount(stdout: string): number {
 	}
 }
 
+// compose --timestamps format: <service>-<N>  | <RFC3339> <message>
+const COMPOSE_LINE =
+	/^([a-zA-Z0-9_-]+?)-\d+\s+\|\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s*(.*)/;
+
+function svcToSource(svc: string): LogLine["source"] | null {
+	const s = svc.toLowerCase();
+	if (s === "nginx") {
+		return "nginx";
+	}
+	if (s === "wordpress" || s.startsWith("php")) {
+		return "php";
+	}
+	if (s === "wp" || s === "cron" || s.startsWith("wp-")) {
+		return "wp";
+	}
+	return null;
+}
+
 export function parseLogLines(
 	stdout: string,
 	source: LogLine["source"]
 ): LogLine[] {
+	let prevSource: LogLine["source"] = source;
+	let prevWhen = "";
 	return stdout
 		.split("\n")
-		.map((l) => l.trim())
-		.filter(Boolean)
+		.filter((l) => l.trim().length > 0)
 		.slice(-200)
-		.map((text, i) => ({
-			id: String(i),
-			source,
-			text,
-			whenISO: new Date(0).toISOString(),
-		}));
+		.map((raw, i) => {
+			const m = COMPOSE_LINE.exec(raw);
+			if (m) {
+				const when = m[2] ?? "";
+				const lineSource = svcToSource(m[1] ?? "") ?? prevSource;
+				prevSource = lineSource;
+				prevWhen = when;
+				return {
+					id: String(i),
+					source: lineSource,
+					text: m[3] ?? "",
+					whenISO: when,
+				};
+			}
+			// Continuation / unparseable — carry forward last known values.
+			return {
+				id: String(i),
+				source: prevSource,
+				text: raw.trim(),
+				whenISO: prevWhen,
+			};
+		});
 }
