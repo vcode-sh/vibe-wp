@@ -217,7 +217,10 @@ export function parseWpUpdateCount(stdout: string): number {
 const COMPOSE_LINE =
 	/^([a-zA-Z0-9_-]+?)-\d+\s+\|\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s*(.*)/;
 
-function svcToSource(svc: string): LogLine["source"] | null {
+// cron runs wp-cron, so its lines are WordPress activity → "wp".
+// Infra containers (db/redis/adminer/etc.) have no app source → "system".
+// Returns a concrete source for EVERY known service (never null).
+function svcToSource(svc: string): LogLine["source"] {
 	const s = svc.toLowerCase();
 	if (s === "nginx") {
 		return "nginx";
@@ -228,13 +231,15 @@ function svcToSource(svc: string): LogLine["source"] | null {
 	if (s === "wp" || s === "cron" || s.startsWith("wp-")) {
 		return "wp";
 	}
-	return null;
+	return "system";
 }
 
 export function parseLogLines(
 	stdout: string,
 	source: LogLine["source"]
 ): LogLine[] {
+	// `source` seeds carry-forward so continuation lines that arrive before the
+	// first matched prefix inherit the requested filter rather than going blank.
 	let prevSource: LogLine["source"] = source;
 	let prevWhen = "";
 	return stdout
@@ -244,8 +249,11 @@ export function parseLogLines(
 		.map((raw, i) => {
 			const m = COMPOSE_LINE.exec(raw);
 			if (m) {
+				// A matched line is a fresh service line: always use its OWN service.
+				// NEVER carry forward prevSource here — otherwise a real db/redis line
+				// (known-but-infra) would wrongly inherit the previous line's source.
 				const when = m[2] ?? "";
-				const lineSource = svcToSource(m[1] ?? "") ?? prevSource;
+				const lineSource = svcToSource(m[1] ?? "");
 				prevSource = lineSource;
 				prevWhen = when;
 				return {
@@ -255,7 +263,8 @@ export function parseLogLines(
 					whenISO: when,
 				};
 			}
-			// Continuation / unparseable — carry forward last known values.
+			// Regex MISS — genuine continuation line (e.g. a multi-line stack trace)
+			// or unparseable output: carry forward the last known values.
 			return {
 				id: String(i),
 				source: prevSource,

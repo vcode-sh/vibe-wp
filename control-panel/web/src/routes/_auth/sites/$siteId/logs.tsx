@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_auth/sites/$siteId/logs")({
 	component: LogsPage,
 });
 
-const SOURCES = ["all", "nginx", "php", "wp"] as const;
+const SOURCES = ["all", "nginx", "php", "wp", "system"] as const;
 
 function RecentLogs({ siteId }: { siteId: string }) {
 	const logs = useQuery(logsQuery(siteId));

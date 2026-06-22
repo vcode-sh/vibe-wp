@@ -81,7 +81,10 @@ case "${command}" in
     vibe_compose ps "$@"
     ;;
   logs)
-    vibe_compose logs -f --timestamps --tail=200 "$@"
+    # No --timestamps here: the live tail streams raw lines unparsed, so a
+    # nanosecond RFC3339 prefix would render verbatim and clutter the view.
+    # logs-recent keeps --timestamps because its output is parsed for the table.
+    vibe_compose logs -f --tail=200 "$@"
     ;;
   logs-recent)
     # One-shot tail (no -f) so non-interactive callers like the installer UI

@@ -84,7 +84,7 @@ export type StagingInfo =
 
 export interface LogLine {
 	id: string;
-	source: "nginx" | "php" | "wp";
+	source: "nginx" | "php" | "wp" | "system";
 	text: string;
 	whenISO: string;
 }

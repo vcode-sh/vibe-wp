@@ -200,6 +200,60 @@ describe("parseLogLines", () => {
 	it("returns an empty array for empty stdout", () => {
 		expect(parseLogLines("", "php")).toEqual([]);
 	});
+
+	it("parses the real compose --timestamps format (padded prefix, nanos)", () => {
+		// Real `docker compose logs --timestamps` output: padded service prefix
+		// then a nanosecond RFC3339 timestamp at the start of the message body.
+		const stdout = [
+			"nginx-1      | 2026-06-22T16:27:04.203766588Z GET / 200",
+			"db-1         | 2026-06-22T16:27:05.0Z ready for connections",
+			"wordpress-1  | 2026-06-22T16:27:06.0Z PHP Notice: undefined",
+			"",
+		].join("\n");
+		const lines = parseLogLines(stdout, "nginx");
+		expect(lines).toHaveLength(3);
+		// whenISO is the parsed RFC3339, not new Date(0).
+		expect(lines[0]?.whenISO).toBe("2026-06-22T16:27:04.203766588Z");
+		expect(lines[0]?.source).toBe("nginx");
+		expect(lines[0]?.text).toBe("GET / 200");
+		// db is a matched-but-infra line → "system", NOT carried-forward "nginx".
+		expect(lines[1]?.source).toBe("system");
+		expect(lines[1]?.whenISO).toBe("2026-06-22T16:27:05.0Z");
+		expect(lines[1]?.text).toBe("ready for connections");
+		// wordpress → php.
+		expect(lines[2]?.source).toBe("php");
+		expect(lines[2]?.text).toBe("PHP Notice: undefined");
+	});
+
+	it("maps redis/adminer/cron services to honest sources", () => {
+		const stdout = [
+			"redis-1   | 2026-06-22T16:27:07.0Z Ready to accept connections",
+			"adminer-1 | 2026-06-22T16:27:08.0Z [Mon] PHP 8.3",
+			"cron-1    | 2026-06-22T16:27:09.0Z wp cron event run --due-now",
+			"",
+		].join("\n");
+		const lines = parseLogLines(stdout, "nginx");
+		expect(lines[0]?.source).toBe("system"); // redis → system
+		expect(lines[1]?.source).toBe("system"); // adminer → system
+		expect(lines[2]?.source).toBe("wp"); // cron runs wp-cron → wp
+	});
+
+	it("carries forward source/time only for continuation lines (regex miss)", () => {
+		const stdout = [
+			"nginx-1 | 2026-06-22T16:27:04.0Z upstream error:",
+			"    at backtrace frame one",
+			"    at backtrace frame two",
+			"",
+		].join("\n");
+		const lines = parseLogLines(stdout, "php");
+		expect(lines[0]?.source).toBe("nginx");
+		// Prefix-less continuation lines inherit the previous matched line.
+		expect(lines[1]?.source).toBe("nginx");
+		expect(lines[1]?.whenISO).toBe("2026-06-22T16:27:04.0Z");
+		expect(lines[1]?.text).toBe("at backtrace frame one");
+		expect(lines[2]?.source).toBe("nginx");
+		expect(lines[2]?.text).toBe("at backtrace frame two");
+	});
 });
 
 describe("parseWpUpdateCount", () => {
