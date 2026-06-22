@@ -23,6 +23,7 @@ describe("buildVibeArgv", () => {
 			"doctorRuntime",
 			"down",
 			"harden",
+			"logsFollow",
 			"logsRecent",
 			"promote",
 			"refresh",

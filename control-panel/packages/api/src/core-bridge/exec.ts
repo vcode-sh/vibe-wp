@@ -1,4 +1,5 @@
 import { redact } from "./redact";
+import { mergeLineStreams } from "./stream-merge";
 
 export type VibeEnv = "local" | "stage" | "prod" | "external";
 
@@ -20,6 +21,7 @@ export const VIBE_OPS = {
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
 	logsRecent: { argv: ["logs-recent"], stream: false },
+	logsFollow: { argv: ["logs"], stream: true },
 	up: { argv: ["up"], stream: true },
 	down: { argv: ["down"], stream: true },
 	restart: { argv: ["restart"], stream: true },
@@ -134,24 +136,14 @@ export function streamVibe(
 	const proc = { exited: child.exited, kill: killTree, pid: child.pid };
 	async function* lines(): AsyncIterable<string> {
 		try {
-			const reader = child.stdout.getReader();
-			const decoder = new TextDecoder();
-			let buffer = "";
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) {
-					break;
-				}
-				buffer += decoder.decode(value, { stream: true });
-				let nl = buffer.indexOf("\n");
-				while (nl !== -1) {
-					yield redact(buffer.slice(0, nl));
-					buffer = buffer.slice(nl + 1);
-					nl = buffer.indexOf("\n");
-				}
-			}
-			if (buffer.length > 0) {
-				yield redact(buffer);
+			for await (const line of mergeLineStreams(
+				[
+					child.stdout as ReadableStream<Uint8Array>,
+					child.stderr as ReadableStream<Uint8Array>,
+				],
+				redact
+			)) {
+				yield line;
 			}
 		} finally {
 			clearTimeout(timer);
