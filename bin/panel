@@ -156,6 +156,15 @@ deploy_panel() {
 
   # DB migrate (the auth DB holds password hashes + sessions). Run as root, then
   # hand the data dir + db to vibe-panel so the service can read/write its DB.
+  # drizzle-kit push cannot ALTER an existing SQLite table to add a PRIMARY KEY
+  # column, so a rateLimit table created before the id-PK fix would silently
+  # survive without its `id` column and 500 every sign-in (storage:database
+  # reads/writes rateLimit on each auth call). The table holds only transient
+  # rate-limit counters, so drop it first and let db:push recreate it with the
+  # correct shape. Safe no-op when the DB or table does not yet exist.
+  if [ -f "$PANEL_DIR/data/panel.db" ]; then
+    PANEL_DB="$PANEL_DIR/data/panel.db" "$BUN" -e 'import {Database} from "bun:sqlite"; const d=new Database(process.env.PANEL_DB); d.run("DROP TABLE IF EXISTS rateLimit"); d.close();' 2>/dev/null || true
+  fi
   ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push )
   $SUDO chown -R "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/data"
   $SUDO chmod 700 "$PANEL_DIR/data"
