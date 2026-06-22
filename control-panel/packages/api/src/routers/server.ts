@@ -3,9 +3,10 @@ import { ORPCError } from "@orpc/server";
 
 import type { ServerInfo } from "../contract";
 import { hostExec, runVibe } from "../core-bridge/exec";
+import { startJob } from "../core-bridge/jobs";
 import { parseSmoke } from "../core-bridge/parse";
 import { detectSites } from "../core-bridge/sites";
-import { protectedProcedure } from "../procedures";
+import { adminProcedure, protectedProcedure } from "../procedures";
 
 const WHITESPACE = /\s+/;
 
@@ -46,5 +47,21 @@ export const serverRouter = {
 		return parseSmoke(
 			(await runVibe(site.installDir, "prod", "doctorRuntime")).stdout
 		);
+	}),
+
+	serverHarden: adminProcedure.handler(async ({ context }) => {
+		const sites = await detectSites();
+		const site = sites[0];
+		if (!site) {
+			throw new ORPCError("NOT_FOUND");
+		}
+		return startJob({
+			op: "harden",
+			siteId: site.id,
+			env: "prod",
+			kind: "harden",
+			userId: context.session.user.id,
+			action: "harden",
+		});
 	}),
 };

@@ -1,9 +1,14 @@
 import { z } from "zod";
 
 import type { StagingInfo } from "../contract";
+import { startJob } from "../core-bridge/jobs";
 import { hostFromUrl, parseEnvFile } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
-import { protectedProcedure } from "../procedures";
+import {
+	adminProcedure,
+	operatorProcedure,
+	protectedProcedure,
+} from "../procedures";
 
 export const stagingRouter = {
 	stagingInfo: protectedProcedure
@@ -21,4 +26,30 @@ export const stagingRouter = {
 				? { present: true, url: hostFromUrl(stage.WP_HOME), noindex: true }
 				: { present: false, url: null };
 		}),
+
+	stagingRefresh: operatorProcedure
+		.input(z.object({ siteId: z.string() }))
+		.handler(({ input, context }) =>
+			startJob({
+				op: "refresh",
+				siteId: input.siteId,
+				env: "stage",
+				kind: "refresh",
+				userId: context.session.user.id,
+				action: "refresh",
+			})
+		),
+
+	stagingPromote: adminProcedure
+		.input(z.object({ siteId: z.string() }))
+		.handler(({ input, context }) =>
+			startJob({
+				op: "promote",
+				siteId: input.siteId,
+				env: "stage",
+				kind: "promote",
+				userId: context.session.user.id,
+				action: "promote",
+			})
+		),
 };
