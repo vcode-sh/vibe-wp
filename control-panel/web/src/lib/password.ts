@@ -16,6 +16,11 @@ export const passwordSchema = z
 
 const LABELS = ["Very weak", "Weak", "Fair", "Good", "Strong"] as const;
 
+const HAS_LOWER = /[a-z]/;
+const HAS_UPPER = /[A-Z]/;
+const HAS_DIGIT = /\d/;
+const HAS_SYMBOL = /[^A-Za-z0-9]/;
+
 export function scorePassword(pw: string): {
 	score: 0 | 1 | 2 | 3 | 4;
 	label: string;
@@ -34,13 +39,13 @@ export function scorePassword(pw: string): {
 	if (pw.length >= 16) {
 		points += 1;
 	}
-	if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) {
+	if (HAS_LOWER.test(pw) && HAS_UPPER.test(pw)) {
 		points += 1;
 	}
-	if (/\d/.test(pw)) {
+	if (HAS_DIGIT.test(pw)) {
 		points += 1;
 	}
-	if (/[^A-Za-z0-9]/.test(pw)) {
+	if (HAS_SYMBOL.test(pw)) {
 		points += 1;
 	}
 	const score = Math.min(4, Math.max(0, points - 1)) as 0 | 1 | 2 | 3 | 4;
