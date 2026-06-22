@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { OperationRunner } from "@/components/patterns/operation-runner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
-import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +17,6 @@ export const Route = createFileRoute("/_auth/server")({
 
 function ServerPage() {
 	const server = useQuery(serverInfoQuery());
-	const [stopping, setStopping] = useState(false);
 	const [runnerOpen, setRunnerOpen] = useState(false);
 	const [jobId, setJobId] = useState<string | null>(null);
 	const [runnerTitle, setRunnerTitle] = useState("");
@@ -80,40 +78,8 @@ function ServerPage() {
 						</Card>
 					</div>
 				</QueryBoundary>
-				{/* TODO: Stop a site — lifecycleDown({ siteId }) requires a site picker;
-				    add a <Select sites> + SafetyConfirm + OperationRunner once the
-				    site-list affordance is designed (follow-up task). */}
-				<Card className="border-destructive/40">
-					<CardContent className="flex items-center justify-between py-4">
-						<div className="text-sm">
-							<div className="font-medium">Stop a site</div>
-							<div className="text-muted-foreground text-xs">
-								Takes a site offline until you start it again.
-							</div>
-						</div>
-						<Button onClick={() => setStopping(true)} variant="outline">
-							Stop a site…
-						</Button>
-					</CardContent>
-				</Card>
+				{/* Site lifecycle (stop/start/restart) needs a site-scoped UI — tracked as a follow-up. */}
 			</div>
-
-			{/* Stop-a-site is not yet fully wired: lifecycleDown needs a siteId that
-			    this server-level page does not have. The SafetyConfirm is kept in
-			    place; the confirm handler shows an informative toast until a site
-			    selector is added in a follow-up. */}
-			<SafetyConfirm
-				confirmLabel="Stop the site"
-				consequence="The site goes offline until you start it again. Your data and backups are untouched."
-				onConfirm={() => {
-					toast.info("Site stopping requires selecting a site — coming soon.");
-					setStopping(false);
-				}}
-				onOpenChange={setStopping}
-				open={stopping}
-				reversible={false}
-				title="Stop a site"
-			/>
 
 			<OperationRunner
 				jobId={jobId}

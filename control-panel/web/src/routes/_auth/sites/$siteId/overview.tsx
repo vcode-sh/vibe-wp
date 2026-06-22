@@ -29,6 +29,7 @@ function OverviewPage() {
 	const [runnerTitle, setRunnerTitle] = useState("");
 
 	const applyUpdates = useMutation(orpc.updatesApply.mutationOptions());
+	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 
 	async function handleApplyUpdates(what: "core" | "plugins" = "core") {
 		try {
@@ -41,11 +42,22 @@ function OverviewPage() {
 		}
 	}
 
+	async function handleBackup() {
+		try {
+			const result = await runBackup.mutateAsync({ siteId });
+			setRunnerTitle("Backing up…");
+			setJobId(result.jobId);
+			setRunnerOpen(true);
+		} catch {
+			toast.error("Failed to start backup.");
+		}
+	}
+
 	async function handleAct(item: NeedItem) {
 		if (item.icon === "update") {
 			await handleApplyUpdates("plugins");
 		} else {
-			toast.success(`${item.actionLabel}: starting…`);
+			toast.info(`${item.actionLabel} isn't available yet.`);
 		}
 	}
 
@@ -94,9 +106,7 @@ function OverviewPage() {
 									))}
 								</div>
 								<SafetyNet
-									onBackup={() =>
-										toast.success("Back up now: starting (mock)…")
-									}
+									onBackup={handleBackup}
 									onRestore={() => toast("Open Backups to restore")}
 									safety={overview.data.safety}
 								/>
