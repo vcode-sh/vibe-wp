@@ -2,7 +2,9 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import type { SiteOverview, SiteSummary, Verdict } from "../contract";
+import { auditToActivity } from "../core-bridge/audit";
 import { runVibe } from "../core-bridge/exec";
+import { recentAudit } from "../core-bridge/jobs-db";
 import { parseBackups, parseSmoke } from "../core-bridge/parse";
 import { detectSites, findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
@@ -70,7 +72,15 @@ export const sitesRouter = {
 					securityText: "Managed by Vibe WP",
 					securityDetail: "Firewall + auto-updates",
 				},
-				activity: [],
+				activity: auditToActivity(
+					(await recentAudit(site.id)).map((r) => ({
+						id: r.id,
+						action: r.action,
+						siteId: r.siteId,
+						jobId: r.jobId,
+						at: r.at,
+					}))
+				),
 			};
 		}),
 };
