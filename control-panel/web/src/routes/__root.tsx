@@ -33,7 +33,7 @@ function RootComponent() {
 				storageKey="vibe-wp-control-theme"
 			>
 				<Outlet />
-				<Toaster richColors />
+				<Toaster />
 			</ThemeProvider>
 		</>
 	);
