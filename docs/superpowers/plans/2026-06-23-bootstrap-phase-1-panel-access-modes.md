@@ -101,24 +101,27 @@ Add a `die()` helper near the top if not present (mirror `bin/vibe-panel-run`'s)
 die() { echo "panel: $1" >&2; exit 1; }
 ```
 
-- [ ] **Step 3: Add a no-op `--print-access` debug exit**
+- [ ] **Step 3: Replace the top-of-`install_panel` prompts with mode-aware ordering + a no-op `--print-access` debug exit**
 
-At the very top of `install_panel()` (after `:252`'s `install_panel() {`), before any host mutation:
+`install_panel` currently prompts for `DOMAIN`/`ADMIN_EMAIL` at its top (`:253-254`). Replace those two lines with the block below. **Order matters:** establish the mode default and prompt for a domain (only when `domain` mode needs one) *before* calling `resolve_access`, so `--access domain` without `--domain` prompts instead of `die`-ing. `resolve_access` keeps its own default logic too (idempotent — used by `update_panel`); calling it here after the prompt is safe.
 ```sh
+  # Establish the access-mode default before deciding whether to prompt for a domain.
+  if [ -z "$ACCESS_MODE" ]; then
+    if [ -n "$DOMAIN" ]; then ACCESS_MODE=domain; else ACCESS_MODE=magic-dns; fi
+  fi
+  # Only 'domain' mode needs a subdomain; prompt when interactive and unset.
+  if [ "$ACCESS_MODE" = domain ] && [ -z "$DOMAIN" ]; then
+    printf 'Subdomain for the panel: '; read -r DOMAIN
+  fi
   resolve_access
   if [ "${VIBE_PANEL_PRINT_ACCESS:-}" = "1" ]; then
     printf 'mode=%s\nhost=%s\norigin=%s\ncaddy_addr=%s\ncaddy_tls=%s\n' \
       "$ACCESS_MODE" "$ACCESS_HOST" "$ACCESS_ORIGIN" "$CADDY_SITE_ADDRESS" "$CADDY_TLS_LINE"
     return 0
   fi
-```
-Note: `install_panel` currently prompts for `DOMAIN`/`ADMIN_EMAIL` at its top (`:253-254`). Move those prompts to AFTER this debug block, and make the `DOMAIN` prompt conditional — only prompt when `ACCESS_MODE=domain` and `DOMAIN` is empty (magic-dns/ip-port/localhost need no domain):
-```sh
-  if [ "$ACCESS_MODE" = domain ] && [ -z "$DOMAIN" ]; then
-    printf 'Subdomain for the panel: '; read -r DOMAIN; resolve_access
-  fi
   [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
 ```
+**Behavior note (intentional, per spec §2):** bare `bin/panel install` with no `--domain`/`--access` now defaults to **magic-dns** (no subdomain prompt) instead of prompting for a subdomain. The old subdomain-prompt behavior is reached with `--access domain` (or by passing `--domain`).
 
 - [ ] **Step 4: Verify the resolver with the debug path (no host changes)**
 
