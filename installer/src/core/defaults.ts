@@ -20,6 +20,7 @@ export function emptyHostFacts(): HostFacts {
     sudo: false,
     docker: null,
     compose: null,
+    bun: null,
     caddy: null,
     git: null,
     curl: null,
@@ -41,6 +42,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     repo: "https://github.com/vcode-sh/vibe-wp.git",
     ref: "main",
     mode: firstSite ? "manage-existing" : "new-site",
+    panelAccessMode: "magic-dns",
     selectedSiteDir: firstSite?.installDir ?? "",
     siteSlug,
     productionDomain: firstSite?.productionUrl
@@ -86,6 +88,7 @@ export function defaultState(host: HostFacts = emptyHostFacts()): InstallerState
     extRedisScheme: "tcp",
     extRedisPassword: "",
     extRedisDatabase: "0",
+    installBun: !host.bun,
     installDocker: !host.docker,
     installCaddy: !host.caddy,
     installRclone: true,

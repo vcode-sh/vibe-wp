@@ -36,6 +36,20 @@ export function buildHostInstallTasks(state: InstallerState): InstallTask[] {
     });
   }
 
+  if (state.installBun && !state.host.bun) {
+    tasks.push({
+      id: "install-bun",
+      title: "Install Bun",
+      description: "Install the Bun runtime to /usr/local for the control panel.",
+      privileged: true,
+      command: [
+        "sh",
+        "-lc",
+        `curl -fsSL https://bun.sh/install | ${sudo}env BUN_INSTALL=/usr/local bash`
+      ]
+    });
+  }
+
   const rcloneTask = buildRcloneInstallTask(state);
   if (rcloneTask) {
     tasks.push(rcloneTask);

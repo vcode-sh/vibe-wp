@@ -44,6 +44,7 @@ export async function detectHostFacts(): Promise<HostFacts> {
   facts.sudo = Boolean(await runText(["sh", "-lc", 'test "$(id -u)" = 0 || command -v sudo']));
   facts.docker = await commandVersion("docker", ["--version"]);
   facts.compose = facts.docker ? await runText(["docker", "compose", "version"]) : null;
+  facts.bun = await commandVersion("bun", ["--version"]);
   facts.caddy = await commandVersion("caddy", ["version"]);
   facts.git = await commandVersion("git", ["--version"]);
   facts.curl = await commandVersion("curl", ["--version"]);

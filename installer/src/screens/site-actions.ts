@@ -42,7 +42,8 @@ export function primaryFor(mode: InstallMode): string {
     "remove-existing": "Remove",
     "staging-only": "Add staging",
     "new-site": "Start setup",
-    "external-services": "Start setup"
+    "external-services": "Start setup",
+    "panel-bootstrap": "Set up panel"
   };
   return verbs[mode];
 }

@@ -1,10 +1,13 @@
+import type { PanelAccessMode } from "./panel-access";
+
 export type InstallMode =
   | "new-site"
   | "manage-existing"
   | "remove-existing"
   | "update-existing"
   | "staging-only"
-  | "external-services";
+  | "external-services"
+  | "panel-bootstrap";
 export type PerformancePreset = "conservative" | "balanced" | "high-memory";
 export type BackupPolicy = "manual" | "local-first" | "external-later";
 export type BackupSchedule = "off" | "daily" | "weekly";
@@ -57,6 +60,7 @@ export interface InstallerOptions {
 
 export interface HostFacts {
   arch: string;
+  bun: string | null;
   caddy: string | null;
   compose: string | null;
   cpuCount: number | null;
@@ -111,6 +115,7 @@ export interface InstallerState {
   fullDelete: boolean;
   hardenServer: boolean;
   host: HostFacts;
+  installBun: boolean;
   installCaddy: boolean;
   installDir: string;
   installDocker: boolean;
@@ -124,6 +129,7 @@ export interface InstallerState {
   monitorTelegramChat: string;
   monitorTelegramToken: string;
   monitorWebhookUrl: string;
+  panelAccessMode: PanelAccessMode;
   performanceCustom: boolean;
   performanceOverrides: Record<string, string>;
   performancePreset: PerformancePreset;
