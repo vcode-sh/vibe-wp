@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { defaultState, emptyHostFacts } from "./defaults";
 import { buildPanelBootstrapPlan } from "./panel-bootstrap-plan";
 
+const PANEL_INSTALL_RE = /^\/opt\/vibe-wp\/bin\/panel install/;
+
 function bareState() {
   const host = { ...emptyHostFacts(), sudo: true, publicIp: "203.0.113.7" };
   const state = defaultState(host);
@@ -25,7 +27,8 @@ describe("buildPanelBootstrapPlan", () => {
     const plan = buildPanelBootstrapPlan(bareState());
     const panel = plan.tasks.find((t) => t.id === "panel-install");
     const line = panel?.command?.[2] ?? "";
-    expect(line).toContain("/opt/vibe-wp/bin/panel install");
+    // bin/panel self-escalates; must NOT have a leading sudo (would strip VIBE_PANEL_ADMIN_PASSWORD)
+    expect(line).toMatch(PANEL_INSTALL_RE);
     expect(line).toContain("--access magic-dns");
     expect(line).toContain("--admin-email 'you@acme.com'");
     // Password must NOT appear in the command (passed via VIBE_PANEL_ADMIN_PASSWORD env instead)

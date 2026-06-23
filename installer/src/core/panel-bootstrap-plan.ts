@@ -15,9 +15,8 @@ export function buildPanelBootstrapPlan(state: InstallerState): InstallPlan {
   }
   tasks.push(...buildHostInstallTasks(state));
 
-  const sudo = state.host.sudo ? "sudo " : "";
   const parts = [
-    `${sudo}${DEFAULT_INSTALL_DIR}/bin/panel install`,
+    `${DEFAULT_INSTALL_DIR}/bin/panel install`,
     `--access ${state.panelAccessMode}`,
     `--admin-email ${shellQuote(state.adminEmail)}`
   ];
