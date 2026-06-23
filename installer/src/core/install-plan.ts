@@ -14,6 +14,7 @@ import {
   buildUpdateTasks,
   skipCaddyForMode
 } from "./operations-plan";
+import { buildPanelBootstrapPlan } from "./panel-bootstrap-plan";
 import { buildPlanWarnings } from "./plan-warnings";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallPlan, InstallTask } from "./types";
@@ -66,6 +67,9 @@ function planCaddyfile(state: InstallerState): string {
 }
 
 function buildTasks(state: InstallerState): InstallTask[] {
+  if (state.mode === "panel-bootstrap") {
+    return buildPanelBootstrapPlan(state).tasks;
+  }
   if (state.mode === "manage-existing") {
     return buildManageTasks(state);
   }
