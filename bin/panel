@@ -325,11 +325,13 @@ install_panel() {
 
   command -v caddy >/dev/null 2>&1 || die "Caddy is not installed. Install Caddy first (the bootstrap installer does this), then re-run."
 
-  # DNS preflight
-  ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
-  resolved="$(getent ahosts "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)"
-  if [ -n "$ip" ] && [ -n "$resolved" ] && [ "$resolved" != "$ip" ]; then
-    echo "WARN: $DOMAIN resolves to '$resolved', server is '$ip'. Add an A record."
+  # DNS preflight — only meaningful when a real domain is in use
+  if [ -n "$DOMAIN" ]; then
+    ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
+    resolved="$(getent ahosts "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)"
+    if [ -n "$ip" ] && [ -n "$resolved" ] && [ "$resolved" != "$ip" ]; then
+      echo "WARN: $DOMAIN resolves to '$resolved', server is '$ip'. Add an A record."
+    fi
   fi
 
   # Preserve existing BETTER_AUTH_SECRET across reinstalls so sessions survive upgrades.
