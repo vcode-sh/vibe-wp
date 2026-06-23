@@ -13,10 +13,13 @@ export type BackupPolicy = "manual" | "local-first" | "external-later";
 export type BackupSchedule = "off" | "daily" | "weekly";
 
 export interface InstallerOptions {
+  access?: PanelAccessMode;
   adminEmail?: string;
+  adminPassword?: string;
   ascii: boolean;
   backupDir?: string;
   backupSchedule?: BackupSchedule;
+  bootstrapPanel?: boolean;
   compact: boolean;
   domain?: string;
   dryRun: boolean;

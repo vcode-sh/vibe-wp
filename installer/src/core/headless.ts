@@ -3,6 +3,7 @@ import { detectHostFacts } from "./host";
 import { buildInstallPlan } from "./install-plan";
 import { availableOperations, type ManageOperation } from "./manage-operations";
 import { buildOperationTask } from "./manage-tasks";
+import { buildPanelBootstrapPlan } from "./panel-bootstrap-plan";
 import { runPlan } from "./plan-runner";
 import { redactPlan } from "./redaction";
 import { runTask, type TaskResult } from "./task-runner";
@@ -18,6 +19,7 @@ export type CoreRequest =
   | { kind: "validate"; state: InstallerState }
   | { kind: "plan"; state: InstallerState; redact?: boolean }
   | { kind: "operations"; hasStaging?: boolean }
+  | { kind: "panelBootstrapPlan"; state: InstallerState }
   | { kind: "runPlan"; plan: InstallPlan; apply: boolean }
   | { kind: "runOperation"; operationId: string; state: InstallerState; apply: boolean };
 
@@ -50,6 +52,8 @@ export async function runHeadless(request: CoreRequest): Promise<CoreResponse> {
     }
     case "operations":
       return { kind: "operations", operations: availableOperations(request.hasStaging ?? false) };
+    case "panelBootstrapPlan":
+      return { kind: "plan", plan: buildPanelBootstrapPlan(request.state) };
     case "runPlan":
       return { kind: "runPlan", results: await runPlan(request.plan, request.apply) };
     case "runOperation":

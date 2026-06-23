@@ -1,3 +1,5 @@
+import type { PanelAccessMode } from "../core/panel-access";
+import { PANEL_ACCESS_MODES } from "../core/panel-access";
 import type { BackupSchedule, InstallerOptions, InstallMode } from "../core/types";
 
 export const DEFAULT_INSTALL_DIR = "/opt/vibe-wp";
@@ -13,6 +15,7 @@ const INSTALL_MODES: InstallMode[] = [
 
 type BooleanOption =
   | "ascii"
+  | "bootstrapPanel"
   | "compact"
   | "dryRun"
   | "headlessJson"
@@ -29,6 +32,7 @@ type BooleanOption =
   | "yes";
 type StringOption =
   | "adminEmail"
+  | "adminPassword"
   | "backupDir"
   | "domain"
   | "exportPlan"
@@ -56,6 +60,7 @@ type StringOption =
 
 const booleanFlags = new Map<string, BooleanOption>([
   ["--ascii", "ascii"],
+  ["--bootstrap-panel", "bootstrapPanel"],
   ["--compact", "compact"],
   ["--dry-run", "dryRun"],
   ["--headless-json", "headlessJson"],
@@ -75,6 +80,7 @@ const booleanFlags = new Map<string, BooleanOption>([
 
 const stringFlags = new Map<string, StringOption>([
   ["--admin-email", "adminEmail"],
+  ["--admin-password", "adminPassword"],
   ["--backup-dir", "backupDir"],
   ["--monitor-email", "monitorEmail"],
   ["--monitor-webhook", "monitorWebhook"],
@@ -150,6 +156,12 @@ export function parseArgs(argv: string[]): InstallerOptions {
       continue;
     }
 
+    if (arg === "--access") {
+      options.access = parseAccess(requireValue(argv, index, arg));
+      index += 1;
+      continue;
+    }
+
     if (arg === "--backup-schedule") {
       options.backupSchedule = parseSchedule(requireValue(argv, index, arg));
       index += 1;
@@ -174,6 +186,14 @@ function parseMode(value: string): InstallMode {
   const mode = INSTALL_MODES.find((candidate) => candidate === value);
   if (!mode) {
     throw new Error(`Invalid --mode value: ${value}. Allowed: ${INSTALL_MODES.join(", ")}.`);
+  }
+  return mode;
+}
+
+function parseAccess(value: string): PanelAccessMode {
+  const mode = PANEL_ACCESS_MODES.find((candidate) => candidate === value);
+  if (!mode) {
+    throw new Error(`Invalid --access value: ${value}`);
   }
   return mode;
 }

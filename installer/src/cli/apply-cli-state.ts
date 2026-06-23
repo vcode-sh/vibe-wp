@@ -61,6 +61,14 @@ export function applyCliState(state: InstallerState, options: InstallerOptions):
     state.adminEmail = options.adminEmail;
   }
 
+  if (options.access) {
+    state.panelAccessMode = options.access;
+  }
+
+  if (options.adminPassword) {
+    state.adminPassword = options.adminPassword;
+  }
+
   applyExternalServices(state, options);
   applyPerfOverrides(state, options);
   applyBackup(state, options);

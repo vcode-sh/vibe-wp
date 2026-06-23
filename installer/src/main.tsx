@@ -97,6 +97,9 @@ async function main() {
   if (options.purge) {
     state.fullDelete = true;
   }
+  if (options.bootstrapPanel) {
+    state.mode = "panel-bootstrap";
+  }
   applyCliState(state, options);
 
   const plan = buildInstallPlan(state);

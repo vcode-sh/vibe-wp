@@ -12,6 +12,10 @@ Usage:
   echo '<json>' | vibe-wp-installer --headless-json
 
 Options:
+  --bootstrap-panel      Bootstrap the control panel on a bare server
+  --access domain|magic-dns|ip-port|localhost
+                         How the control panel is reached (default: magic-dns)
+  --admin-password P     Control panel owner password (never printed/logged)
   --resume               Skip steps already completed in a previous --headless run
   --support-bundle <dir> Write a redacted diagnostics bundle (host, journal, plan)
   --no-harden            Skip server hardening; --no-monitor skips the health timer
@@ -20,7 +24,7 @@ Options:
   --staging-domain <h>   Staging domain (enables staging)
   --mode <mode>          Install mode: new-site, manage-existing,
                          remove-existing, update-existing, staging-only,
-                         external-services
+                         external-services, panel-bootstrap
   --install-dir <path>   Install directory, default /opt/vibe-wp
   --repo <url>           Vibe WP git repository
   --ref <ref>            Git branch or tag, default main

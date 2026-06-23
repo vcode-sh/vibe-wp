@@ -50,4 +50,14 @@ describe("parseArgs", () => {
   test("rejects an invalid mode", () => {
     expect(() => parseArgs(["--mode", "foo"])).toThrow("Invalid --mode value: foo");
   });
+
+  test("parses --bootstrap-panel and --access", () => {
+    const o = parseArgs(["--bootstrap-panel", "--access", "magic-dns", "--admin-email", "a@b.c"]);
+    expect(o.bootstrapPanel).toBe(true);
+    expect(o.access).toBe("magic-dns");
+  });
+
+  test("rejects an invalid --access value", () => {
+    expect(() => parseArgs(["--access", "nope"])).toThrow("Invalid --access value: nope");
+  });
 });

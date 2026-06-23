@@ -106,6 +106,23 @@ test("runHeadlessRunPlan emits a start+result per task in order and returns the 
   }
 });
 
+test("builds a panel-bootstrap plan", async () => {
+  const host = { ...defaultState().host, sudo: true, publicIp: "203.0.113.7" };
+  const state = defaultState(host);
+  state.mode = "panel-bootstrap";
+  state.panelAccessMode = "magic-dns";
+  state.adminEmail = "you@acme.com";
+  state.adminPassword = "supersecret";
+  state.installDocker = true;
+  state.installCaddy = true;
+  state.installBun = true;
+  const res = await runHeadless({ kind: "panelBootstrapPlan", state });
+  if (res.kind !== "plan") {
+    throw new Error(`expected plan, got ${res.kind}`);
+  }
+  expect(res.plan.tasks.map((t) => t.id)).toContain("panel-install");
+});
+
 test("non-runPlan kinds each emit exactly one parseable JSON response", async () => {
   // The CLI prints runHeadless's response as ONE pretty JSON for every non-runPlan
   // kind; assert each is a single JSON.parse-able document (no NDJSON framing).
