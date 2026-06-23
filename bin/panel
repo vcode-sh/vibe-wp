@@ -32,11 +32,14 @@ DOMAIN=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 RESET_EMAIL=""
+ACCESS_MODE=""
 PASSWORD_STDIN=0
 YES=0
 PURGE=0
 LOGS_FOLLOW=0
 LOGS_LINES=200
+
+die() { echo "panel: $1" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -44,6 +47,7 @@ while [ $# -gt 0 ]; do
     --admin-email)    ADMIN_EMAIL="$2";    shift 2 ;;
     --admin-password) ADMIN_PASSWORD="$2"; shift 2 ;;
     --email)          RESET_EMAIL="$2";    shift 2 ;;
+    --access)         ACCESS_MODE="$2";    shift 2 ;;
     --password-stdin) PASSWORD_STDIN=1;    shift ;;
     --yes)            YES=1;               shift ;;
     --port)           PORT="$2";           shift 2 ;;
@@ -61,6 +65,52 @@ installer_arch() {
     x86_64|amd64) echo "x64" ;;
     aarch64|arm64) echo "arm64" ;;
     *) echo "unsupported arch: $m" >&2; return 1 ;;
+  esac
+}
+
+# Detect the server's public IPv4 (best-effort; empty on failure).
+detect_public_ip() {
+  curl -fsS https://api.ipify.org 2>/dev/null || true
+}
+
+# Resolve all access-dependent values from (ACCESS_MODE, DOMAIN, PORT).
+# Sets: ACCESS_MODE ACCESS_HOST ACCESS_ORIGIN CADDY_SITE_ADDRESS CADDY_TLS_LINE
+# Default mode: magic-dns when no --domain/--access given, else domain.
+resolve_access() {
+  if [ -z "$ACCESS_MODE" ]; then
+    if [ -n "$DOMAIN" ]; then ACCESS_MODE=domain; else ACCESS_MODE=magic-dns; fi
+  fi
+  CADDY_TLS_LINE=""
+  case "$ACCESS_MODE" in
+    domain)
+      [ -n "$DOMAIN" ] || die "access mode 'domain' requires --domain"
+      ACCESS_HOST="$DOMAIN"
+      ACCESS_ORIGIN="https://$DOMAIN"
+      CADDY_SITE_ADDRESS="$DOMAIN"
+      ;;
+    magic-dns)
+      ip="$(detect_public_ip)"
+      [ -n "$ip" ] || die "magic-dns needs a detectable public IP (none found)"
+      dashed="$(printf '%s' "$ip" | tr '.' '-')"
+      ACCESS_HOST="panel.$dashed.sslip.io"
+      ACCESS_ORIGIN="https://$ACCESS_HOST"
+      CADDY_SITE_ADDRESS="$ACCESS_HOST"
+      ;;
+    ip-port)
+      ip="$(detect_public_ip)"
+      [ -n "$ip" ] || die "ip-port needs a detectable public IP (none found)"
+      ACCESS_HOST="$ip"
+      ACCESS_ORIGIN="https://$ip:8443"
+      CADDY_SITE_ADDRESS="$ip:8443"
+      CADDY_TLS_LINE="$(printf '\ttls internal')"
+      ;;
+    localhost)
+      ACCESS_HOST="localhost"
+      ACCESS_ORIGIN="https://localhost:8443"
+      CADDY_SITE_ADDRESS="localhost:8443"
+      CADDY_TLS_LINE="$(printf '\ttls internal')"
+      ;;
+    *) die "invalid --access mode: $ACCESS_MODE (use domain|magic-dns|ip-port|localhost)" ;;
   esac
 }
 
@@ -250,7 +300,20 @@ WantedBy=multi-user.target"
 }
 
 install_panel() {
-  [ -n "$DOMAIN" ] || { printf 'Subdomain for the panel: '; read -r DOMAIN; }
+  # Establish the access-mode default before deciding whether to prompt for a domain.
+  if [ -z "$ACCESS_MODE" ]; then
+    if [ -n "$DOMAIN" ]; then ACCESS_MODE=domain; else ACCESS_MODE=magic-dns; fi
+  fi
+  # Only 'domain' mode needs a subdomain; prompt when interactive and unset.
+  if [ "$ACCESS_MODE" = domain ] && [ -z "$DOMAIN" ]; then
+    printf 'Subdomain for the panel: '; read -r DOMAIN
+  fi
+  resolve_access
+  if [ "${VIBE_PANEL_PRINT_ACCESS:-}" = "1" ]; then
+    printf 'mode=%s\nhost=%s\norigin=%s\ncaddy_addr=%s\ncaddy_tls=%s\n' \
+      "$ACCESS_MODE" "$ACCESS_HOST" "$ACCESS_ORIGIN" "$CADDY_SITE_ADDRESS" "$CADDY_TLS_LINE"
+    return 0
+  fi
   [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
 
   # Bun preflight
