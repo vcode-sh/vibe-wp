@@ -74,6 +74,9 @@ need_command curl
 need_command awk
 need_command sed
 need_command uname
+need_command git
+
+if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
 os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch_name=$(uname -m | tr '[:upper:]' '[:lower:]')
@@ -174,6 +177,15 @@ echo "Verified: $actual_sha" >&2
 if [ "${VIBE_WP_INSTALLER_NO_EXEC:-}" = "1" ]; then
   echo "Downloaded and verified only: $binary_path" >&2
   exit 0
+fi
+
+VIBE_REPO_DIR="${VIBE_WP_REPO_DIR:-/opt/vibe-wp}"
+VIBE_REPO_URL="${VIBE_WP_REPO_URL:-https://github.com/vcode-sh/vibe-wp.git}"
+if [ ! -d "$VIBE_REPO_DIR/.git" ]; then
+  echo "Cloning Vibe WP to $VIBE_REPO_DIR ..." >&2
+  $SUDO git clone --depth 1 "$VIBE_REPO_URL" "$VIBE_REPO_DIR"
+else
+  $SUDO git -C "$VIBE_REPO_DIR" pull --ff-only >/dev/null 2>&1 || true
 fi
 
 eval "set -- $forward_args"
