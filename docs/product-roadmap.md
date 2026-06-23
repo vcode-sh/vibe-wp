@@ -1,5 +1,7 @@
 # Vibe WP — Product Roadmap
 
+> **⚠️ Superseded (2026-06-23):** this 2026-06-20 snapshot predates the entire control-panel backend, the one-command bootstrap, the user-manager, and the feature-wave planning. For the current status + the next-task roadmap, see **`docs/superpowers/ROADMAP.md`**. The vision/principles below remain useful context.
+
 Status: Living document. Last updated 2026-06-20.
 
 ## Vision

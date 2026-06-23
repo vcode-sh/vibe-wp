@@ -59,7 +59,9 @@ Three roles are defined via the admin plugin + access control: `viewer` (read si
 ./bin/panel install --domain panel.yourdomain.com --admin-email you@example.com
 ```
 
-It: installs Bun if absent, builds `control-panel/`, writes `server/.env` with a generated secret, applies the DB schema, creates a `vibe-panel` system user (added to the `docker` group), writes a `vibe-wp-panel.service` systemd unit, drops a Caddy snippet so the panel is served over HTTPS, and bootstraps the owner account. After install, `bin/panel status` and `bin/panel uninstall [--purge]` are available.
+It: installs Bun if absent, builds `control-panel/`, writes `server/.env` with a generated secret, applies the DB schema, creates a least-privilege `vibe-panel` system user that reaches the host **only** through the root-owned, sudoers-gated `bin/vibe-panel-run` wrapper (a fixed op/arg allowlist — never broad host access), runs the `vibe-wp-panel.service` systemd unit **as `vibe-panel`**, drops a Caddy snippet so the panel is served over HTTPS, and bootstraps the owner account. After install, `bin/panel status` and `bin/panel uninstall [--purge]` are available.
+
+No domain? `--access magic-dns` (default when no `--domain`) serves the panel over a real Let's Encrypt cert on `panel.<ip-dashed>.sslip.io`; `--access ip-port` falls back to `https://<ip>:8443` (self-signed). On a bare VPS, the installer's "Set up your control panel" flow installs Docker/Caddy/Bun and runs this for you (`curl -fsSL https://wp.vcode.sh/install.sh | sh`).
 
 For break-glass account recovery on the VPS, reset a panel user's password over
 SSH instead of using email delivery:
@@ -76,7 +78,7 @@ user's existing sessions. For automation, pipe the secret on stdin:
 printf '%s\n' "$NEW_PANEL_PASSWORD" | ./bin/panel reset-password --email you@example.com --password-stdin --yes
 ```
 
-Real-VPS end-to-end validation (browser sign-in → live sites → real backup stream via SSE) is pending as of 2026-06-21.
+Real-VPS end-to-end validation is **complete** (2026-06-23): magic-DNS install with a real Let's Encrypt cert, off-root `vibe-panel` service, owner sign-in + session, host ops through the wrapper, and site detection — all verified on live hardware. See `docs/superpowers/ROADMAP.md` for the full status + the next feature wave.
 
 ## Getting Started
 

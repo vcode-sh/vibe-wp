@@ -57,9 +57,9 @@ const controlCapabilities = [
 	},
 	{
 		name: "Dedicated-user hardening",
-		status: "planned",
+		status: "shipped",
 		detail:
-			"Run the panel under a least-privilege host user with a narrowed sudo allowlist instead of broad host access.",
+			"The panel runs under the least-privilege vibe-panel host user and reaches the host only through the root-owned, sudoers-gated vibe-panel-run wrapper (a fixed op/arg allowlist), never broad host access.",
 	},
 	{
 		name: "Single-binary distribution",
