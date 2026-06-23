@@ -12,6 +12,7 @@ export const env = createEnv({
 			.enum(["development", "production", "test"])
 			.default("development"),
 		PANEL_SITES_ROOTS: z.string().default("/opt:/srv"),
+		PANEL_HOST_DIR: z.string().default("/opt/vibe-wp"),
 		PANEL_VPS_LABEL: z.string().optional(),
 		PANEL_INSTALLER_BIN: z
 			.string()
