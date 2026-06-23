@@ -10,6 +10,7 @@
     }
   },
   "scripts": {
+    "test": "vitest run",
     "db:local": "turso dev --db-file local.db",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@control-panel/config": "workspace:*",
     "drizzle-kit": "^0.31.10",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
   }
 }
