@@ -8,7 +8,7 @@ import {
 } from "./site-profile";
 import type { HostFacts, InstallerState, PerformancePreset } from "./types";
 
-export const INSTALLER_VERSION = "0.1.2";
+export const INSTALLER_VERSION = "0.1.3";
 
 export function emptyHostFacts(): HostFacts {
   return {
