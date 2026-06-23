@@ -82,3 +82,8 @@ test("external-services reveals the connection screens and omits staging", () =>
   expect(ids).toContain("external-redis");
   expect(ids).not.toContain("staging");
 });
+
+test("panel-bootstrap flow is panel-first and skips site/domain config", () => {
+  const ids = visibleSteps("panel-bootstrap").map((step) => step.id);
+  expect(ids).toEqual(["welcome", "panel", "review", "execute", "success"]);
+});

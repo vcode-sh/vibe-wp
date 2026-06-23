@@ -3,6 +3,11 @@ import type { BackupPolicy, InstallerState } from "../core/types";
 
 // Steps with a dynamic focusable count grow with the user's choices.
 export function focusCountFor(step: Step, state: InstallerState): number {
+  if (step.id === "panel") {
+    // access-mode selector + owner email + owner password + Continue = 4 base;
+    // domain field adds 1 when access mode is "domain".
+    return state.panelAccessMode === "domain" ? 5 : 4;
+  }
   if (step.id === "performance" && state.performanceCustom) {
     return 3 + PERFORMANCE_FIELDS.length;
   }
@@ -30,6 +35,7 @@ export type StepId =
   | "external-redis"
   | "mode"
   | "admin"
+  | "panel"
   | "performance"
   | "ai"
   | "backup"
@@ -82,6 +88,12 @@ export const steps: Step[] = [
     focusCount: 5,
     title: "Admin",
     help: "Creates the first WordPress administrator with generated secrets."
+  },
+  {
+    id: "panel",
+    focusCount: 4,
+    title: "Control panel",
+    help: "Where the panel lives + your owner login."
   },
   {
     id: "staging",

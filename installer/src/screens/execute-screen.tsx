@@ -9,6 +9,7 @@ import { ProgressBar, Spinner } from "../components/spinner";
 import { runPlan } from "../core/plan-runner";
 import type { TaskResult } from "../core/task-runner";
 import {
+  confirmationPhraseFor,
   type ExecuteStatus,
   executionTitle,
   primaryLabel,
@@ -46,7 +47,7 @@ export function ExecuteScreen({
     return () => clearInterval(id);
   }, [status]);
   const lines = executionLines.length > 12 ? executionLines.slice(-12) : executionLines;
-  const confirmationPhrase = `INSTALL ${state.productionDomain.trim().toLowerCase()}`;
+  const confirmationPhrase = confirmationPhraseFor(state);
   const confirmationAccepted =
     options.yes || confirmation.trim().toLowerCase() === confirmationPhrase.toLowerCase();
   const failed = results.find((result) => result.status === "failed");

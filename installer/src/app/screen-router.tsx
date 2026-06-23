@@ -5,6 +5,7 @@ import { DomainScreen } from "../screens/domain-screen";
 import { ExecuteScreen } from "../screens/execute-screen";
 import { ExternalDbScreen, ExternalRedisScreen } from "../screens/external-screens";
 import { MonitoringScreen } from "../screens/monitoring-screen";
+import { PanelScreen } from "../screens/panel-screen";
 import { PerformanceScreen } from "../screens/performance-screen";
 import { ReviewScreen, SuccessScreen } from "../screens/review-screens";
 import { AdminScreen, ModeScreen, SystemScreen } from "../screens/setup-screens";
@@ -26,6 +27,8 @@ export function renderScreen(props: ScreenProps) {
       return <DomainScreen {...props} />;
     case "mode":
       return <ModeScreen {...props} />;
+    case "panel":
+      return <PanelScreen {...props} />;
     case "admin":
       return <AdminScreen {...props} />;
     case "performance":

@@ -15,8 +15,37 @@ const FEATURES = [
   "Smoke tests"
 ];
 
-export function WelcomeScreen({ state, next }: ScreenProps) {
+export function WelcomeScreen({ state, update, next }: ScreenProps) {
   const siteCount = state.host.existingSites.length;
+  const bare = siteCount === 0 && !state.host.docker && !state.host.caddy;
+
+  function ctaLabel(): string {
+    if (siteCount > 0) {
+      return "Open control panel";
+    }
+    if (bare) {
+      return "Set up your control panel";
+    }
+    return "Start guided install";
+  }
+
+  function subtitleText(): string {
+    if (siteCount > 0) {
+      return `${siteCount} site(s) on this server — open the panel to manage them or add another.`;
+    }
+    if (bare) {
+      return "Bare server detected — we'll install Docker, Caddy and the control panel for you.";
+    }
+    return "Before you start: have a domain ready and pointed at this server's IP.";
+  }
+
+  function handlePrimary() {
+    if (bare) {
+      update("mode", "panel-bootstrap");
+    }
+    next();
+  }
+
   return (
     <box alignItems="center" flexDirection="column" flexGrow={1} gap={1} justifyContent="center">
       <Banner />
@@ -37,15 +66,11 @@ export function WelcomeScreen({ state, next }: ScreenProps) {
         />
       </box>
       <FeatureStrip />
-      <text fg={color("subtle")}>
-        {siteCount > 0
-          ? `${siteCount} site(s) on this server — open the panel to manage them or add another.`
-          : "Before you start: have a domain ready and pointed at this server's IP."}
-      </text>
+      <text fg={color("subtle")}>{subtitleText()}</text>
       <box paddingY={1}>
         <ActionRow
-          onPrimary={next}
-          primary={siteCount > 0 ? "Open control panel" : "Start guided install"}
+          onPrimary={handlePrimary}
+          primary={ctaLabel()}
           secondary="Nothing privileged runs until review"
         />
       </box>

@@ -56,12 +56,14 @@ const EXTERNAL: StepId[] = [
   "success"
 ];
 
-function visibleStepIds(mode: InstallMode, quickInstall: boolean): StepId[] {
+export function visibleStepIds(mode: InstallMode, quickInstall: boolean): StepId[] {
   switch (mode) {
     case "external-services":
       return EXTERNAL;
     case "manage-existing":
       return ["welcome", "sites", "dashboard"];
+    case "panel-bootstrap":
+      return ["welcome", "panel", "review", "execute", "success"];
     case "remove-existing":
       return ["welcome", "sites", "review", "execute", "success"];
     case "update-existing":

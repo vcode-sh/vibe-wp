@@ -12,6 +12,7 @@ const STEP_KIND: Record<StepId, StepKind> = {
   domain: "mixed",
   mode: "fields",
   admin: "fields",
+  panel: "mixed",
   performance: "choice",
   ai: "fields",
   backup: "choice",

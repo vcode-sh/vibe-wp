@@ -1,7 +1,18 @@
 import { color } from "../app/theme";
 import type { TaskResult } from "../core/task-runner";
+import type { InstallerState } from "../core/types";
 
 export type ExecuteStatus = "idle" | "running" | "done" | "failed";
+
+// Returns the phrase the user must type to confirm execution.
+// For panel-bootstrap, a stable phrase is used (no domain is required).
+// --yes / headless mode bypasses this entirely.
+export function confirmationPhraseFor(state: InstallerState): string {
+  if (state.mode === "panel-bootstrap") {
+    return "INSTALL PANEL";
+  }
+  return `INSTALL ${state.productionDomain.trim().toLowerCase()}`;
+}
 
 export function executionTitle(status: ExecuteStatus, validationCount: number): string {
   if (validationCount > 0) {
