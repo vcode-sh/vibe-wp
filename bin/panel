@@ -15,7 +15,7 @@ if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
 usage() {
   echo "Usage: bin/panel <install|update|status|logs|reset-password|uninstall> [options]"
   echo ""
-  echo "  install    --domain d --admin-email e [--port N] [--admin-password P]"
+  echo "  install    --admin-email e [--access domain|magic-dns|ip-port|localhost] [--domain d] [--port N] [--admin-password P]"
   echo "  update     Rebuild + redeploy the panel from the current repo checkout"
   echo "  status     Show systemd service status"
   echo "  logs       Tail panel service logs  [-n N] [-f]"
@@ -322,6 +322,8 @@ install_panel() {
     curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
   fi
   BUN="$(command -v bun || echo /usr/local/bin/bun)"
+
+  command -v caddy >/dev/null 2>&1 || die "Caddy is not installed. Install Caddy first (the bootstrap installer does this), then re-run."
 
   # DNS preflight
   ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
