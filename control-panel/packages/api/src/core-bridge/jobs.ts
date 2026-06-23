@@ -10,6 +10,9 @@ import type { persistJobFinish, persistJobStart, writeAudit } from "./jobs-db";
 import { LineStream } from "./line-stream";
 import type { DetectedSite } from "./sites";
 
+/** Sentinel siteId that resolves to the host-level PANEL_HOST_DIR checkout. */
+const SERVER_SITE_ID = "server";
+
 interface JobEntry {
 	job: Job;
 	proc: { kill: () => void };
@@ -203,10 +206,24 @@ export async function startJob(
 	deps?: JobDeps
 ): Promise<{ jobId: string }> {
 	const d = deps ?? (await getRealDeps());
-	const site = await d.findSite(input.siteId);
-	if (!site) {
-		throw new Error("Unknown site");
+
+	// Resolve the working directory. The sentinel siteId "server" maps to the
+	// host-level PANEL_HOST_DIR checkout so host ops (e.g. harden) can run
+	// without a provisioned site. All other siteIds resolve via findSite.
+	let workDir: string;
+	if (input.siteId === SERVER_SITE_ID) {
+		// Lazy-import env so tests that mock the env module are not broken by a
+		// top-level static import.
+		const { env } = await import("@control-panel/env/server");
+		workDir = env.PANEL_HOST_DIR;
+	} else {
+		const site = await d.findSite(input.siteId);
+		if (!site) {
+			throw new Error("Unknown site");
+		}
+		workDir = site.installDir;
 	}
+
 	if (hasRunningJob(input.siteId, input.kind)) {
 		throw new Error(
 			"An operation of this type is already running for this site."
@@ -220,7 +237,7 @@ export async function startJob(
 			userId: input.userId,
 		},
 		() =>
-			d.streamVibe(site.installDir, input.env, input.op, {
+			d.streamVibe(workDir, input.env, input.op, {
 				args: input.args,
 				timeoutMs: STREAM_TIMEOUT_MS,
 				env: input.extraEnv,

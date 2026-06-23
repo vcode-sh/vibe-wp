@@ -1,5 +1,4 @@
 import { env } from "@control-panel/env/server";
-import { ORPCError } from "@orpc/server";
 
 import type { SecurityStatus, ServerInfo } from "../contract";
 import { hostExec, runVibe } from "../core-bridge/exec";
@@ -42,7 +41,8 @@ export const serverRouter = {
 		const sites = await detectSites();
 		const site = sites[0];
 		if (!site) {
-			throw new ORPCError("NOT_FOUND");
+			// No sites yet — return an empty-checks result (nothing running to check).
+			return parseSmoke("");
 		}
 		return parseSmoke(
 			(await runVibe(site.installDir, "prod", "doctorRuntime")).stdout
@@ -51,30 +51,19 @@ export const serverRouter = {
 
 	securityStatus: protectedProcedure.handler(
 		async (): Promise<SecurityStatus> => {
-			// Host-level check; any site's bin/vibe reaches the same host script.
-			const sites = await detectSites();
-			const site = sites[0];
-			if (!site) {
-				throw new ORPCError("NOT_FOUND");
-			}
-			const { stdout } = await runVibe(
-				site.installDir,
-				"prod",
-				"securityStatus"
-			);
+			// Host-level check; runs against the canonical PANEL_HOST_DIR checkout,
+			// not a per-site dir — so it works with zero sites.
+			const { stdout } = await runVibe(env.PANEL_HOST_DIR, "prod", "securityStatus");
 			return parseSecurityStatus(stdout);
 		}
 	),
 
 	serverHarden: adminProcedure.handler(async ({ context }) => {
-		const sites = await detectSites();
-		const site = sites[0];
-		if (!site) {
-			throw new ORPCError("NOT_FOUND");
-		}
+		// Host-level hardening runs against PANEL_HOST_DIR (siteId "server" maps
+		// to env.PANEL_HOST_DIR inside startJob).
 		return startJob({
 			op: "harden",
-			siteId: site.id,
+			siteId: "server",
 			env: "prod",
 			kind: "harden",
 			userId: context.session.user.id,
