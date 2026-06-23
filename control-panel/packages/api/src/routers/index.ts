@@ -10,11 +10,13 @@ import { operationsRouter } from "./operations";
 import { provisioningRouter } from "./provisioning";
 import { serverRouter } from "./server";
 import { settingsRouter } from "./settings";
+import { setupRouter } from "./setup";
 import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
 import { updatesRouter } from "./updates";
 
 export const appRouter = {
+	...setupRouter,
 	...healthRouter,
 	...controlOverviewRouter,
 	...lifecycleRouter,
