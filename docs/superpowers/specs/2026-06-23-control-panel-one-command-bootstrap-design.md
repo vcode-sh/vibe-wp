@@ -26,7 +26,7 @@ This spec closes those seams for a **panel-first** bootstrap: one command stands
   - **Tier 3 (Custom)** — localhost-only + SSH tunnel, for the security-conscious.
 - **The one command always ends at a working HTTPS sign-in URL.** Admin credentials never travel over plaintext; HTTPS is mandatory in every tier.
 - **Canonical checkout at `/opt/vibe-wp`.** The bootstrap clones the repo there so the panel deploy and host-level ops have source on disk; this aligns with the existing `bin/panel update` (git pull + rebuild). The deployed app stays at `/opt/vibe-wp-panel`.
-- **Off-root hardening is out of scope here** (separate "harden" thread). This bootstrap inherits the current root-run posture; the exec allowlist remains the primary control. Flagged as the recommended immediate follow-on (§10).
+- **Off-root hardening already landed** (correction to the original audit snapshot, verified 2026-06-23): `bin/panel` already runs the service as a least-privilege `vibe-panel` user behind a root-owned, sudoers-gated wrapper (`bin/vibe-panel-run`) with a per-op `env_keep` allowlist; registration is already closed (the better-auth `create.before` hook) and cookies are already `sameSite: "lax"`. This bootstrap **builds on** that posture rather than introducing it. The one remaining auth gap is the **first-admin race** (still a read-then-write in `packages/auth/src/index.ts`) plus the guarded browser owner screen (§6).
 
 ## 3. Architecture & one-command flow
 
@@ -113,8 +113,8 @@ The exec layer keeps its allowlist + argv-array + redaction guarantees for the h
 
 - **HTTPS in every tier** — no plaintext admin login (Tier 1 real cert, Tier 2 self-signed, Tier 3 tunnel).
 - Login-gated, rate-limited (5/10s on sign-in), origin-checked CSRF (`trustedOrigins` includes the resolved access origin), public route gated on owner-exists.
-- **The panel still runs as root in this thread.** The dedicated least-privilege `vibe-panel` user + scoped sudoers (`bin/vibe-panel-run`) described in the backend-install design (§8) is **not** built here. A public one-command installer is exactly where this matters most, so it is the **recommended immediate follow-on** after this thread. The exec command allowlist remains the primary control until then.
-- A public admin panel on a guessable URL is an attack surface; the Done screen should nudge toward a real domain and (later) the off-root hardening, and Tier 3 remains available for the cautious.
+- **Off-root privilege boundary is already in place** (verified 2026-06-23): the service runs as `vibe-panel`, and every host op flows through the root-owned, sudoers-gated `bin/vibe-panel-run` wrapper, which re-validates op/args/site-dir against a fixed allowlist and asserts the exec target is root-owned. This bootstrap must **preserve** that boundary — in particular, any new host-level path (zero-site server ops, §7) must route through the wrapper, not bypass it. The remaining hardening item is the **first-admin race** (§6), which this thread closes.
+- A public admin panel on a guessable URL is still an attack surface; the Done screen should nudge toward a real domain, and Tier 3 (localhost-only) remains available for the cautious.
 
 ## 11. Scope / out of scope
 
