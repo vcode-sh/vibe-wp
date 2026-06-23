@@ -220,7 +220,7 @@ deploy_panel() {
   install_runner_and_sudoers
 
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
-  printf 'VITE_SERVER_URL=https://%s\n' "$DOMAIN" > "$REPO_DIR/control-panel/web/.env"
+  printf 'VITE_SERVER_URL=%s\n' "$ACCESS_ORIGIN" > "$REPO_DIR/control-panel/web/.env"
   ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build )
   $SUDO rm -rf "$PANEL_DIR/app"
   $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
@@ -234,8 +234,8 @@ deploy_panel() {
   ( umask 077 && printf '%s\n' \
     "DATABASE_URL=file:$PANEL_DIR/data/panel.db" \
     "BETTER_AUTH_SECRET=$SECRET" \
-    "BETTER_AUTH_URL=https://$DOMAIN" \
-    "CORS_ORIGIN=https://$DOMAIN" \
+    "BETTER_AUTH_URL=$ACCESS_ORIGIN" \
+    "CORS_ORIGIN=$ACCESS_ORIGIN" \
     "NODE_ENV=production" \
     "PANEL_SITES_ROOTS=/opt:/srv" \
     "PANEL_INSTALLER_BIN=$PANEL_DIR/bin/vibe-wp-installer" \
@@ -401,7 +401,8 @@ update_panel() {
 
   # Source domain, secret, and port from the existing env — no re-prompting.
   # BETTER_AUTH_SECRET must be read BEFORE rm -rf "$PANEL_DIR/app" in deploy_panel.
-  DOMAIN="$($SUDO grep -m1 '^BETTER_AUTH_URL=' "$env_file" 2>/dev/null | cut -d= -f2- | sed 's|https://||' || true)"
+  ACCESS_ORIGIN="$($SUDO grep -m1 '^BETTER_AUTH_URL=' "$env_file" 2>/dev/null | cut -d= -f2- || true)"
+  DOMAIN="$(printf '%s' "$ACCESS_ORIGIN" | sed -e 's|^https://||' -e 's|:.*$||')"
   SECRET="$($SUDO grep -m1 '^BETTER_AUTH_SECRET=' "$env_file" 2>/dev/null | cut -d= -f2- || true)"
   existing_port="$($SUDO grep -m1 '^Environment=PORT=' /etc/systemd/system/$UNIT.service 2>/dev/null | cut -d= -f3 || true)"
   [ -n "$existing_port" ] && PORT="$existing_port"
