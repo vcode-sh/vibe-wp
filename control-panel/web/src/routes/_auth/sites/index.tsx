@@ -109,12 +109,12 @@ function SiteGrid({
 	if (sites && sites.length === 0) {
 		return (
 			<div className="rounded-lg border border-border border-dashed p-10 text-center">
-				<p className="font-medium">No sites yet</p>
+				<p className="font-medium">Create your first site</p>
 				<p className="mt-1 text-muted-foreground text-sm">
-					Create your first Vibe WP site to get started.
+					Your server is ready. Launch your first WordPress site to get started.
 				</p>
 				<Button className="mt-4" onClick={onCreate}>
-					<Plus className="size-4" /> New site
+					<Plus className="size-4" /> Create your first site
 				</Button>
 			</div>
 		);

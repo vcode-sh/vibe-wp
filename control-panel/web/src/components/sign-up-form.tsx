@@ -12,8 +12,10 @@ import { Loader } from "./loader";
 
 export function SignUpForm({
 	onSwitchToSignIn,
+	ownerSetup = false,
 }: {
-	onSwitchToSignIn: () => void;
+	onSwitchToSignIn?: () => void;
+	ownerSetup?: boolean;
 }) {
 	const navigate = useNavigate({
 		from: "/login",
@@ -62,10 +64,12 @@ export function SignUpForm({
 	return (
 		<div className="w-full max-w-md p-6">
 			<h1 className="mb-2 text-center font-semibold text-2xl">
-				Create a control account
+				{ownerSetup ? "Create owner account" : "Create a control account"}
 			</h1>
 			<p className="mb-6 text-center text-muted-foreground text-sm">
-				This account is local to the Vibe WP control panel.
+				{ownerSetup
+					? "This is the first account — it becomes the panel owner."
+					: "This account is local to the Vibe WP control panel."}
 			</p>
 
 			<form
@@ -162,15 +166,17 @@ export function SignUpForm({
 				</form.Subscribe>
 			</form>
 
-			<div className="mt-4 text-center">
-				<Button
-					className="text-muted-foreground"
-					onClick={onSwitchToSignIn}
-					variant="link"
-				>
-					Already have an account? Sign in
-				</Button>
-			</div>
+			{!ownerSetup && onSwitchToSignIn && (
+				<div className="mt-4 text-center">
+					<Button
+						className="text-muted-foreground"
+						onClick={onSwitchToSignIn}
+						variant="link"
+					>
+						Already have an account? Sign in
+					</Button>
+				</div>
+			)}
 		</div>
 	);
 }

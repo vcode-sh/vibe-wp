@@ -13,7 +13,7 @@ import { Loader } from "./loader";
 export function SignInForm({
 	onSwitchToSignUp,
 }: {
-	onSwitchToSignUp: () => void;
+	onSwitchToSignUp?: () => void;
 }) {
 	const navigate = useNavigate({
 		from: "/login",
@@ -137,15 +137,17 @@ export function SignInForm({
 				</form.Subscribe>
 			</form>
 
-			<div className="mt-4 text-center">
-				<Button
-					className="text-muted-foreground"
-					onClick={onSwitchToSignUp}
-					variant="link"
-				>
-					Need an account? Create one
-				</Button>
-			</div>
+			{onSwitchToSignUp && (
+				<div className="mt-4 text-center">
+					<Button
+						className="text-muted-foreground"
+						onClick={onSwitchToSignUp}
+						variant="link"
+					>
+						Need an account? Create one
+					</Button>
+				</div>
+			)}
 		</div>
 	);
 }
