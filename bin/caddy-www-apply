@@ -179,7 +179,12 @@ if command -v caddy >/dev/null 2>&1; then
     exit 1
   fi
 else
-  echo "caddy-www-apply: caddy not installed; wrote ${snippet} without reload" >&2
+  # This op exists to validate + hot-reload Caddy. With no caddy binary we can do
+  # neither, so refuse rather than persist an unvalidated, un-applied edit that
+  # reports success: roll back and fail.
+  echo "caddy-www-apply: caddy not installed — cannot validate/reload; rolling back ${snippet}" >&2
+  restore_snippet
+  exit 1
 fi
 
 ${SUDO} rm -f "${backup}" 2>/dev/null || true

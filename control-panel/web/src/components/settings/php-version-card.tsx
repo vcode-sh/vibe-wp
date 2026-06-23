@@ -48,7 +48,10 @@ export function PhpVersionCard({
 	);
 	const phpSet = useMutation(orpc.sitePhpImageSet.mutationOptions());
 	const rebuild = useMutation(orpc.lifecycleUp.mutationOptions());
-	const changed = image !== currentImage;
+	// Only "changed" when we actually read the current image (known). If the env
+	// read failed (currentImage empty/unknown), keep the action disabled so we
+	// never trigger a surprise rebuild against a misreported current version.
+	const changed = known && image !== currentImage;
 
 	async function triggerRebuild() {
 		try {

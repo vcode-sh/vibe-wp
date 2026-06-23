@@ -110,13 +110,21 @@ export function streamProvision(
 			...o,
 			signal,
 		});
-		for await (const event of stream.events) {
-			yield progressLine(event);
+		// Always observe stream.result. If the events generator throws (e.g. the
+		// signal is already aborted when the loop first iterates, which rejects
+		// result before any event is yielded), the for-await propagates that throw
+		// and would otherwise leave result's rejection unhandled.
+		try {
+			for await (const event of stream.events) {
+				yield progressLine(event);
+			}
+			const final = await stream.result;
+			const ok = finalOk(final);
+			yield ok ? "Provision complete." : "Provision failed.";
+			exitResolve(ok ? 0 : 1);
+		} finally {
+			stream.result.catch(() => undefined);
 		}
-		const final = await stream.result;
-		const ok = finalOk(final);
-		yield ok ? "Provision complete." : "Provision failed.";
-		exitResolve(ok ? 0 : 1);
 	}
 	const proc = {
 		exited,
