@@ -16,6 +16,7 @@ usage() {
   echo "Usage: bin/panel <install|update|status|logs|reset-password|uninstall> [options]"
   echo ""
   echo "  install    --admin-email e [--access domain|magic-dns|ip-port|localhost] [--domain d] [--port N] [--admin-password P]"
+  echo "             Env: VIBE_PANEL_ADMIN_PASSWORD — supply the owner password without exposing it in argv/ps"
   echo "  update     Rebuild + redeploy the panel from the current repo checkout"
   echo "  status     Show systemd service status"
   echo "  logs       Tail panel service logs  [-n N] [-f]"
@@ -371,6 +372,9 @@ $CADDY_TLS_LINE
   # Smoke + owner bootstrap (first user becomes admin via the DB hook; password never echoed)
   sleep 2
   curl -fsS "http://localhost:$PORT/" >/dev/null && echo "panel: service up"
+  # Accept the owner password from the environment (avoids argv/ps exposure)
+  # when the installer drives this non-interactively.
+  [ -n "$ADMIN_PASSWORD" ] || ADMIN_PASSWORD="${VIBE_PANEL_ADMIN_PASSWORD:-}"
   if [ -z "$ADMIN_PASSWORD" ]; then
     printf 'Owner password (min 8): '
     stty -echo

@@ -102,6 +102,14 @@ async function main() {
   }
   applyCliState(state, options);
 
+  // Pass the owner password to spawned bin/panel via environment rather than
+  // argv so it never appears in --dry-run output, --export-plan JSON, or `ps`.
+  // Bun.spawn inherits process.env, so setting it here covers both the
+  // interactive (TUI) render path and any non-interactive execution path.
+  if (state.adminPassword) {
+    process.env.VIBE_PANEL_ADMIN_PASSWORD = state.adminPassword;
+  }
+
   const plan = buildInstallPlan(state);
 
   if (options.dryRun) {

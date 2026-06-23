@@ -19,8 +19,7 @@ export function buildPanelBootstrapPlan(state: InstallerState): InstallPlan {
   const parts = [
     `${sudo}${DEFAULT_INSTALL_DIR}/bin/panel install`,
     `--access ${state.panelAccessMode}`,
-    `--admin-email ${shellQuote(state.adminEmail)}`,
-    `--admin-password ${shellQuote(state.adminPassword)}`
+    `--admin-email ${shellQuote(state.adminEmail)}`
   ];
   if (state.panelAccessMode === "domain") {
     parts.push(`--domain ${shellQuote(state.productionDomain)}`);

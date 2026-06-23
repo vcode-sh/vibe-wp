@@ -21,14 +21,16 @@ describe("buildPanelBootstrapPlan", () => {
     expect(ids).toEqual(["install-docker", "install-caddy", "install-bun", "panel-install"]);
   });
 
-  it("passes the access mode + owner creds to bin/panel and omits --domain for magic-dns", () => {
+  it("passes the access mode + owner email to bin/panel, omits --admin-password and --domain for magic-dns", () => {
     const plan = buildPanelBootstrapPlan(bareState());
     const panel = plan.tasks.find((t) => t.id === "panel-install");
     const line = panel?.command?.[2] ?? "";
     expect(line).toContain("/opt/vibe-wp/bin/panel install");
     expect(line).toContain("--access magic-dns");
     expect(line).toContain("--admin-email 'you@acme.com'");
-    expect(line).toContain("--admin-password");
+    // Password must NOT appear in the command (passed via VIBE_PANEL_ADMIN_PASSWORD env instead)
+    expect(line).not.toContain("--admin-password");
+    expect(line).not.toContain("supersecret");
     expect(line).not.toContain("--domain");
   });
 
