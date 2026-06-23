@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** On a bare VPS, `curl … | sh` clones the repo and leads the installer with a "Set up your control panel" path that installs Docker/Caddy/Bun standalone and runs `/opt/vibe-wp/bin/panel install --access … --admin-email … --admin-password …`, ending at a working HTTPS panel URL.
+> **Correction (post-implementation):** the panel's canonical checkout is **`/opt/vibe-wp-src`**, not `/opt/vibe-wp` (which is the installer's *site* default and collided with a live site on the test VPS). Wherever this plan says the checkout / clone target / `bin/panel` path is `/opt/vibe-wp`, the shipped code uses `/opt/vibe-wp-src`. The installer's `DEFAULT_INSTALL_DIR` for sites stays `/opt/vibe-wp`.
+
+**Goal:** On a bare VPS, `curl … | sh` clones the repo and leads the installer with a "Set up your control panel" path that installs Docker/Caddy/Bun standalone and runs `/opt/vibe-wp-src/bin/panel install --access … --admin-email … --admin-password …`, ending at a working HTTPS panel URL.
 
 **Architecture:** A new `panel-bootstrap` install mode. `public-install/install.sh` clones `/opt/vibe-wp`. `host-install.ts` gains a standalone `install-bun` task. A new `core/panel-bootstrap-plan.ts` assembles `[dns-preflight? , docker, caddy, bun, panel-install]` as an `InstallPlan`, reusing the existing `runPlan` executor. The TUI bare-server welcome branch sets the mode; a `PanelScreen` collects access-mode + owner login; the existing Execute screen runs it. Headless parity via `--bootstrap-panel`.
 

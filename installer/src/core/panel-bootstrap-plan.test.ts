@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { defaultState, emptyHostFacts } from "./defaults";
 import { buildPanelBootstrapPlan } from "./panel-bootstrap-plan";
 
-const PANEL_INSTALL_RE = /^\/opt\/vibe-wp\/bin\/panel install/;
+const PANEL_INSTALL_RE = /^\/opt\/vibe-wp-src\/bin\/panel install/;
 
 function bareState() {
   const host = { ...emptyHostFacts(), sudo: true, publicIp: "203.0.113.7" };

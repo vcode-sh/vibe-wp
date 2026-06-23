@@ -179,7 +179,7 @@ if [ "${VIBE_WP_INSTALLER_NO_EXEC:-}" = "1" ]; then
   exit 0
 fi
 
-VIBE_REPO_DIR="${VIBE_WP_REPO_DIR:-/opt/vibe-wp}"
+VIBE_REPO_DIR="${VIBE_WP_REPO_DIR:-/opt/vibe-wp-src}"
 VIBE_REPO_URL="${VIBE_WP_REPO_URL:-https://github.com/vcode-sh/vibe-wp.git}"
 if [ ! -d "$VIBE_REPO_DIR/.git" ]; then
   echo "Cloning Vibe WP to $VIBE_REPO_DIR ..." >&2

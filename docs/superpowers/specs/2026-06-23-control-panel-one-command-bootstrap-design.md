@@ -4,6 +4,8 @@ Status: Approved design (brainstorm). Date: 2026-06-23.
 Scope owner: root `bin/` + `public-install/`, `installer/src/` (core + screens), and `control-panel/` (`packages/api` core-bridge + `routers/server`, `packages/auth`, `web` first-run/empty-state).
 Builds on: `2026-06-21-control-panel-backend-install-design.md` (§7 `bin/panel install`, §7a TUI install UX, §6 auth bootstrap).
 
+> **Correction (2026-06-23, post-implementation, found in VPS validation):** the panel's canonical repo checkout is **`/opt/vibe-wp-src`**, NOT `/opt/vibe-wp`. `/opt/vibe-wp` is the installer's `DEFAULT_INSTALL_DIR` for a *site* (`installer/src/cli/args.ts`), so using it for the panel checkout collides with a site installed at the default path (a real conflict observed on the test VPS, where `/opt/vibe-wp` was a live WordPress site). Everywhere below that says the checkout / `PANEL_HOST_DIR` / `install.sh` clone target is `/opt/vibe-wp`, read **`/opt/vibe-wp-src`** — that is what the code does. The site default stays `/opt/vibe-wp`; the deployed app stays `/opt/vibe-wp-panel`.
+
 ## 1. Context
 
 The control panel is already a real per-VPS, host-native application: it runs as a systemd Bun service behind Caddy TLS, executes real work through a hardened exec chokepoint to each site's `bin/vibe`, streams operations over SSE, enforces RBAC, and the web already provisions brand-new sites in the browser (the data seam is 100% real oRPC — no fixtures). `bin/panel install|update|status|uninstall|logs` exists and is idempotent.

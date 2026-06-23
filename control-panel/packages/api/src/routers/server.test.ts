@@ -13,7 +13,7 @@ vi.mock("../core-bridge/jobs", () => ({
 	startJob: vi.fn(async () => ({ jobId: "job1" })),
 }));
 vi.mock("@control-panel/env/server", () => ({
-	env: { PANEL_HOST_DIR: "/opt/vibe-wp", PANEL_VPS_LABEL: undefined },
+	env: { PANEL_HOST_DIR: "/opt/vibe-wp-src", PANEL_VPS_LABEL: undefined },
 }));
 
 import { runVibe } from "../core-bridge/exec";
@@ -28,7 +28,7 @@ describe("securityStatus", () => {
 			context: fakeContext,
 			input: undefined,
 		});
-		expect(runVibe).toHaveBeenCalledWith("/opt/vibe-wp", "prod", "securityStatus");
+		expect(runVibe).toHaveBeenCalledWith("/opt/vibe-wp-src", "prod", "securityStatus");
 		expect(result).toMatchObject({ firewall: true, fail2ban: true, autoUpdates: true });
 	});
 });

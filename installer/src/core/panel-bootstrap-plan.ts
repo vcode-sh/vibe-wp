@@ -5,7 +5,10 @@ import { resolvePanelAccessUrl } from "./panel-access";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallPlan, InstallTask } from "./types";
 
-const DEFAULT_INSTALL_DIR = "/opt/vibe-wp";
+// The panel's canonical repo checkout — deliberately NOT the installer's site
+// DEFAULT_INSTALL_DIR (/opt/vibe-wp), so the panel source never collides with a
+// site installed at the default path.
+const PANEL_CHECKOUT_DIR = "/opt/vibe-wp-src";
 
 export function buildPanelBootstrapPlan(state: InstallerState): InstallPlan {
   const tasks: InstallTask[] = [];
@@ -16,7 +19,7 @@ export function buildPanelBootstrapPlan(state: InstallerState): InstallPlan {
   tasks.push(...buildHostInstallTasks(state));
 
   const parts = [
-    `${DEFAULT_INSTALL_DIR}/bin/panel install`,
+    `${PANEL_CHECKOUT_DIR}/bin/panel install`,
     `--access ${state.panelAccessMode}`,
     `--admin-email ${shellQuote(state.adminEmail)}`
   ];
@@ -48,14 +51,14 @@ export function buildPanelBootstrapPlan(state: InstallerState): InstallPlan {
     },
     envFiles: [],
     generatedAt: new Date().toISOString(),
-    installDir: DEFAULT_INSTALL_DIR,
+    installDir: PANEL_CHECKOUT_DIR,
     localSandbox: state.localSandbox,
     ref: state.ref,
     repo: state.repo,
     siteSlug: "panel",
     summary: {
       panelUrl: url,
-      installDir: DEFAULT_INSTALL_DIR,
+      installDir: PANEL_CHECKOUT_DIR,
       accessMode: state.panelAccessMode
     },
     tasks,

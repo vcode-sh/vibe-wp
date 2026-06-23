@@ -4,7 +4,9 @@
 
 **Goal:** Make the panel work cleanly on a fresh install with **zero sites**, make first-admin creation **race-safe**, and land the operator on a guarded "Create owner account" first-run + a "Create your first site" empty state.
 
-**Architecture:** Host-level server ops (`securityStatus`/`serverHarden`) run against a canonical `PANEL_HOST_DIR=/opt/vibe-wp` checkout **through the existing root-owned `vibe-panel-run` wrapper** (no wrapper change — `/opt/vibe-wp` is under `/opt` and `security-status`/`harden` are already allowlisted). `serverDoctor` returns a typed "no sites yet" result. A DB partial-unique-index guarantees at most one `admin` row, closing the read-then-write race without breaking the sign-up-based owner bootstrap. A public `needsSetup` oRPC procedure drives a guarded owner first-run screen.
+> **Correction (post-implementation):** `PANEL_HOST_DIR` defaults to **`/opt/vibe-wp-src`**, not `/opt/vibe-wp` (the latter is the installer's site default and collided with a live site on the test VPS). Read `/opt/vibe-wp` below as `/opt/vibe-wp-src` for the panel checkout; the shipped code + tests use `/opt/vibe-wp-src`.
+
+**Architecture:** Host-level server ops (`securityStatus`/`serverHarden`) run against a canonical `PANEL_HOST_DIR=/opt/vibe-wp-src` checkout **through the existing root-owned `vibe-panel-run` wrapper** (no wrapper change — `/opt/vibe-wp-src` is under `/opt` and `security-status`/`harden` are already allowlisted). `serverDoctor` returns a typed "no sites yet" result. A DB partial-unique-index guarantees at most one `admin` row, closing the read-then-write race without breaking the sign-up-based owner bootstrap. A public `needsSetup` oRPC procedure drives a guarded owner first-run screen.
 
 **Tech Stack:** oRPC (`@orpc/server`), better-auth, drizzle-orm + libsql (SQLite), React/TanStack Router (web), vitest.
 

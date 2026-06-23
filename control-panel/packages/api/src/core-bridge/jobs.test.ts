@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@control-panel/env/server", () => ({
-	env: { PANEL_HOST_DIR: "/opt/vibe-wp" },
+	env: { PANEL_HOST_DIR: "/opt/vibe-wp-src" },
 }));
 
 import type { JobDeps } from "./jobs";
@@ -148,7 +148,7 @@ describe("startJob — SERVER_SITE_ID sentinel security guard", () => {
 		);
 		proc.resolveExit(0);
 		await proc.exited;
-		expect(capturedWorkDir).toBe("/opt/vibe-wp");
+		expect(capturedWorkDir).toBe("/opt/vibe-wp-src");
 		expect(jobId).toBeTruthy();
 	});
 

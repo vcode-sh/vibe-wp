@@ -239,6 +239,7 @@ deploy_panel() {
     "CORS_ORIGIN=$ACCESS_ORIGIN" \
     "NODE_ENV=production" \
     "PANEL_SITES_ROOTS=/opt:/srv" \
+    "PANEL_HOST_DIR=$REPO_DIR" \
     "PANEL_INSTALLER_BIN=$PANEL_DIR/bin/vibe-wp-installer" \
     "PANEL_PRIVILEGED_RUNNER=$PANEL_DIR/bin/vibe-panel-run" \
     | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null )
