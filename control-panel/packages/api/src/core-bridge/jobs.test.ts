@@ -1,4 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@control-panel/env/server", () => ({
+	env: { PANEL_HOST_DIR: "/opt/vibe-wp" },
+}));
 
 import type { JobDeps } from "./jobs";
 import { cancelJob, getJob, startJob } from "./jobs";
@@ -121,6 +125,49 @@ describe("cancelJob — terminal-state guard", () => {
 		const result = cancelJob(jobId);
 		expect(result).toBe(false);
 		expect(getJob(jobId)?.status).toBe("succeeded");
+	});
+});
+
+describe("startJob — SERVER_SITE_ID sentinel security guard", () => {
+	it("resolves workDir to PANEL_HOST_DIR when siteId is 'server' and op is 'harden'", async () => {
+		const proc = makeProc();
+		let capturedWorkDir: string | undefined;
+		const deps: JobDeps = {
+			findSite: () => Promise.resolve(FAKE_SITE),
+			persistJobFinish: () => noop(),
+			persistJobStart: () => noop(),
+			streamVibe: (workDir, _env, _op, _opts) => {
+				capturedWorkDir = workDir;
+				return { proc, lines: noLines() };
+			},
+			writeAudit: () => noop(),
+		};
+		const { jobId } = await startJob(
+			{ ...BASE_INPUT, op: "harden" as const, siteId: "server", kind: "harden", action: "harden" },
+			deps
+		);
+		proc.resolveExit(0);
+		await proc.exited;
+		expect(capturedWorkDir).toBe("/opt/vibe-wp");
+		expect(jobId).toBeTruthy();
+	});
+
+	it("rejects (throws 'Unknown site') when siteId is 'server' and op is not 'harden'", async () => {
+		const proc = makeProc();
+		const deps: JobDeps = {
+			findSite: () => Promise.resolve(FAKE_SITE),
+			persistJobFinish: () => noop(),
+			persistJobStart: () => noop(),
+			streamVibe: () => ({ proc, lines: noLines() }),
+			writeAudit: () => noop(),
+		};
+		await expect(
+			startJob(
+				{ ...BASE_INPUT, op: "backup" as const, siteId: "server", kind: "backup", action: "backup" },
+				deps
+			)
+		).rejects.toThrow("Unknown site");
+		proc.resolveExit(0);
 	});
 });
 

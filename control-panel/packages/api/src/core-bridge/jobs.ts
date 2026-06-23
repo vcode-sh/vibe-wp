@@ -212,6 +212,11 @@ export async function startJob(
 	// without a provisioned site. All other siteIds resolve via findSite.
 	let workDir: string;
 	if (input.siteId === SERVER_SITE_ID) {
+		// "server" is a host-level sentinel reserved for the admin-only harden job;
+		// no other op may target the canonical checkout.
+		if (input.op !== "harden") {
+			throw new Error("Unknown site");
+		}
 		// Lazy-import env so tests that mock the env module are not broken by a
 		// top-level static import.
 		const { env } = await import("@control-panel/env/server");
