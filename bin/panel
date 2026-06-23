@@ -349,7 +349,8 @@ install_panel() {
   if ! grep -q 'sites-enabled/\*.caddy' /etc/caddy/Caddyfile; then
     printf '\n%s\n' 'import /etc/caddy/sites-enabled/*.caddy' | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null
   fi
-  printf '%s\n' "$DOMAIN {
+  printf '%s\n' "$CADDY_SITE_ADDRESS {
+$CADDY_TLS_LINE
 	handle /rpc/* {
 		reverse_proxy localhost:$PORT
 	}
@@ -382,7 +383,7 @@ install_panel() {
   # Expose the public domain only AFTER the owner exists, so the panel never
   # serves publicly with zero users (closes a first-install sign-up race window).
   $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
-  echo "Done. Open https://$DOMAIN and sign in."
+  echo "Done. Open $ACCESS_ORIGIN and sign in."
 }
 
 update_panel() {
