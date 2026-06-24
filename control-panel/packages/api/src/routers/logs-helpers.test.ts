@@ -9,6 +9,7 @@ import {
 	hostArgs,
 	mapServiceToSource,
 	maskStreamLine,
+	passesStreamSourceFilter,
 } from "./logs-helpers";
 
 const mk = (over: Partial<LogLine>): LogLine => ({
@@ -105,6 +106,23 @@ describe("assertSourceAllowed", () => {
 describe("mapServiceToSource", () => {
 	it("seeds access", () => expect(mapServiceToSource("access")).toBe("access"));
 	it("seeds php", () => expect(mapServiceToSource("php")).toBe("php"));
+});
+
+describe("passesStreamSourceFilter", () => {
+	const access = '1.2.3.4 - - "GET / HTTP/1.1" 200 5 "-" "ua" "-" cache=HIT';
+	const error = "2026/06/24 [error] open() failed";
+	it("nginx tab drops access lines", () => {
+		expect(passesStreamSourceFilter(access, "nginx")).toBe(false);
+		expect(passesStreamSourceFilter(error, "nginx")).toBe(true);
+	});
+	it("access tab keeps only access lines", () => {
+		expect(passesStreamSourceFilter(access, "access")).toBe(true);
+		expect(passesStreamSourceFilter(error, "access")).toBe(false);
+	});
+	it("all tab keeps everything", () => {
+		expect(passesStreamSourceFilter(access, "all")).toBe(true);
+		expect(passesStreamSourceFilter(error, "all")).toBe(true);
+	});
 });
 
 describe("maskStreamLine", () => {

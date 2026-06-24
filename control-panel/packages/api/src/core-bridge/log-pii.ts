@@ -4,6 +4,14 @@
 // Owner decision O3=b: IPs are masked only in access context, never globally.
 
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+// Matches colon-grouped tokens that look like IPv6: requires at least two colons
+// (covering both full and compressed forms). The guard in maskAccessPii then
+// rejects all-decimal HH:MM:SS timestamps (no hex letters, no "::").
+const IPV6_TOKEN =
+	/\b[0-9a-fA-F]{0,4}(?::{1,2}[0-9a-fA-F]{1,4}){2,}\b|::[0-9a-fA-F:]+/g;
+// Guard: only replace a candidate token if it truly has hex letters or "::"
+// (decimal timestamps like 10:00:00 have neither).
+const HEX_LETTER = /[a-fA-F]/;
 const CACHE_FIELD = /\bcache=([A-Z]+)\b/;
 const SQL_STRING_LITERAL = /'(?:[^'\\]|\\.){0,500}'/g;
 const MARIADB_USER_HOST =
@@ -22,9 +30,13 @@ export function extractCache(text: string): string | undefined {
 	return m ? m[1] : undefined;
 }
 
-/** Mask every IPv4 address — call ONLY on access-context lines. */
+/** Mask every IPv4 and IPv6 address — call ONLY on access-context lines. */
 export function maskAccessPii(text: string): string {
-	return text.replace(IPV4, "[ip]");
+	return text
+		.replace(IPV4, "[ip]")
+		.replace(IPV6_TOKEN, (m) =>
+			HEX_LETTER.test(m) || m.includes("::") ? "[ip]" : m
+		);
 }
 
 /** Mask SQL string literals + slow-query User@Host — call ONLY on mariadb-source lines. */

@@ -16,6 +16,7 @@ import {
 	LOG_TAIL,
 	mapServiceToSource,
 	maskStreamLine,
+	passesStreamSourceFilter,
 } from "./logs-helpers";
 
 const GLOBAL_MAX = 8;
@@ -127,6 +128,9 @@ export const logsRouter = {
 			try {
 				for await (const raw of lines) {
 					if (raw.length === 0) {
+						continue;
+					}
+					if (!passesStreamSourceFilter(raw, input.service)) {
 						continue;
 					}
 					const masked = maskStreamLine(raw, input.service);

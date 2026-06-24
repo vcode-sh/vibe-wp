@@ -115,6 +115,20 @@ export function maskStreamLine(raw: string, service: PanelService): string {
 	return line;
 }
 
+/** Live-stream per-line source gate, mirroring applySourceFilter for the streaming path. */
+export function passesStreamSourceFilter(
+	raw: string,
+	service: PanelService
+): boolean {
+	if (service === "nginx") {
+		return !isAccessLine(raw);
+	}
+	if (service === "access") {
+		return isAccessLine(raw);
+	}
+	return true;
+}
+
 export const SENSITIVE_SOURCES = new Set<string>(["access", "mariadb"]);
 
 /** Enforce admin for access/mariadb (operator procedure can't gate per-source). */
