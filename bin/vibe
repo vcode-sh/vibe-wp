@@ -200,6 +200,15 @@ case "${command}" in
   schedule-status)
     "${VIBE_BIN_DIR}/schedule-status" "$@"
     ;;
+  insights)
+    # Read-only: cat the host-mounted drop-file written by the WP collector.
+    # No container needed — content/ is the host bind mount.
+    if [ ! -f "content/.vibe/insights.json" ]; then
+      echo '{"error":"not_collected"}' >&2
+      exit 1
+    fi
+    cat "content/.vibe/insights.json"
+    ;;
   site-config-apply)
     "${VIBE_BIN_DIR}/site-config-apply" "$@"
     ;;

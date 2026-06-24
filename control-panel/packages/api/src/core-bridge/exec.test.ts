@@ -378,6 +378,8 @@ describe("buildVibeArgv", () => {
 			"down",
 			"env",
 			"harden",
+			"insights",
+			"insightsRefresh",
 			"logsExport",
 			"logsFollow",
 			"logsRecent",

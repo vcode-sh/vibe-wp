@@ -113,6 +113,11 @@ export const VIBE_OPS = {
 		argv: ["wp", "plugin", "list", "--update=available", "--format=json"],
 		stream: false,
 	},
+	insights: { argv: ["insights"], stream: false },
+	insightsRefresh: {
+		argv: ["wp", "cron", "event", "run", "vibe_insights_collect_cron"],
+		stream: false,
+	},
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

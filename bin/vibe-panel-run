@@ -151,8 +151,8 @@ assert_safe_entrypoint() {
 #   backup-schedule-apply monitor-schedule-apply schedule-status site-config-apply
 #   caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test
 #   logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod
-#   promote-files-to-prod harden wp
-OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-schedule-apply monitor-schedule-apply schedule-status site-config-apply caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod promote-files-to-prod harden wp"
+#   promote-files-to-prod harden wp insights
+OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-schedule-apply monitor-schedule-apply schedule-status site-config-apply caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod promote-files-to-prod harden wp insights"
 
 # Free-form (caller-supplied) args reach only a few ops: restore/backup-verify
 # take a backup path; the schedule/notify/site/backup-config-apply ops and
@@ -208,6 +208,7 @@ validate_wp_args() {
     "core update") return 0 ;;
     "plugin update --all") return 0 ;;
     "plugin list --update=available --format=json") return 0 ;;
+    "cron event run vibe_insights_collect_cron") return 0 ;;
     *) die "wp subcommand not allowed: wp $joined" ;;
   esac
 }
