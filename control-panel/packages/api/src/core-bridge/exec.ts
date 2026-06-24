@@ -88,6 +88,8 @@ export const VIBE_OPS = {
 	backupTest: { argv: ["backup-test"], stream: false },
 	notifyConfigApply: { argv: ["notify-config-apply"], stream: false },
 	notifyTest: { argv: ["notify-test"], stream: false },
+	smtpConfigApply: { argv: ["smtp-config-apply"], stream: false },
+	smtpTest: { argv: ["smtp-test"], stream: false },
 	logsRecent: { argv: ["logs-recent"], stream: false, takesArg: true },
 	logsFollow: { argv: ["logs"], stream: true, takesArg: true },
 	logsExport: { argv: ["logs-recent"], stream: false, takesArg: true },

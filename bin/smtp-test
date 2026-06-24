@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+set -eu
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+vibe_require_env_file
+# Load the env file so SMTP_* (and SMTP_TEST_TO injected by the panel) are set.
+set -a; . "${VIBE_ENV_FILE}"; set +a
+: "${SMTP_TEST_TO:?SMTP_TEST_TO is required}"
+[ "${SMTP_MODE:-off}" = "relay" ] || { echo "SMTP_MODE is not 'relay' — nothing to test."; exit 1; }
+# Render an ephemeral msmtprc from the env (msmtp masks the password in --debug).
+rc="$(mktemp)"; trap 'rm -f "$rc"' EXIT INT TERM
+case "${SMTP_SECURE:-starttls}" in
+  starttls) _tls=on; _stls=on ;; tls) _tls=on; _stls=off ;; *) _tls=off; _stls=off ;;
+esac
+{
+  printf 'defaults\n  auth %s\n  tls %s\n  tls_starttls %s\n  tls_certcheck on\n  logfile -\n' "${SMTP_AUTH:-on}" "$_tls" "$_stls"
+  printf 'account default\n  host %s\n  port %s\n  from %s\n  user %s\n  password %s\n' \
+    "${SMTP_HOST:-}" "${SMTP_PORT:-587}" "${SMTP_FROM:-}" "${SMTP_USER:-}" "${SMTP_PASSWORD:-}"
+} > "$rc"
+chmod 600 "$rc"
+printf 'Subject: Vibe WP SMTP test\nFrom: %s\nTo: %s\n\nThis is a Vibe WP SMTP relay test.\n' \
+  "${SMTP_FROM:-}" "${SMTP_TEST_TO}" \
+  | msmtp --debug --file "$rc" "${SMTP_TEST_TO}" 2>&1
