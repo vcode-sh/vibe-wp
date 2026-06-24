@@ -37,6 +37,11 @@ PANEL_SITES_ROOTS="${PANEL_SITES_ROOTS:-/opt:/srv}"
 # Installer binary the panel drives for provisioning. Fixed default mirrors the
 # panel's PANEL_INSTALLER_BIN; only `--headless-json` may ever be passed.
 PANEL_INSTALLER_BIN="${PANEL_INSTALLER_BIN:-/opt/vibe-wp-panel/bin/vibe-wp-installer}"
+# Deployed source repo (where the shared-db ops live: bin/shared-db-*, bin/db-*,
+# bin/lib/shared-db.sh). Fixed at this root boundary — a caller-supplied value is
+# stripped by sudo's env_reset (PANEL_HOST_DIR is NOT in panel_env_keep), so the
+# `shared-db` subcommand always resolves its scripts from this trusted default.
+PANEL_HOST_DIR="${PANEL_HOST_DIR:-/opt/vibe-wp-src}"
 
 die() {
   echo "vibe-panel-run: $1" >&2
@@ -330,6 +335,20 @@ validate_logs_args() {
   fi
 }
 
+# `shared-db` op allowlist — re-validated HERE at the root boundary (mirrors the
+# wrapper subcommand surface in exec.ts wrapSharedDbArgv). Defined above the
+# dispatch guard so unit tests can source the wrapper as a lib and exercise it
+# without Docker. The slug re-validation uses the lib's own sdb_validate_slug
+# (SF-5), not a re-typed regex.
+SHARED_DB_OP_ALLOWLIST="init status provision deprovision backup"
+validate_shared_db_op() {
+  op="$1"
+  for allowed in $SHARED_DB_OP_ALLOWLIST; do
+    [ "$op" = "$allowed" ] && return 0
+  done
+  die "shared-db op not allowed: $op"
+}
+
 # --- siteinfo: scan roots, print ONLY non-secret fields as TAB-separated rows.
 # Columns: installDir  slug  domain  prodPort  stagePort  hasStaging  stagingDomain
 # slug          = COMPOSE_PROJECT_NAME minus the vibe-wp- prefix and -prod/-stage suffix
@@ -474,6 +493,63 @@ case "$sub" in
   siteinfo)
     [ $# -eq 0 ] || die "siteinfo takes no arguments"
     siteinfo
+    ;;
+  shared-db)
+    # shared-db <op> [slug]  — host-level ops for the ONE shared MariaDB project.
+    #   op ∈ {init, status, provision, deprovision, backup}
+    #   provision/deprovision take EXACTLY one slug (re-validated below); the
+    #   rest take none. These are NOT per-site ops (no site dir / no bin/vibe);
+    #   they run the deployed repo's bin/shared-db-* / bin/db-* scripts as root
+    #   against the shared container. The shared-db state dir + its 0600 env file
+    #   are asserted root-owned before any op other than init.
+    sdb_op="${1:-}"; shift || true
+    validate_shared_db_op "$sdb_op"
+
+    # Scripts live in the deployed source repo (fixed at this boundary).
+    sdb_bin="$PANEL_HOST_DIR/bin"
+    assert_root_owned "$sdb_bin" "shared-db bin dir"
+
+    # State dir + env-file hygiene (everything but init, which creates them).
+    sdb_state_dir="${SHARED_DB_DIR:-/opt/vibe-wp-shared-db}"
+    if [ "$sdb_op" != "init" ]; then
+      [ -d "$sdb_state_dir" ] || die "shared-db not initialized ($sdb_state_dir missing)"
+      assert_root_owned "$sdb_state_dir" "shared-db state dir"
+      sdb_envf="$sdb_state_dir/env/shared-db.env"
+      [ -f "$sdb_envf" ] || die "shared-db env file missing"
+      assert_root_owned "$sdb_envf" "shared-db env file"
+      # Holds the root password — must have NO group/other access bits at all.
+      if [ -n "$(find "$sdb_envf" -prune -perm /077 2>/dev/null)" ]; then
+        die "shared-db env file is group/other-accessible (refusing)"
+      fi
+    fi
+
+    # Map op -> script + enforce arity (SF-6).
+    case "$sdb_op" in
+      init)        sdb_script="$sdb_bin/shared-db-init";   [ "$#" -eq 0 ] || die "shared-db init takes no args" ;;
+      status)      sdb_script="$sdb_bin/shared-db-status"; [ "$#" -eq 0 ] || die "shared-db status takes no args" ;;
+      backup)      sdb_script="$sdb_bin/backup-shared-db"; [ "$#" -eq 0 ] || die "shared-db backup takes no args" ;;
+      provision)   sdb_script="$sdb_bin/db-provision";     [ "$#" -eq 1 ] || die "shared-db provision takes exactly one slug" ;;
+      deprovision) sdb_script="$sdb_bin/db-deprovision";   [ "$#" -eq 1 ] || die "shared-db deprovision takes exactly one slug" ;;
+    esac
+
+    # SF-5: defense-in-depth slug re-validation using the lib's OWN validator (no
+    # re-typed regex). Sourcing executes the lib as root, so assert it is a
+    # root-owned, non-writable file first. sdb_validate_slug `die`s on any invalid
+    # slug; its echoed identifier is discarded.
+    if [ "$sdb_op" = "provision" ] || [ "$sdb_op" = "deprovision" ]; then
+      sdb_lib="$sdb_bin/lib/shared-db.sh"
+      [ -f "$sdb_lib" ] || die "shared-db lib missing: $sdb_lib"
+      assert_root_owned "$sdb_lib" "shared-db lib"
+      # shellcheck disable=SC1090
+      . "$sdb_lib"
+      sdb_validate_slug "$1" >/dev/null
+    fi
+
+    # The target script must be a root-owned, non-writable, executable regular file.
+    [ -f "$sdb_script" ] || die "shared-db script missing: $sdb_script"
+    assert_root_owned "$sdb_script" "shared-db script"
+    [ -x "$sdb_script" ] || die "shared-db script not executable: $sdb_script"
+    exec "$sdb_script" "$@"
     ;;
   *)
     die "unknown subcommand: $sub"
