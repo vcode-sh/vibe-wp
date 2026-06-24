@@ -25,6 +25,11 @@
 #   - `siteinfo` prints ONLY non-secret fields. It NEVER prints DB/Redis
 #     passwords, WP salts, R2/monitor secrets, or any other env value.
 set -eu
+# Force the C locale so every `case` charset guard (e.g. the slug regex
+# *[!a-z0-9-]*) is strictly ASCII. In a UTF-8 locale a range like [a-z] can span
+# accented collation characters, which would widen what a slug/version guard
+# accepts. This is a defense-in-depth hardening of the root boundary.
+export LC_ALL=C
 
 # Roots under which a site install dir is allowed to live. The panel passes the
 # same default; keeping it here too means the gate holds even if the caller lies.
@@ -239,6 +244,10 @@ validate_wp_args() {
     plugin|theme|core) : ;;
     *) die "wp namespace not allowed: $namespace" ;;
   esac
+  # Note: there is intentionally NO "theme deactivate" — WordPress has no
+  # wp-cli theme-deactivate (a site always has one active theme), so the panel
+  # never sends it. "core version" is also intentionally omitted: the panel reads
+  # the core version from the insights drop-file, not via wp-cli.
   case "$namespace $verb" in
     "plugin activate"|"plugin deactivate"|"plugin update"|"plugin delete"|\
     "plugin auto-updates"|\
