@@ -201,13 +201,11 @@ case "${command}" in
     "${VIBE_BIN_DIR}/schedule-status" "$@"
     ;;
   insights)
-    # Read-only: cat the host-mounted drop-file written by the WP collector.
-    # No container needed — content/ is the host bind mount.
-    if [ ! -f "content/.vibe/insights.json" ]; then
-      echo '{"error":"not_collected"}' >&2
-      exit 1
-    fi
-    cat "content/.vibe/insights.json"
+    # Read-only: the WP collector writes the drop-file to wp-content/.vibe/, which
+    # in prod is a named Docker VOLUME (not a host bind), so read it from inside
+    # the running wordpress container. Absent file / stopped container -> exit 1.
+    vibe_compose exec -T wordpress cat /var/www/html/wp-content/.vibe/insights.json 2>/dev/null \
+      || { echo '{"error":"not_collected"}' >&2; exit 1; }
     ;;
   site-config-apply)
     "${VIBE_BIN_DIR}/site-config-apply" "$@"
