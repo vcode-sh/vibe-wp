@@ -45,3 +45,14 @@ describe("redact", () => {
 		);
 	});
 });
+
+describe("SMTP AUTH masking", () => {
+	it("masks AUTH PLAIN base64 (decodes to credentials)", () => {
+		const out = redact("--> AUTH PLAIN AGFwaWtleQBzM2NyM3RfcGFzcw==");
+		expect(out).not.toContain("AGFwaWtleQBzM2NyM3RfcGFzcw==");
+		expect(out).toContain("AUTH PLAIN ***");
+	});
+	it("masks AUTH LOGIN token", () => {
+		expect(redact("AUTH LOGIN dXNlcg==")).toContain("AUTH LOGIN ***");
+	});
+});

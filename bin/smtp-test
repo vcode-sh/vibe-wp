@@ -18,6 +18,15 @@ esac
     "${SMTP_HOST:-}" "${SMTP_PORT:-587}" "${SMTP_FROM:-}" "${SMTP_USER:-}" "${SMTP_PASSWORD:-}"
 } > "$rc"
 chmod 600 "$rc"
-printf 'Subject: Vibe WP SMTP test\nFrom: %s\nTo: %s\n\nThis is a Vibe WP SMTP relay test.\n' \
+set +e
+out="$(printf 'Subject: Vibe WP SMTP test\nFrom: %s\nTo: %s\n\nThis is a Vibe WP SMTP relay test.\n' \
   "${SMTP_FROM:-}" "${SMTP_TEST_TO}" \
-  | msmtp --debug --file "$rc" "${SMTP_TEST_TO}" 2>&1
+  | msmtp --file "$rc" "${SMTP_TEST_TO}" 2>&1)"
+code=$?
+set -e
+if [ "$code" -eq 0 ]; then
+  printf 'Test email sent to %s.\n' "${SMTP_TEST_TO}"
+else
+  printf 'Test send failed (msmtp exit %s):\n%s\n' "$code" "$out"
+fi
+exit "$code"

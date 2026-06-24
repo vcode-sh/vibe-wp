@@ -16,9 +16,17 @@ const BEARER = /\b(Bearer\s+)[A-Za-z0-9\-._~+/]+=*/g;
 const AWS_KEY_ID =
 	/\b((?:access[_-]?key(?:[_-]?id)?|key[_-]?id)\s*[=:\s]+)([A-Z0-9]{16,40})\b/gi;
 
+// SMTP AUTH exchange — mask the inline credential token. `AUTH PLAIN <base64>`
+// and `AUTH LOGIN <base64>` decode directly to username/password, and msmtp's
+// --debug/-v output is explicitly NOT sanitized. (bin/smtp-test no longer uses
+// --debug; this is defense-in-depth for any other captured transcript.)
+const SMTP_AUTH =
+	/\b(AUTH\s+(?:PLAIN|LOGIN|CRAM-MD5|SCRAM-[A-Z0-9-]+)\s+)\S+/gi;
+
 export function redact(text: string): string {
 	return text
 		.replace(BEARER, "$1***")
+		.replace(SMTP_AUTH, "$1***")
 		.replace(FLAG_SECRET, (_match, flag, sep, _val) => `${flag}${sep}***`)
 		.replace(SECRET_KEY, (_match, key, sep) => `${key}${sep}***`)
 		.replace(AWS_KEY_ID, (_match, prefix) => `${prefix}***`);
