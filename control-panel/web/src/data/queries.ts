@@ -46,6 +46,9 @@ export const backupConfigQuery = (siteId: string) =>
 export const notifyConfigQuery = (siteId: string) =>
 	orpc.notifyConfigGet.queryOptions({ input: { siteId } });
 
+export const smtpConfigQuery = (siteId: string) =>
+	orpc.smtpConfigGet.queryOptions({ input: { siteId } });
+
 export const siteSettingsQuery = (siteId: string) =>
 	orpc.siteSettingsGet.queryOptions({ input: { siteId } });
 

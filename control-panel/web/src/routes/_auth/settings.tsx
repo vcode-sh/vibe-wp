@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ModeToggle } from "@/components/mode-toggle";
 import { PageHeader } from "@/components/patterns/page-header";
+import { MailCard } from "@/components/settings/mail-card";
 import { NotifyCard } from "@/components/settings/notify-card";
 import { R2GlobalCard } from "@/components/settings/r2-global-card";
 import { TopBar } from "@/components/top-bar";
@@ -24,6 +25,7 @@ function SettingsPage() {
 					<TabsList>
 						<TabsTrigger value="general">General</TabsTrigger>
 						<TabsTrigger value="notifications">Notifications</TabsTrigger>
+						<TabsTrigger value="mail">Mail</TabsTrigger>
 						<TabsTrigger value="backups">Backups</TabsTrigger>
 					</TabsList>
 
@@ -41,6 +43,10 @@ function SettingsPage() {
 
 					<TabsContent className="grid gap-4 pt-4" value="notifications">
 						<NotifyCard />
+					</TabsContent>
+
+					<TabsContent className="grid gap-4 pt-4" value="mail">
+						<MailCard />
 					</TabsContent>
 
 					<TabsContent className="pt-4" value="backups">
