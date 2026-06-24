@@ -183,3 +183,54 @@ export interface RemoveSiteInput {
 	purge: boolean;
 	siteId: string;
 }
+
+export interface InsightsPlugin {
+	slug: string;
+	name: string;
+	version: string;
+	status: "active" | "inactive" | "must-use" | "dropin";
+	update_available: boolean;
+	new_version: string | null;
+	auto_update: boolean | null;
+}
+
+export interface InsightsTheme {
+	slug: string;
+	name: string;
+	version: string;
+	status: "active" | "parent" | "inactive";
+	update_available: boolean;
+	new_version: string | null;
+	auto_update: boolean | null;
+}
+
+export interface InsightsHealthIssue {
+	label: string;
+	description: string;
+	test: string;
+}
+
+export interface SiteInsights {
+	schema_version: 1;
+	generated_at: string;
+	site_url: string;
+	wp_core: { version: string; update_available: boolean; new_version: string | null };
+	php_version: string;
+	db: { size_bytes: number; engine: string; server_version: string };
+	plugins: InsightsPlugin[];
+	themes: InsightsTheme[];
+	users: { count: number; admin_count: number; last_login: string | null };
+	site_health: { collected_at: string; critical: InsightsHealthIssue[]; recommended: InsightsHealthIssue[] };
+	signals: {
+		xmlrpc_enabled: boolean;
+		file_edit_enabled: boolean;
+		debug_on: boolean;
+		debug_log_on: boolean;
+		debug_display_on: boolean;
+		script_debug_on: boolean;
+		auto_update_core: "minor" | "major" | "off";
+		cron_disabled: boolean;
+	};
+	object_cache: { enabled: boolean; type: "redis" | "memcached" | "apcu" | "none"; dropin_present: boolean };
+	fastcgi_cache: { enabled: boolean };
+}
