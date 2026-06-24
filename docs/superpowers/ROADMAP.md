@@ -51,7 +51,7 @@ Grounded in a 2026-06-23 research pass (full dossier in this session's history).
 ### Build order (dependency-aware, quick-wins + foundations first)
 1. ~~**Logs (#1)**~~ ✅ **DONE** (merged `ac983d3`, 2026-06-24; VPS validation + push pending). Plan: `plans/2026-06-24-feature-1-logs.md`.
 2. ~~**SMTP relay (#2)**~~ ✅ **DONE** (merged `f9535ad`, VPS-validated, 2026-06-24). Plan: `plans/2026-06-24-feature-2-smtp-relay.md`. Lesson: the host/container/sudo boundary needs VPS validation — 6 integration bugs slipped past unit tests + whole-branch review.
-3. **Insights plugin (#3)** — the data backbone for #4, #5, C, E.
+3. ~~**Insights plugin (#3)**~~ ✅ **DONE** (data backbone; merged `640f33a`, VPS-validated, 2026-06-24). Vuln feed + security score deferred.
 4. **Plugin/update mgmt + safe-update (#4)** — daily-driver; needs #3 inventory.
 5. **Quick-win extras B, C, D** — parallelizable on existing ops + #3.
 6. **Smart perf tuning (#5)** — needs #3 + extended perf-report; advisory-first.
