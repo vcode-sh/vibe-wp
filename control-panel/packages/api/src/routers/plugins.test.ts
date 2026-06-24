@@ -1,0 +1,72 @@
+import { describe, expect, it, vi } from "vitest";
+
+// Mock startJob so we assert the op/args without a DB or a real spawn.
+// vi.hoisted lets the hoisted vi.mock factory reference this fn safely.
+const { startJob } = vi.hoisted(() => ({
+	startJob: vi.fn(async () => ({ jobId: "job-1" })),
+}));
+vi.mock("../core-bridge/jobs", () => ({ startJob }));
+
+import { pluginsRouter } from "./plugins";
+
+const ctx = { session: { user: { id: "u1", role: "operator" } } } as never;
+
+describe("pluginsRouter mutations", () => {
+	it("pluginUpdate starts a wpPluginUpdate job with the slug", async () => {
+		startJob.mockClear();
+		await pluginsRouter.pluginUpdate["~orpc"].handler({
+			input: { siteId: "s1", slug: "akismet" },
+			context: ctx,
+		});
+		expect(startJob).toHaveBeenCalledWith(
+			expect.objectContaining({
+				op: "wpPluginUpdate",
+				args: ["akismet"],
+				siteId: "s1",
+				env: "prod",
+			})
+		);
+	});
+
+	it("pluginDeactivate maps to wpPluginDeactivate", async () => {
+		startJob.mockClear();
+		await pluginsRouter.pluginDeactivate["~orpc"].handler({
+			input: { siteId: "s1", slug: "woocommerce" },
+			context: ctx,
+		});
+		expect(startJob).toHaveBeenCalledWith(
+			expect.objectContaining({ op: "wpPluginDeactivate", args: ["woocommerce"] })
+		);
+	});
+
+	it("pluginAutoUpdate enable -> wpPluginAutoUpdatesEnable, disable -> ...Disable", async () => {
+		startJob.mockClear();
+		await pluginsRouter.pluginAutoUpdate["~orpc"].handler({
+			input: { siteId: "s1", slug: "redis-cache", enabled: true },
+			context: ctx,
+		});
+		expect(startJob).toHaveBeenCalledWith(
+			expect.objectContaining({ op: "wpPluginAutoUpdatesEnable", args: ["redis-cache"] })
+		);
+		startJob.mockClear();
+		await pluginsRouter.pluginAutoUpdate["~orpc"].handler({
+			input: { siteId: "s1", slug: "redis-cache", enabled: false },
+			context: ctx,
+		});
+		expect(startJob).toHaveBeenCalledWith(
+			expect.objectContaining({ op: "wpPluginAutoUpdatesDisable" })
+		);
+	});
+
+	it("pluginActivate rejects an invalid slug before spawning", () => {
+		startJob.mockClear();
+		// assertSlug throws synchronously, before startJob is reached.
+		expect(() =>
+			pluginsRouter.pluginActivate["~orpc"].handler({
+				input: { siteId: "s1", slug: "evil; rm -rf /" },
+				context: ctx,
+			})
+		).toThrow(/Invalid/);
+		expect(startJob).not.toHaveBeenCalled();
+	});
+});
