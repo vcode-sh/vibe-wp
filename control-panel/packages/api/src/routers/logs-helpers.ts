@@ -75,6 +75,25 @@ export function applyTextFilter(lines: LogLine[], filter: string): LogLine[] {
 	return lines.filter((l) => (re ? re.test(l.text) : l.text.toLowerCase().includes(needle)));
 }
 
+const DB_LINE_PREFIX = /^\s*db-\d+\s*\|/;
+
+/**
+ * Mask a single RAW live-stream line (docker compose logs output, no timestamps,
+ * prefixed `<service>-N | …`). Mirrors decorateLines for the streaming path:
+ * client IPs are masked on access-format lines (so an operator tailing nginx/all
+ * never sees visitor IPs), and SQL/user@host is masked on db-service lines.
+ */
+export function maskStreamLine(raw: string, service: PanelService): string {
+	let line = raw;
+	if (isAccessLine(line)) {
+		line = maskAccessPii(line);
+	}
+	if (service === "mariadb" || DB_LINE_PREFIX.test(line)) {
+		line = maskMariadbPii(line);
+	}
+	return line;
+}
+
 export const SENSITIVE_SOURCES = new Set<string>(["access", "mariadb"]);
 
 /** Enforce admin for access/mariadb (operator procedure can't gate per-source). */

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LogLine } from "../contract";
 import {
   applySourceFilter, applyTextFilter, assertSourceAllowed, decorateLines,
-  hostArgs, mapServiceToSource,
+  hostArgs, mapServiceToSource, maskStreamLine,
 } from "./logs-helpers";
 
 const mk = (over: Partial<LogLine>): LogLine =>
@@ -68,4 +68,28 @@ describe("assertSourceAllowed", () => {
 describe("mapServiceToSource", () => {
   it("seeds access", () => expect(mapServiceToSource("access")).toBe("access"));
   it("seeds php", () => expect(mapServiceToSource("php")).toBe("php"));
+});
+
+describe("maskStreamLine", () => {
+  it("masks the client IP on an nginx access line under the nginx tab", () => {
+    const raw = 'nginx-1  | 5.6.7.8 - - "GET / HTTP/1.1" 200 12 "-" "ua" "-" cache=HIT';
+    const out = maskStreamLine(raw, "nginx");
+    expect(out).not.toContain("5.6.7.8");
+    expect(out).toContain("[ip]");
+  });
+  it("masks the client IP under the all tab too", () => {
+    const raw = 'nginx-1  | 9.9.9.9 - - "GET /x HTTP/1.1" 404 0 "-" "-" "-" cache=MISS';
+    expect(maskStreamLine(raw, "all")).not.toContain("9.9.9.9");
+  });
+  it("masks SQL literals on a db-prefixed line", () => {
+    const raw = "db-1  | ... WHERE user_email = 'a@b.com'";
+    expect(maskStreamLine(raw, "all")).not.toContain("a@b.com");
+  });
+  it("masks SQL on the mariadb tab regardless of prefix", () => {
+    expect(maskStreamLine("some slow query 'secret'", "mariadb")).not.toContain("secret");
+  });
+  it("leaves a plain nginx error line unchanged", () => {
+    const raw = "nginx-1  | 2026/06/24 [error] open() failed";
+    expect(maskStreamLine(raw, "nginx")).toBe(raw);
+  });
 });

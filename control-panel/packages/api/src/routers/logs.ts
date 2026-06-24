@@ -15,6 +15,7 @@ import {
 	LOG_SERVICE,
 	LOG_TAIL,
 	mapServiceToSource,
+	maskStreamLine,
 } from "./logs-helpers";
 
 const GLOBAL_MAX = 8;
@@ -125,15 +126,13 @@ export const logsRouter = {
 					if (raw.length === 0) {
 						continue;
 					}
-					if (
-						input.filter &&
-						!raw.toLowerCase().includes(input.filter.toLowerCase())
-					) {
+					const masked = maskStreamLine(raw, input.service);
+					if (input.filter && !masked.toLowerCase().includes(input.filter.toLowerCase())) {
 						// Server-side filter before yielding keeps wire traffic low. Plain
 						// substring (not regex) for the stream path — cheap + ReDoS-free.
 						continue;
 					}
-					yield { line: raw, status: "running", done: false };
+					yield { line: masked, status: "running", done: false };
 				}
 				yield { line: "", status: "succeeded", done: true };
 			} finally {
