@@ -8,8 +8,10 @@ import { Panel } from "../components/panel";
 import { ActionRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
 import { shortPath } from "../core/site-profile";
+import { PanelPlanSummary, PanelSuccess } from "./panel-result";
 
-export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenProps) {
+export function ReviewScreen({ redactedPlan, state, validationErrors, next }: ScreenProps) {
+  const isPanel = state.mode === "panel-bootstrap";
   // Half-width panel: keep just env/<file> so it never truncates; the site is
   // already named in the plan summary above.
   const envPaths = redactedPlan.envFiles.map((env) => shortPath(env.path, 2)).join("\n");
@@ -18,16 +20,14 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
     .join("\n");
   return (
     <box flexDirection="column" flexGrow={1} gap={1}>
-      {validationErrors.length > 0 ? (
-        <ValidationErrors errors={validationErrors} />
-      ) : (
-        <PlanSummary plan={redactedPlan} />
-      )}
+      <ReviewSummary isPanel={isPanel} plan={redactedPlan} validationErrors={validationErrors} />
       <box flexDirection="row" gap={2}>
-        <Panel content={envPaths} maxLines={6} title="ENV FILES" />
+        {!isPanel && <Panel content={envPaths} maxLines={6} title="ENV FILES" />}
         <Panel content={commands} maxLines={6} title="TASKS" />
       </box>
-      <Panel content={redactedPlan.caddyfile} maxLines={6} title="CADDYFILE PREVIEW" />
+      {!isPanel && (
+        <Panel content={redactedPlan.caddyfile} maxLines={6} title="CADDYFILE PREVIEW" />
+      )}
       <ActionRow
         onPrimary={next}
         primary="Open execution"
@@ -37,10 +37,31 @@ export function ReviewScreen({ redactedPlan, validationErrors, next }: ScreenPro
   );
 }
 
+function ReviewSummary({
+  isPanel,
+  plan,
+  validationErrors
+}: {
+  isPanel: boolean;
+  plan: ScreenProps["redactedPlan"];
+  validationErrors: string[];
+}) {
+  if (validationErrors.length > 0) {
+    return <ValidationErrors errors={validationErrors} />;
+  }
+  if (isPanel) {
+    return <PanelPlanSummary plan={plan} />;
+  }
+  return <PlanSummary plan={plan} />;
+}
+
 export function SuccessScreen({ redactedPlan, state }: ScreenProps) {
   const glyphs = useGlyphs();
   const { width } = useTerminalDimensions();
   const summary = redactedPlan.summary;
+  if (state.mode === "panel-bootstrap") {
+    return <PanelSuccess email={state.adminEmail} panelUrl={summary.panelUrl ?? ""} />;
+  }
   const stagingLive = state.stagingEnabled && summary.stagingUrl !== "disabled";
   // Three link cards in a row truncate their URLs (admin URLs run ~32 chars)
   // unless the panel is very wide; stack them otherwise so each shows in full.

@@ -96,9 +96,10 @@ export function PanelScreen({ state, update, focusIndex, setFocusIndex, next }: 
         />
       </Section>
 
-      <text fg={color("muted")}>
-        Panel URL: <text fg={color("accent")}>{resolvedUrl}</text>
-      </text>
+      <box flexDirection="row" gap={1}>
+        <text fg={color("muted")}>Panel URL:</text>
+        <text fg={color("accent")}>{resolvedUrl}</text>
+      </box>
 
       <ActionRow
         onPrimary={() => {
