@@ -15,8 +15,21 @@ export const healthQuery = (siteId: string) =>
 export const backupsQuery = (siteId: string) =>
 	orpc.backupsList.queryOptions({ input: { siteId } });
 
-export const logsQuery = (siteId: string) =>
-	orpc.logsRecent.queryOptions({ input: { siteId, source: "nginx" } });
+export type LogParams = {
+	service?: "nginx" | "php" | "wp" | "mariadb" | "redis" | "access" | "all";
+	tail?: "100" | "500" | "2000";
+	filter?: string;
+};
+
+export const logsQuery = (siteId: string, params: LogParams = {}) =>
+	orpc.logsRecent.queryOptions({
+		input: {
+			siteId,
+			service: params.service ?? "all",
+			tail: params.tail ?? "500",
+			...(params.filter ? { filter: params.filter } : {}),
+		},
+	});
 
 export const stagingQuery = (siteId: string) =>
 	orpc.stagingInfo.queryOptions({ input: { siteId } });
