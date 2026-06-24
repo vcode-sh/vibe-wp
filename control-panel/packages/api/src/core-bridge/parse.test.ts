@@ -270,30 +270,33 @@ describe("parseWpUpdateCount", () => {
 });
 
 describe("svcToSource via parseLogLines", () => {
-  const line = (svc: string) =>
-    `${svc}-1  | 2026-06-24T10:00:00Z hello world`;
-  it("maps db → mariadb", () =>
-    expect(parseLogLines(line("db"), "system")[0]?.source).toBe("mariadb"));
-  it("maps redis → redis", () =>
-    expect(parseLogLines(line("redis"), "system")[0]?.source).toBe("redis"));
-  it("maps cron → wp", () =>
-    expect(parseLogLines(line("cron"), "system")[0]?.source).toBe("wp"));
+	const line = (svc: string) => `${svc}-1  | 2026-06-24T10:00:00Z hello world`;
+	it("maps db → mariadb", () =>
+		expect(parseLogLines(line("db"), "system")[0]?.source).toBe("mariadb"));
+	it("maps redis → redis", () =>
+		expect(parseLogLines(line("redis"), "system")[0]?.source).toBe("redis"));
+	it("maps cron → wp", () =>
+		expect(parseLogLines(line("cron"), "system")[0]?.source).toBe("wp"));
 });
 
 describe("parseSeverity via parseLogLines", () => {
-  const sev = (msg: string) =>
-    parseLogLines(`nginx-1  | 2026-06-24T10:00:00Z ${msg}`, "nginx")[0]?.severity;
-  it("classifies error", () => expect(sev("PHP Fatal error: boom")).toBe("error"));
-  it("classifies warn", () => expect(sev("[warn] something")).toBe("warn"));
-  it("classifies debug", () => expect(sev("DEBUG trace here")).toBe("debug"));
-  it("defaults to info", () => expect(sev("just a normal line")).toBe("info"));
+	const sev = (msg: string) =>
+		parseLogLines(`nginx-1  | 2026-06-24T10:00:00Z ${msg}`, "nginx")[0]
+			?.severity;
+	it("classifies error", () =>
+		expect(sev("PHP Fatal error: boom")).toBe("error"));
+	it("classifies warn", () => expect(sev("[warn] something")).toBe("warn"));
+	it("classifies debug", () => expect(sev("DEBUG trace here")).toBe("debug"));
+	it("defaults to info", () => expect(sev("just a normal line")).toBe("info"));
 });
 
 describe("parseLogLines maxLines", () => {
-  it("keeps the last maxLines, not a hardcoded 200", () => {
-    const stdout = Array.from({ length: 600 }, (_, i) =>
-      `nginx-1  | 2026-06-24T10:00:00Z line ${i}`).join("\n");
-    expect(parseLogLines(stdout, "nginx", 500)).toHaveLength(500);
-    expect(parseLogLines(stdout, "nginx", 2000)).toHaveLength(600);
-  });
+	it("keeps the last maxLines, not a hardcoded 200", () => {
+		const stdout = Array.from(
+			{ length: 600 },
+			(_, i) => `nginx-1  | 2026-06-24T10:00:00Z line ${i}`
+		).join("\n");
+		expect(parseLogLines(stdout, "nginx", 500)).toHaveLength(500);
+		expect(parseLogLines(stdout, "nginx", 2000)).toHaveLength(600);
+	});
 });

@@ -15,11 +15,11 @@ export const healthQuery = (siteId: string) =>
 export const backupsQuery = (siteId: string) =>
 	orpc.backupsList.queryOptions({ input: { siteId } });
 
-export type LogParams = {
+export interface LogParams {
+	filter?: string;
 	service?: "nginx" | "php" | "wp" | "mariadb" | "redis" | "access" | "all";
 	tail?: "100" | "500" | "2000";
-	filter?: string;
-};
+}
 
 export const logsQuery = (siteId: string, params: LogParams = {}) =>
 	orpc.logsRecent.queryOptions({

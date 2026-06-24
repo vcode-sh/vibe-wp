@@ -83,12 +83,12 @@ export type StagingInfo =
 	| { present: false; url: null };
 
 export interface LogLine {
+	cache?: string;
 	id: string;
+	severity?: "error" | "warn" | "info" | "debug";
 	source: "nginx" | "php" | "wp" | "system" | "mariadb" | "redis" | "access";
 	text: string;
 	whenISO: string;
-	severity?: "error" | "warn" | "info" | "debug";
-	cache?: string;
 }
 
 export interface PerfReport {

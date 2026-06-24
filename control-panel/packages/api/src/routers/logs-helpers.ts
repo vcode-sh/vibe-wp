@@ -1,15 +1,28 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { LogLine } from "../contract";
-import { extractCache, isAccessLine, maskAccessPii, maskMariadbPii } from "../core-bridge/log-pii";
+import {
+	extractCache,
+	isAccessLine,
+	maskAccessPii,
+	maskMariadbPii,
+} from "../core-bridge/log-pii";
 
-export const LOG_SERVICE = z.enum(["nginx", "php", "wp", "mariadb", "redis", "access", "all"]);
+export const LOG_SERVICE = z.enum([
+	"nginx",
+	"php",
+	"wp",
+	"mariadb",
+	"redis",
+	"access",
+	"all",
+]);
 export const LOG_TAIL = z.enum(["100", "500", "2000"]);
 export type PanelService = z.infer<typeof LOG_SERVICE>;
 
 // Panel source → docker compose SERVICE NAME. null = no service filter (all).
 // access shares the nginx container (post-filtered to access-format lines).
-export const panelToDockerService: Record<PanelService, string | null> = {
+const panelToDockerService: Record<PanelService, string | null> = {
 	nginx: "nginx",
 	php: "wordpress",
 	wp: "cron",
@@ -36,7 +49,10 @@ export function mapServiceToSource(service: PanelService): LogLine["source"] {
 }
 
 /** Split the shared nginx stream: nginx tab = error lines, access tab = access lines. */
-export function applySourceFilter(lines: LogLine[], service: PanelService): LogLine[] {
+export function applySourceFilter(
+	lines: LogLine[],
+	service: PanelService
+): LogLine[] {
 	if (service === "nginx") {
 		return lines.filter((l) => !isAccessLine(l.text));
 	}
@@ -47,7 +63,10 @@ export function applySourceFilter(lines: LogLine[], service: PanelService): LogL
 }
 
 /** Apply source-specific PII masking + cache extraction + access retagging. */
-export function decorateLines(lines: LogLine[], service: PanelService): LogLine[] {
+export function decorateLines(
+	lines: LogLine[],
+	service: PanelService
+): LogLine[] {
 	return lines.map((l) => {
 		const next: LogLine = { ...l };
 		if (service === "access") {
@@ -72,7 +91,9 @@ export function applyTextFilter(lines: LogLine[], filter: string): LogLine[] {
 		re = null;
 	}
 	const needle = filter.toLowerCase();
-	return lines.filter((l) => (re ? re.test(l.text) : l.text.toLowerCase().includes(needle)));
+	return lines.filter((l) =>
+		re ? re.test(l.text) : l.text.toLowerCase().includes(needle)
+	);
 }
 
 const DB_LINE_PREFIX = /^\s*db-\d+\s*\|/;
@@ -97,7 +118,10 @@ export function maskStreamLine(raw: string, service: PanelService): string {
 export const SENSITIVE_SOURCES = new Set<string>(["access", "mariadb"]);
 
 /** Enforce admin for access/mariadb (operator procedure can't gate per-source). */
-export function assertSourceAllowed(service: string, role: string | undefined): void {
+export function assertSourceAllowed(
+	service: string,
+	role: string | undefined
+): void {
 	if (SENSITIVE_SOURCES.has(service) && role !== "admin") {
 		throw new ORPCError("FORBIDDEN", {
 			message: "Access and database logs require an admin role.",

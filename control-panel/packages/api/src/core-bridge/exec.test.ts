@@ -557,22 +557,26 @@ describe("STREAM_TIMEOUT_MS", () => {
 });
 
 describe("buildVibeArgv logs ops", () => {
-  it("passes positional service + tail for logsRecent", () => {
-    expect(buildVibeArgv("/opt/site", "prod", "logsRecent", ["nginx", "500"]))
-      .toEqual(["/opt/site/bin/vibe", "prod", "logs-recent", "nginx", "500"]);
-  });
-  it("passes service + tail for logsFollow", () => {
-    expect(buildVibeArgv("/opt/site", "prod", "logsFollow", ["db", "200"]))
-      .toEqual(["/opt/site/bin/vibe", "prod", "logs", "db", "200"]);
-  });
-  it("exposes logsExport mapped to logs-recent", () => {
-    expect(buildVibeArgv("/opt/site", "prod", "logsExport", ["all", "2000"]))
-      .toEqual(["/opt/site/bin/vibe", "prod", "logs-recent", "all", "2000"]);
-  });
-  it("still rejects a flag-like arg (tail must be a bare number)", () => {
-    expect(() => buildVibeArgv("/opt/site", "prod", "logsRecent", ["nginx", "--tail=500"]))
-      .toThrow(/flag-like/);
-  });
+	it("passes positional service + tail for logsRecent", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "logsRecent", ["nginx", "500"])
+		).toEqual(["/opt/site/bin/vibe", "prod", "logs-recent", "nginx", "500"]);
+	});
+	it("passes service + tail for logsFollow", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "logsFollow", ["db", "200"])
+		).toEqual(["/opt/site/bin/vibe", "prod", "logs", "db", "200"]);
+	});
+	it("exposes logsExport mapped to logs-recent", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "logsExport", ["all", "2000"])
+		).toEqual(["/opt/site/bin/vibe", "prod", "logs-recent", "all", "2000"]);
+	});
+	it("still rejects a flag-like arg (tail must be a bare number)", () => {
+		expect(() =>
+			buildVibeArgv("/opt/site", "prod", "logsRecent", ["nginx", "--tail=500"])
+		).toThrow("flag-like");
+	});
 });
 
 describe("streamVibe kill-on-timeout contract", () => {

@@ -32,9 +32,7 @@ const logStreamSchema = z.object({
 	done: z.boolean(),
 });
 
-function roleOf(context: {
-	session: { user: unknown };
-}): string | undefined {
+function roleOf(context: { session: { user: unknown } }): string | undefined {
 	return (context.session.user as { role?: string } | undefined)?.role;
 }
 
@@ -117,17 +115,25 @@ export const logsRouter = {
 				(perUserActiveStreams.get(userId) ?? 0) + 1
 			);
 
-			const { proc, lines } = streamVibe(site.installDir, "prod", "logsFollow", {
-				timeoutMs: STREAM_TIMEOUT_MS,
-				args: hostArgs(input.service, FOLLOW_TAIL),
-			});
+			const { proc, lines } = streamVibe(
+				site.installDir,
+				"prod",
+				"logsFollow",
+				{
+					timeoutMs: STREAM_TIMEOUT_MS,
+					args: hostArgs(input.service, FOLLOW_TAIL),
+				}
+			);
 			try {
 				for await (const raw of lines) {
 					if (raw.length === 0) {
 						continue;
 					}
 					const masked = maskStreamLine(raw, input.service);
-					if (input.filter && !masked.toLowerCase().includes(input.filter.toLowerCase())) {
+					if (
+						input.filter &&
+						!masked.toLowerCase().includes(input.filter.toLowerCase())
+					) {
 						// Server-side filter before yielding keeps wire traffic low. Plain
 						// substring (not regex) for the stream path — cheap + ReDoS-free.
 						continue;
