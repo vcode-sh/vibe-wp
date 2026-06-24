@@ -15,6 +15,20 @@
 # The script exits non-zero on ANY failed assertion. It cleans up both test tenants
 # (sitea, siteb) on exit, even after a failure.
 #
+# CONNECTION MODEL (security-critical):
+#   Per-site users are granted for the Docker subnet host pattern
+#   (`vibe_<slug>@<subnet>.%`, derived live by db-provision). A real WordPress
+#   container connects from an address ON that subnet. This harness therefore
+#   connects as a per-site user from an EPHEMERAL CLIENT CONTAINER attached to the
+#   `vibe-wp-shared-db` network (`docker run --network … mariadb -h db …`), so the
+#   connection's source IP matches the grant — exactly like production. Connecting
+#   via `docker exec` INTO the db container instead would originate from localhost
+#   and be rejected by the subnet grant, which would (a) fail every OWN assertion
+#   and (b) make every DENY assertion pass for the WRONG reason (denied because it
+#   could not authenticate at all, not because the privilege is correctly scoped).
+#   The OWN-* assertions are the canary: if they pass, authentication works, which
+#   makes the DENY-* non-zero exits genuine privilege denials.
+#
 # Assertions covered:
 #   OWN-1  vibe_sitea CAN CREATE TABLE in its own database
 #   OWN-2  vibe_sitea CAN INSERT into its own database
@@ -46,6 +60,7 @@ SHARED_DB_DIR="${SHARED_DB_DIR:-/opt/vibe-wp-shared-db}"
 SHARED_DB_ENV="${SHARED_DB_DIR}/env/shared-db.env"
 COMPOSE_FILE="${SHARED_DB_DIR}/compose.yaml"
 ENV_FILE="${SHARED_DB_ENV}"
+SHARED_DB_NETWORK="vibe-wp-shared-db"
 
 # Wrapper: every docker compose invocation must supply --env-file so the
 # compose.yaml variable interpolation (${MARIADB_ROOT_PASSWORD:?required})
@@ -132,45 +147,43 @@ assert_not_contains() {
 }
 
 # ---------------------------------------------------------------------------
-# mariadb runner — connects as a PER-SITE user (not root) via docker exec.
-# Never stores or echoes the password; accepts it as a variable.
-# $1=db_name $2=user $3=password_var_name $4=sql
-# Outputs query results to stdout; non-zero exit on error.
+# Pre-flight: verify shared-db container is present and resolve the client image
 # ---------------------------------------------------------------------------
-run_as_site_user() {
-  _db="$1"; _user="$2"; _pw_var="$3"; _sql="$4"
-  eval "_pw=\"\${${_pw_var}}\""
-  # Password delivered via --password= inside the container only; never via argv visible
-  # to host ps. The docker exec command itself shows -u and --database but not -p<pw>
-  # (we use --password= which IS visible in container argv — acceptable for per-site
-  # users whose passwords are non-secret at the container boundary; the ROOT password
-  # is held to the stricter off-argv standard in sdb_mariadb_root).
-  printf '%s\n' "$_sql" \
-    | DC exec -T db \
-        mariadb -u "$_user" "--password=${_pw}" "--database=${_db}" \
-          --batch --skip-column-names 2>&1
-}
+echo "==> Pre-flight: checking shared-db container"
 
-# Variant: ignore the database selection (for USE/cross-db tests where we start at root)
-run_as_site_user_nodb() {
-  _user="$1"; _pw_var="$2"; _sql="$3"
-  eval "_pw=\"\${${_pw_var}}\""
-  printf '%s\n' "$_sql" \
-    | DC exec -T db \
-        mariadb -u "$_user" "--password=${_pw}" \
-          --batch --skip-column-names 2>&1
-}
-
-# ---------------------------------------------------------------------------
-# Pre-flight: verify shared-db container is present and healthy
-# ---------------------------------------------------------------------------
-echo "==> Pre-flight: checking shared-db container health"
-
-if ! DC ps --status running db 2>/dev/null | grep -q db; then
-  echo "SKIP: shared-db container is not running. Run 'bin/shared-db-init' first."
+DB_CONTAINER="$(DC ps -q db 2>/dev/null || true)"
+if [ -z "$DB_CONTAINER" ]; then
+  echo "FAIL: shared-db 'db' container is not running. Run 'bin/shared-db-init' first." >&2
   exit 1
 fi
-echo "     Container is running."
+echo "     Container is running ($DB_CONTAINER)."
+
+# Use the SAME image as the running db container for the ephemeral clients — it
+# ships the mariadb client and is guaranteed present (no pull). Fall back to the
+# compose image name only if inspect fails.
+SITE_CLIENT_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$DB_CONTAINER" 2>/dev/null || true)"
+[ -n "$SITE_CLIENT_IMAGE" ] || SITE_CLIENT_IMAGE="vibe-wp-shared-db-mariadb"
+echo "     Per-site client image: $SITE_CLIENT_IMAGE"
+
+# ---------------------------------------------------------------------------
+# site_sql <user> <password> <sql> [database]
+# Run SQL as a PER-SITE user from an ephemeral client container ON the shared
+# network (source IP on the Docker subnet → matches the per-site host grant).
+# The password is passed via MYSQL_PWD inherited from this process's environment
+# (name-only `-e MYSQL_PWD`), so it never appears in the host `docker run` argv
+# and mariadb emits no "password on the command line" warning. Combined
+# stdout+stderr to stdout; the pipeline exit code is mariadb's (non-zero on
+# access-denied or connect failure).
+# ---------------------------------------------------------------------------
+site_sql() {
+  _su_user="$1"; _su_pw="$2"; _su_sql="$3"; _su_db="${4:-}"
+  if [ -n "$_su_db" ]; then _su_dbarg="--database=${_su_db}"; else _su_dbarg=""; fi
+  printf '%s\n' "$_su_sql" \
+    | MYSQL_PWD="$_su_pw" docker run --rm -i \
+        --network "$SHARED_DB_NETWORK" -e MYSQL_PWD \
+        "$SITE_CLIENT_IMAGE" \
+        mariadb -h db -u "$_su_user" $_su_dbarg --batch --skip-column-names 2>&1
+}
 
 # ---------------------------------------------------------------------------
 # Phase 1: Provision two tenants — capture passwords
@@ -224,19 +237,16 @@ esac
 "${BIN}/db-provision" sitec >/tmp/vibe_test_pwc 2>/dev/null &
 bg_pid=$!
 
-# Give the provision a moment to start up (it needs to pull the root pw + start docker exec).
-# We sleep up to 3 seconds, checking each second if the process is still running.
-# Once it's confirmed running (kill -0 succeeds), we snapshot ps — this is the window
-# where the root pw could appear in argv if the implementation is wrong.
+# Snapshot the process lists while the provision is (likely) mid-flight. We poll
+# briefly so the snapshot lands inside the window where a buggy implementation
+# would expose the root pw in argv.
 _waited=0
 while [ "$_waited" -lt 15 ]; do
   sleep 0.2
   _waited=$((_waited + 1))
   if kill -0 "$bg_pid" 2>/dev/null; then
-    # Process is still alive — a good time to snapshot
     break
   fi
-  # If the process already exited (very fast provision), continue to snapshot anyway.
 done
 
 # Snapshot host process list.
@@ -273,32 +283,25 @@ unset root_pw ps_snapshot container_ps
 
 # ---------------------------------------------------------------------------
 # Phase 3: Per-site OWN-access assertions (sitea CAN use its own DB)
+# These prove authentication works from the network → DENY-* below are genuine.
 # ---------------------------------------------------------------------------
 echo ""
 echo "==> Phase 3: Own-database access assertions (sitea)"
 
-# These wrappers run mariadb directly; exit 0 from mariadb = success = PASS for assert_ok.
 _own_create_table() {
-  printf 'CREATE TABLE IF NOT EXISTS _vibe_test_t (id INT PRIMARY KEY);\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" \
+    'CREATE TABLE IF NOT EXISTS _vibe_test_t (id INT PRIMARY KEY);' vibe_sitea
 }
 assert_ok "OWN-1: vibe_sitea can CREATE TABLE in vibe_sitea" _own_create_table
 
 _own_insert() {
-  printf 'INSERT INTO _vibe_test_t (id) VALUES (1) ON DUPLICATE KEY UPDATE id=id;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" \
+    'INSERT INTO _vibe_test_t (id) VALUES (1) ON DUPLICATE KEY UPDATE id=id;' vibe_sitea
 }
 assert_ok "OWN-2: vibe_sitea can INSERT into vibe_sitea" _own_insert
 
 _own_select() {
-  printf 'SELECT id FROM _vibe_test_t;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" 'SELECT id FROM _vibe_test_t;' vibe_sitea
 }
 assert_ok "OWN-3: vibe_sitea can SELECT from vibe_sitea" _own_select
 
@@ -309,50 +312,30 @@ echo ""
 echo "==> Phase 4: Cross-tenant denial assertions"
 
 # DENY-1: cannot USE vibe_siteb
-# mariadb exits non-zero on "Access denied" → assert_deny sees non-zero → PASS.
-# If vibe_sitea somehow could switch to vibe_siteb, mariadb exits 0 → FAIL.
-_deny_use_siteb() {
-  printf 'USE vibe_siteb;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" \
-          --batch --skip-column-names 2>/dev/null
-}
+_deny_use_siteb() { site_sql vibe_sitea "$pw_a" 'USE vibe_siteb;'; }
 assert_deny "DENY-1: vibe_sitea cannot USE vibe_siteb" _deny_use_siteb
 
 # DENY-2: cannot SELECT from vibe_siteb.*
 _deny_select_siteb() {
-  printf 'SELECT * FROM vibe_siteb._vibe_test_t;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" 'SELECT * FROM vibe_siteb._vibe_test_t;' vibe_sitea
 }
 assert_deny "DENY-2: vibe_sitea cannot SELECT from vibe_siteb.*" _deny_select_siteb
 
 # DENY-3: cannot SELECT from mysql.user
 _deny_select_mysql_user() {
-  printf 'SELECT User, Host FROM mysql.user;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" 'SELECT User, Host FROM mysql.user;' vibe_sitea
 }
 assert_deny "DENY-3: vibe_sitea cannot SELECT from mysql.user" _deny_select_mysql_user
 
 # DENY-4: cannot GRANT (no GRANT OPTION)
-# MariaDB returns "Access denied; you need (at least one of) the GRANT OPTION privilege(s)"
 _deny_grant() {
-  printf 'GRANT SELECT ON vibe_sitea.* TO vibe_sitea;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" 'GRANT SELECT ON vibe_sitea.* TO vibe_sitea;' vibe_sitea
 }
 assert_deny "DENY-4: vibe_sitea cannot GRANT privileges (no GRANT OPTION)" _deny_grant
 
 # DENY-5: cannot CREATE USER
 _deny_create_user() {
-  printf "CREATE USER 'attacker'@'%%' IDENTIFIED BY 'x';\n" \
-    | DC exec -T db \
-        mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-          --batch --skip-column-names 2>/dev/null
+  site_sql vibe_sitea "$pw_a" "CREATE USER 'attacker'@'%' IDENTIFIED BY 'x';" vibe_sitea
 }
 assert_deny "DENY-5: vibe_sitea cannot CREATE USER" _deny_create_user
 
@@ -362,10 +345,7 @@ assert_deny "DENY-5: vibe_sitea cannot CREATE USER" _deny_create_user
 echo ""
 echo "==> Phase 5: SHOW DATABASES cross-tenant visibility"
 
-show_dbs="$(printf 'SHOW DATABASES;\n' \
-  | DC exec -T db \
-      mariadb -u vibe_sitea "--password=${pw_a}" \
-        --batch --skip-column-names 2>/dev/null || true)"
+show_dbs="$(site_sql vibe_sitea "$pw_a" 'SHOW DATABASES;' || true)"
 
 assert_contains "SHOW-1a: SHOW DATABASES contains vibe_sitea" "vibe_sitea" "$show_dbs"
 assert_not_contains "SHOW-1b: SHOW DATABASES does NOT contain vibe_siteb" "vibe_siteb" "$show_dbs"
@@ -376,10 +356,8 @@ assert_not_contains "SHOW-1b: SHOW DATABASES does NOT contain vibe_siteb" "vibe_
 echo ""
 echo "==> Phase 6: SF-3 — information_schema.SCHEMATA cross-tenant invisibility"
 
-schemata="$(printf 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA;\n' \
-  | DC exec -T db \
-      mariadb -u vibe_sitea "--password=${pw_a}" \
-        --batch --skip-column-names 2>/dev/null || true)"
+schemata="$(site_sql vibe_sitea "$pw_a" \
+  'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA;' || true)"
 
 assert_contains "SF-3a: SCHEMATA contains vibe_sitea" "vibe_sitea" "$schemata"
 assert_not_contains "SF-3b: SCHEMATA does NOT reveal vibe_siteb" "vibe_siteb" "$schemata"
@@ -390,10 +368,7 @@ assert_not_contains "SF-3b: SCHEMATA does NOT reveal vibe_siteb" "vibe_siteb" "$
 echo ""
 echo "==> Phase 7: SHOW GRANTS scope for vibe_sitea"
 
-grants="$(printf 'SHOW GRANTS FOR CURRENT_USER();\n' \
-  | DC exec -T db \
-      mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-        --batch --skip-column-names 2>/dev/null || true)"
+grants="$(site_sql vibe_sitea "$pw_a" 'SHOW GRANTS FOR CURRENT_USER();' vibe_sitea || true)"
 
 # Must contain the scoped grant.
 assert_contains "GRANT-1: grants include scoped vibe_sitea.* grant" \
@@ -404,7 +379,6 @@ assert_contains "GRANT-2: grants include MAX_USER_CONNECTIONS" \
   "MAX_USER_CONNECTIONS" "$grants"
 
 # Must NOT have any *.* (global) grant beyond USAGE.
-# Extract any ON *.* grants.
 global_non_usage="$(printf '%s\n' "$grants" \
   | grep 'ON \*\.\*' | grep -v '^GRANT USAGE ON' || true)"
 if [ -z "$global_non_usage" ]; then
@@ -422,8 +396,8 @@ assert_not_contains "GRANT-5: no SUPER in grants" "SUPER" "$grants"
 # Must NOT reference vibe_siteb.
 assert_not_contains "GRANT-6: grants do not reference vibe_siteb" "vibe_siteb" "$grants"
 
-# Must NOT contain PROCESS, FILE, RELOAD, SHUTDOWN, REPLICATION.
-for _priv in PROCESS FILE RELOAD SHUTDOWN REPLICATION CREATE USER; do
+# Must NOT contain PROCESS, FILE, RELOAD, SHUTDOWN, REPLICATION, CREATE USER.
+for _priv in PROCESS FILE RELOAD SHUTDOWN REPLICATION "CREATE USER"; do
   assert_not_contains "GRANT-7-${_priv}: no ${_priv} in grants" "$_priv" "$grants"
 done
 
@@ -437,11 +411,8 @@ echo "==> Phase 8: Deprovision sitea — assert DB+user gone, siteb intact"
   fail "DEPR-0: db-deprovision sitea failed"
 }
 
-# DEPR-1: connecting as vibe_sitea must now FAIL.
-depr_result="$(printf 'SELECT 1;\n' \
-  | DC exec -T db \
-      mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
-        --batch --skip-column-names 2>&1 || true)"
+# DEPR-1: connecting as vibe_sitea must now FAIL (user dropped → access denied).
+depr_result="$(site_sql vibe_sitea "$pw_a" 'SELECT 1;' vibe_sitea || true)"
 case "$depr_result" in
   *"Access denied"*|*"denied"*|*"Can't connect"*|*"Unknown database"*)
     pass "DEPR-1: vibe_sitea DB+user are gone after deprovision" ;;
@@ -451,12 +422,7 @@ case "$depr_result" in
 esac
 
 # DEPR-2: siteb must still be accessible.
-_depr_siteb_intact() {
-  printf 'SELECT 1;\n' \
-    | DC exec -T db \
-        mariadb -u vibe_siteb "--password=${pw_b}" --database=vibe_siteb \
-          --batch --skip-column-names 2>/dev/null
-}
+_depr_siteb_intact() { site_sql vibe_siteb "$pw_b" 'SELECT 1;' vibe_siteb; }
 assert_ok "DEPR-2: vibe_siteb is intact after sitea deprovision" _depr_siteb_intact
 
 # ---------------------------------------------------------------------------
