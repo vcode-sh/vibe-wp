@@ -340,7 +340,7 @@ validate_logs_args() {
 # dispatch guard so unit tests can source the wrapper as a lib and exercise it
 # without Docker. The slug re-validation uses the lib's own sdb_validate_slug
 # (SF-5), not a re-typed regex.
-SHARED_DB_OP_ALLOWLIST="init status provision deprovision backup"
+SHARED_DB_OP_ALLOWLIST="init status provision deprovision backup rotate-root"
 validate_shared_db_op() {
   op="$1"
   for allowed in $SHARED_DB_OP_ALLOWLIST; do
@@ -525,9 +525,10 @@ case "$sub" in
 
     # Map op -> script + enforce arity (SF-6).
     case "$sdb_op" in
-      init)        sdb_script="$sdb_bin/shared-db-init";   [ "$#" -eq 0 ] || die "shared-db init takes no args" ;;
-      status)      sdb_script="$sdb_bin/shared-db-status"; [ "$#" -eq 0 ] || die "shared-db status takes no args" ;;
-      backup)      sdb_script="$sdb_bin/backup-shared-db"; [ "$#" -eq 0 ] || die "shared-db backup takes no args" ;;
+      init)        sdb_script="$sdb_bin/shared-db-init";        [ "$#" -eq 0 ] || die "shared-db init takes no args" ;;
+      status)      sdb_script="$sdb_bin/shared-db-status";      [ "$#" -eq 0 ] || die "shared-db status takes no args" ;;
+      backup)      sdb_script="$sdb_bin/backup-shared-db";      [ "$#" -eq 0 ] || die "shared-db backup takes no args" ;;
+      rotate-root) sdb_script="$sdb_bin/shared-db-rotate-root"; [ "$#" -eq 0 ] || die "shared-db rotate-root takes no args" ;;
       provision)   sdb_script="$sdb_bin/db-provision";     [ "$#" -eq 1 ] || die "shared-db provision takes exactly one slug" ;;
       deprovision) sdb_script="$sdb_bin/db-deprovision";   [ "$#" -eq 1 ] || die "shared-db deprovision takes exactly one slug" ;;
     esac

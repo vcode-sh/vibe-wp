@@ -38,12 +38,16 @@ function runValidateSlug(slug: string): number {
 }
 
 describe("validate_shared_db_op — allowlist", () => {
-	it.each(["init", "status", "provision", "deprovision", "backup"])(
-		"accepts %s",
-		(op) => {
-			expect(runValidateOp(op)).toBe(0);
-		}
-	);
+	it.each([
+		"init",
+		"status",
+		"provision",
+		"deprovision",
+		"backup",
+		"rotate-root",
+	])("accepts %s", (op) => {
+		expect(runValidateOp(op)).toBe(0);
+	});
 
 	it.each([
 		"",
@@ -53,7 +57,7 @@ describe("validate_shared_db_op — allowlist", () => {
 		"shell",
 		"provision; rm -rf /",
 		"init status",
-		"rotate-root",
+		"rotate",
 		"--help",
 	])("rejects %j", (op) => {
 		expect(runValidateOp(op)).toBe(1);
