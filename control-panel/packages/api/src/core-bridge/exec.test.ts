@@ -402,8 +402,19 @@ describe("buildVibeArgv", () => {
 			"smtpTest",
 			"up",
 			"wpCoreUpdate",
+			"wpPluginActivate",
+			"wpPluginAutoUpdatesDisable",
+			"wpPluginAutoUpdatesEnable",
+			"wpPluginDeactivate",
+			"wpPluginDelete",
+			"wpPluginUpdate",
 			"wpPluginUpdateAll",
 			"wpPluginUpdates",
+			"wpThemeActivate",
+			"wpThemeAutoUpdatesDisable",
+			"wpThemeAutoUpdatesEnable",
+			"wpThemeDelete",
+			"wpThemeUpdate",
 		]);
 	});
 });
@@ -604,5 +615,48 @@ describe("streamVibe kill-on-timeout contract", () => {
 			});
 			child.on("error", reject);
 		});
+	});
+});
+
+describe("per-item wp ops (feature #4)", () => {
+	it("builds plugin activate argv with the slug appended", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "wpPluginActivate", ["akismet"])
+		).toEqual([
+			"/opt/site/bin/vibe",
+			"prod",
+			"wp",
+			"plugin",
+			"activate",
+			"akismet",
+		]);
+	});
+
+	it("builds plugin auto-updates enable argv with the slug as trailing arg", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "wpPluginAutoUpdatesEnable", [
+				"redis-cache",
+			])
+		).toEqual([
+			"/opt/site/bin/vibe",
+			"prod",
+			"wp",
+			"plugin",
+			"auto-updates",
+			"enable",
+			"redis-cache",
+		]);
+	});
+
+	it("builds theme update argv with the slug", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "wpThemeUpdate", ["astra"])
+		).toEqual(["/opt/site/bin/vibe", "prod", "wp", "theme", "update", "astra"]);
+	});
+
+	it("refuses a flag-like slug (no leading dash reaches the wrapper)", () => {
+		expect(() =>
+			buildVibeArgv("/opt/site", "prod", "wpPluginUpdate", ["--path=/evil"])
+		).toThrow();
 	});
 });

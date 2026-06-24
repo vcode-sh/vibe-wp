@@ -118,6 +118,42 @@ export const VIBE_OPS = {
 		argv: ["wp", "cron", "event", "run", "vibe_insights_collect_cron"],
 		stream: false,
 	},
+	// --- Feature #4: per-item plugin/theme management (slug arrives as args[0]) ---
+	wpPluginActivate: {
+		argv: ["wp", "plugin", "activate"],
+		stream: true,
+		takesArg: true,
+	},
+	wpPluginDeactivate: {
+		argv: ["wp", "plugin", "deactivate"],
+		stream: true,
+		takesArg: true,
+	},
+	wpPluginUpdate: { argv: ["wp", "plugin", "update"], stream: true, takesArg: true },
+	wpPluginDelete: { argv: ["wp", "plugin", "delete"], stream: true, takesArg: true },
+	wpPluginAutoUpdatesEnable: {
+		argv: ["wp", "plugin", "auto-updates", "enable"],
+		stream: false,
+		takesArg: true,
+	},
+	wpPluginAutoUpdatesDisable: {
+		argv: ["wp", "plugin", "auto-updates", "disable"],
+		stream: false,
+		takesArg: true,
+	},
+	wpThemeActivate: { argv: ["wp", "theme", "activate"], stream: true, takesArg: true },
+	wpThemeUpdate: { argv: ["wp", "theme", "update"], stream: true, takesArg: true },
+	wpThemeDelete: { argv: ["wp", "theme", "delete"], stream: true, takesArg: true },
+	wpThemeAutoUpdatesEnable: {
+		argv: ["wp", "theme", "auto-updates", "enable"],
+		stream: false,
+		takesArg: true,
+	},
+	wpThemeAutoUpdatesDisable: {
+		argv: ["wp", "theme", "auto-updates", "disable"],
+		stream: false,
+		takesArg: true,
+	},
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;
