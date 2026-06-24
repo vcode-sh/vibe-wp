@@ -1,0 +1,35 @@
+#!/bin/sh
+# db-provision <slug> — create a per-site MariaDB database + user on the shared container.
+# OUTPUT CONTRACT: prints EXACTLY the 32-hex per-site password (one line) to stdout.
+# Errors go to stderr only. No secret appears in argv, env, or logs.
+set -eu
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+[ "$#" -eq 1 ] || sdb_die "usage: db-provision <slug>"
+
+# Validate slug: excludes all SQL metacharacters. Produces the DB/user identifier.
+ident="$(sdb_validate_slug "$1")"          # vibe_<...>; safe, no SQL metacharacters
+
+# Generate a 32-hex per-site password; returned ONLY via stdout at the end.
+pw="$(openssl rand -hex 16)"
+
+# MF-5: derive host pattern from the live network subnet. Fails closed (never '%').
+host_pat="$(sdb_host_pattern)"
+
+# Numeric connection cap; default 25.
+maxc="$(sdb_max_user_connections)"
+
+# FIXED SQL TEMPLATE — only the VALIDATED ident, generated pw, derived host_pat,
+# and numeric maxc are substituted; no raw caller input reaches SQL.
+# CREATE USER IF NOT EXISTS + ALTER USER guarantees the printed pw is the live one
+# even on re-run (MF-3). Grant is ONLY vibe_<slug>.* — no *.*, no GRANT OPTION,
+# no server privileges (least privilege, non-negotiable).
+sdb_mariadb_root "CREATE DATABASE IF NOT EXISTS \`${ident}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${ident}'@'${host_pat}' IDENTIFIED BY '${pw}';
+ALTER USER '${ident}'@'${host_pat}' IDENTIFIED BY '${pw}';
+GRANT ALL PRIVILEGES ON \`${ident}\`.* TO '${ident}'@'${host_pat}' WITH MAX_USER_CONNECTIONS ${maxc};
+FLUSH PRIVILEGES;"
+
+# Output contract: exactly the password, nothing else.
+printf '%s\n' "$pw"

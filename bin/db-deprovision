@@ -1,0 +1,29 @@
+#!/bin/sh
+# db-deprovision <slug> — drop the per-site database and ALL host entries for the user.
+# Silent on success. Errors go to stderr only.
+# MF-6: exhaustive host enumeration — drops the user from every host it was granted on,
+# not a guessed pattern (which may have changed since provision).
+set -eu
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+[ "$#" -eq 1 ] || sdb_die "usage: db-deprovision <slug>"
+
+# Validate slug; produces the DB/user identifier.
+ident="$(sdb_validate_slug "$1")"          # vibe_<...>; validated, no SQL metacharacters
+
+# MF-6: enumerate ALL hosts this user exists on before dropping the DB.
+# $h values come from our own mysql.user rows (not caller input).
+hosts="$(sdb_mariadb_root "SELECT Host FROM mysql.user WHERE User='${ident}';")"
+
+# Drop the database.
+sdb_mariadb_root "DROP DATABASE IF EXISTS \`${ident}\`;" > /dev/null
+
+# Drop the user from every host it was created on (exhaustive, not pattern-guessing).
+for h in $hosts; do
+  sdb_mariadb_root "DROP USER IF EXISTS '${ident}'@'${h}';" > /dev/null
+done
+
+sdb_mariadb_root "FLUSH PRIVILEGES;" > /dev/null
+
+# Silent on success.
