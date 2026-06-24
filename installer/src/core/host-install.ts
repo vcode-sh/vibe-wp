@@ -6,6 +6,10 @@ import type { InstallerState, InstallTask } from "./types";
 // --no-host-install flags, so re-runs and managed hosts skip what they already have.
 export function buildHostInstallTasks(state: InstallerState): InstallTask[] {
   const sudo = state.host.sudo ? "sudo " : "";
+  // Unattended apt: DEBIAN_FRONTEND stops debconf prompting and NEEDRESTART_MODE=a
+  // auto-restarts services, so a non-TTY install never hangs on a prompt. The
+  // `env` prefix survives `sudo` (which resets the environment).
+  const aptInstall = `${sudo}env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt install -y`;
   const tasks: InstallTask[] = [];
 
   if (state.installDocker && !state.host.docker) {
@@ -17,7 +21,7 @@ export function buildHostInstallTasks(state: InstallerState): InstallTask[] {
       command: [
         "sh",
         "-lc",
-        `${sudo}apt update && ${sudo}apt install -y ca-certificates curl && ${sudo}install -m 0755 -d /etc/apt/keyrings && ${sudo}curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && ${sudo}chmod a+r /etc/apt/keyrings/docker.asc && ${sudo}tee /etc/apt/sources.list.d/docker.sources >/dev/null <<'EOF'\nTypes: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: $(. /etc/os-release && echo "\${UBUNTU_CODENAME:-$VERSION_CODENAME}")\nComponents: stable\nArchitectures: $(dpkg --print-architecture)\nSigned-By: /etc/apt/keyrings/docker.asc\nEOF\n${sudo}apt update && ${sudo}apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`
+        `${sudo}apt update && ${aptInstall} ca-certificates curl && ${sudo}install -m 0755 -d /etc/apt/keyrings && ${sudo}curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && ${sudo}chmod a+r /etc/apt/keyrings/docker.asc && ${sudo}tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF\nTypes: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: $(. /etc/os-release && echo "\${UBUNTU_CODENAME:-$VERSION_CODENAME}")\nComponents: stable\nArchitectures: $(dpkg --print-architecture)\nSigned-By: /etc/apt/keyrings/docker.asc\nEOF\n${sudo}apt update && ${aptInstall} docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`
       ]
     });
   }
@@ -31,7 +35,7 @@ export function buildHostInstallTasks(state: InstallerState): InstallTask[] {
       command: [
         "sh",
         "-lc",
-        `${sudo}apt install -y debian-keyring debian-archive-keyring apt-transport-https curl && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | ${sudo}gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | ${sudo}tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null && ${sudo}chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list && ${sudo}apt update && ${sudo}apt install -y caddy`
+        `${aptInstall} debian-keyring debian-archive-keyring apt-transport-https curl && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | ${sudo}gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | ${sudo}tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null && ${sudo}chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list && ${sudo}apt update && ${aptInstall} caddy`
       ]
     });
   }
@@ -45,7 +49,7 @@ export function buildHostInstallTasks(state: InstallerState): InstallTask[] {
       command: [
         "sh",
         "-lc",
-        `curl -fsSL https://bun.sh/install | ${sudo}env BUN_INSTALL=/usr/local bash`
+        `${aptInstall} unzip && curl -fsSL https://bun.sh/install | ${sudo}env BUN_INSTALL=/usr/local bash`
       ]
     });
   }
