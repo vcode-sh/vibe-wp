@@ -31,6 +31,7 @@ content/mu-plugins/*
 !content/mu-plugins/vibe-wp-environment.php
 !content/mu-plugins/vibe-wp-loopback.php
 !content/mu-plugins/vibe-wp-redis.php
+!content/mu-plugins/vibe-wp-smtp.php
 
 env/*.env
 !env/*.env.example

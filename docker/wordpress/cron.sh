@@ -15,5 +15,8 @@ done
 echo "Starting WordPress cron loop with ${interval}s interval."
 while true; do
   wp_cmd cron event run --due-now || true
+  # Retry any mail spooled by the php-fpm container when its relay was briefly
+  # unreachable (no-op when the queue is empty / mode != relay).
+  /usr/local/bin/vibe-wp-mailq-flush || true
   sleep "${interval}"
 done
