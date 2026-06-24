@@ -162,6 +162,10 @@ OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose e
 # is exactly the set of flags exec.ts VIBE_OPS bake into their argv (plus --yes):
 #   monitor --json --no-notify | perf-report --json | backup --local-only | *--yes
 FLAG_ALLOWLIST="--local-only --yes --json --no-notify"
+# The `logs`/`logs-recent` ops are special-cased: their args are a fixed
+# service enum (all nginx wordpress cron db redis) + a fixed tail enum
+# (100 200 500 2000), validated by validate_logs_args — NOT the generic
+# validate_arg path (which would allow any metachar-free token as a service).
 
 validate_op() {
   op="$1"
@@ -235,6 +239,26 @@ validate_env_key() {
     [ "$key" = "$allowed" ] && return 0
   done
   die "env key not allowed: $key"
+}
+
+# `logs` / `logs-recent` take up to two positional args: a service from the
+# fixed compose-service enum and a tail depth from the fixed enum. Re-validated
+# HERE so a compromised panel cannot tail an arbitrary container or pass an
+# unbounded --tail. Mirrors bin/vibe _validate_logs_args and the router enums.
+LOG_SERVICE_ENUM="all nginx wordpress cron db redis"
+LOG_TAIL_ENUM="100 200 500 2000"
+validate_logs_args() {
+  [ "$#" -le 2 ] || die "logs op takes at most 2 args (service, tail)"
+  if [ "$#" -ge 1 ]; then
+    _ok=0
+    for s in $LOG_SERVICE_ENUM; do [ "$1" = "$s" ] && _ok=1 && break; done
+    [ "$_ok" = 1 ] || die "logs service not allowed: $1"
+  fi
+  if [ "$#" -ge 2 ]; then
+    _ok=0
+    for t in $LOG_TAIL_ENUM; do [ "$2" = "$t" ] && _ok=1 && break; done
+    [ "$_ok" = 1 ] || die "logs tail not allowed: $2"
+  fi
 }
 
 # --- siteinfo: scan roots, print ONLY non-secret fields as TAB-separated rows.
@@ -349,6 +373,7 @@ case "$sub" in
       wp)      validate_wp_args "$@" ;;     # only the 3 exact panel wp forms
       compose) validate_compose_args "$@" ;; # only `compose ps --format json`
       env)     validate_env_key "$@" ;;     # exactly one key, non-secret allowlist
+      logs|logs-recent) validate_logs_args "$@" ;; # fixed service + tail enums
       *)
         for a in "$@"; do
           validate_arg "$a"
