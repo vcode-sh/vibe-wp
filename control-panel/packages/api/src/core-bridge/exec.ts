@@ -129,8 +129,16 @@ export const VIBE_OPS = {
 		stream: true,
 		takesArg: true,
 	},
-	wpPluginUpdate: { argv: ["wp", "plugin", "update"], stream: true, takesArg: true },
-	wpPluginDelete: { argv: ["wp", "plugin", "delete"], stream: true, takesArg: true },
+	wpPluginUpdate: {
+		argv: ["wp", "plugin", "update"],
+		stream: true,
+		takesArg: true,
+	},
+	wpPluginDelete: {
+		argv: ["wp", "plugin", "delete"],
+		stream: true,
+		takesArg: true,
+	},
 	wpPluginAutoUpdatesEnable: {
 		argv: ["wp", "plugin", "auto-updates", "enable"],
 		stream: false,
@@ -141,9 +149,21 @@ export const VIBE_OPS = {
 		stream: false,
 		takesArg: true,
 	},
-	wpThemeActivate: { argv: ["wp", "theme", "activate"], stream: true, takesArg: true },
-	wpThemeUpdate: { argv: ["wp", "theme", "update"], stream: true, takesArg: true },
-	wpThemeDelete: { argv: ["wp", "theme", "delete"], stream: true, takesArg: true },
+	wpThemeActivate: {
+		argv: ["wp", "theme", "activate"],
+		stream: true,
+		takesArg: true,
+	},
+	wpThemeUpdate: {
+		argv: ["wp", "theme", "update"],
+		stream: true,
+		takesArg: true,
+	},
+	wpThemeDelete: {
+		argv: ["wp", "theme", "delete"],
+		stream: true,
+		takesArg: true,
+	},
 	wpThemeAutoUpdatesEnable: {
 		argv: ["wp", "theme", "auto-updates", "enable"],
 		stream: false,

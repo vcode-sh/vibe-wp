@@ -36,7 +36,10 @@ describe("themesRouter", () => {
 			context: ctx,
 		});
 		expect(startJob).toHaveBeenCalledWith(
-			expect.objectContaining({ op: "wpThemeAutoUpdatesEnable", args: ["astra"] })
+			expect.objectContaining({
+				op: "wpThemeAutoUpdatesEnable",
+				args: ["astra"],
+			})
 		);
 	});
 

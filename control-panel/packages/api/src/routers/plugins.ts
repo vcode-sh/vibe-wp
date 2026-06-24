@@ -2,10 +2,30 @@ import { z } from "zod";
 
 import { runVibe } from "../core-bridge/exec";
 import { startJob } from "../core-bridge/jobs";
+import { startSafeUpdate } from "../core-bridge/safe-update";
 import { findSite } from "../core-bridge/sites";
 import { assertSlug, procedureFor } from "../core-bridge/wp-actions";
 
 const SlugInput = z.object({ siteId: z.string(), slug: z.string() });
+
+/**
+ * Resolve the inputs safe-update needs: the public URL (for the TTFB probe) and
+ * the backup destination. The pre-update snapshot is intentionally LOCAL
+ * (env-immune, no network needed for the rollback), so r2 is always false here.
+ */
+async function resolveSafeUpdateContext(
+	siteId: string
+): Promise<{ siteUrl: string; r2: boolean }> {
+	const site = await findSite(siteId);
+	if (!site) {
+		throw new Error("Unknown site");
+	}
+	// WP_HOME is the public URL and is in the wrapper's non-secret env allowlist.
+	const { stdout } = await runVibe(site.installDir, "prod", "env", {
+		args: ["WP_HOME"],
+	});
+	return { siteUrl: stdout.trim() || "http://localhost", r2: false };
+}
 
 export const pluginsRouter = {
 	pluginActivate: procedureFor("plugin.activate")
@@ -104,5 +124,45 @@ export const pluginsRouter = {
 				{ args: [input.cadence], timeoutMs: 30_000 }
 			);
 			return { ok: code === 0 };
+		}),
+
+	safeUpdate: procedureFor("safeUpdate")
+		.input(
+			z.object({
+				siteId: z.string(),
+				target: z.discriminatedUnion("kind", [
+					z.object({ kind: z.literal("plugin"), slug: z.string() }),
+					z.object({ kind: z.literal("theme"), slug: z.string() }),
+					z.object({ kind: z.literal("core") }),
+				]),
+			})
+		)
+		.handler(async ({ input, context }) => {
+			if ("slug" in input.target) {
+				assertSlug(input.target.slug, input.target.kind);
+			}
+			const { siteUrl, r2 } = await resolveSafeUpdateContext(input.siteId);
+			return startSafeUpdate({
+				siteId: input.siteId,
+				env: "prod",
+				target: input.target,
+				userId: context.session.user.id,
+				siteUrl,
+				r2,
+			});
+		}),
+
+	safeUpdateAll: procedureFor("safeUpdate")
+		.input(z.object({ siteId: z.string() }))
+		.handler(async ({ input, context }) => {
+			const { siteUrl, r2 } = await resolveSafeUpdateContext(input.siteId);
+			return startSafeUpdate({
+				siteId: input.siteId,
+				env: "prod",
+				target: { kind: "allPlugins" },
+				userId: context.session.user.id,
+				siteUrl,
+				r2,
+			});
 		}),
 };

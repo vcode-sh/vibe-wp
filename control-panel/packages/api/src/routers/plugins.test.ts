@@ -11,9 +11,13 @@ const { runVibe } = vi.hoisted(() => ({
 const { findSite } = vi.hoisted(() => ({
 	findSite: vi.fn(async () => ({ installDir: "/opt/s1" })),
 }));
+const { startSafeUpdate } = vi.hoisted(() => ({
+	startSafeUpdate: vi.fn(async () => ({ jobId: "safe-1" })),
+}));
 vi.mock("../core-bridge/jobs", () => ({ startJob }));
 vi.mock("../core-bridge/exec", () => ({ runVibe }));
 vi.mock("../core-bridge/sites", () => ({ findSite }));
+vi.mock("../core-bridge/safe-update", () => ({ startSafeUpdate }));
 
 import { pluginsRouter } from "./plugins";
 
@@ -43,7 +47,10 @@ describe("pluginsRouter mutations", () => {
 			context: ctx,
 		});
 		expect(startJob).toHaveBeenCalledWith(
-			expect.objectContaining({ op: "wpPluginDeactivate", args: ["woocommerce"] })
+			expect.objectContaining({
+				op: "wpPluginDeactivate",
+				args: ["woocommerce"],
+			})
 		);
 	});
 
@@ -54,7 +61,10 @@ describe("pluginsRouter mutations", () => {
 			context: ctx,
 		});
 		expect(startJob).toHaveBeenCalledWith(
-			expect.objectContaining({ op: "wpPluginAutoUpdatesEnable", args: ["redis-cache"] })
+			expect.objectContaining({
+				op: "wpPluginAutoUpdatesEnable",
+				args: ["redis-cache"],
+			})
 		);
 		startJob.mockClear();
 		await pluginsRouter.pluginAutoUpdate["~orpc"].handler({
@@ -92,5 +102,43 @@ describe("pluginsRouter mutations", () => {
 			expect.objectContaining({ args: ["daily"] })
 		);
 		expect(res).toEqual({ ok: true });
+	});
+
+	it("safeUpdate resolves context and starts a safe-update for the target", async () => {
+		startSafeUpdate.mockClear();
+		await pluginsRouter.safeUpdate["~orpc"].handler({
+			input: { siteId: "s1", target: { kind: "plugin", slug: "akismet" } },
+			context: ctx,
+		});
+		expect(startSafeUpdate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				siteId: "s1",
+				target: { kind: "plugin", slug: "akismet" },
+				userId: "u1",
+				r2: false,
+			})
+		);
+	});
+
+	it("safeUpdateAll targets allPlugins", async () => {
+		startSafeUpdate.mockClear();
+		await pluginsRouter.safeUpdateAll["~orpc"].handler({
+			input: { siteId: "s1" },
+			context: ctx,
+		});
+		expect(startSafeUpdate).toHaveBeenCalledWith(
+			expect.objectContaining({ target: { kind: "allPlugins" } })
+		);
+	});
+
+	it("safeUpdate rejects an invalid slug", async () => {
+		startSafeUpdate.mockClear();
+		await expect(
+			pluginsRouter.safeUpdate["~orpc"].handler({
+				input: { siteId: "s1", target: { kind: "plugin", slug: "../evil" } },
+				context: ctx,
+			})
+		).rejects.toThrow(/Invalid/);
+		expect(startSafeUpdate).not.toHaveBeenCalled();
 	});
 });

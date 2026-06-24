@@ -21,13 +21,16 @@ describe("WP_ACTION_TIERS", () => {
 });
 
 describe("assertSlug", () => {
-	it.each(["akismet", "contact-form-7", "a", "a".repeat(63), "redis-cache"])(
-		"accepts %s",
-		(s) => {
-			expect(() => assertSlug(s, "plugin")).not.toThrow();
-			expect(SLUG_RE.test(s)).toBe(true);
-		}
-	);
+	it.each([
+		"akismet",
+		"contact-form-7",
+		"a",
+		"a".repeat(63),
+		"redis-cache",
+	])("accepts %s", (s) => {
+		expect(() => assertSlug(s, "plugin")).not.toThrow();
+		expect(SLUG_RE.test(s)).toBe(true);
+	});
 
 	it.each([
 		"",

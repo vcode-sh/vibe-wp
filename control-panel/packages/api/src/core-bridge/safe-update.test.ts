@@ -4,7 +4,7 @@ import { buildSafeUpdateStream } from "./safe-update";
 
 function fakeStream(lines: string[], code: number) {
 	return {
-		proc: { exited: Promise.resolve(code), kill: () => {} },
+		proc: { exited: Promise.resolve(code), kill: () => undefined },
 		lines: (async function* () {
 			for (const l of lines) {
 				yield l;
@@ -25,10 +25,7 @@ describe("safe-update", () => {
 	it("happy path: backup -> update -> smoke ok -> no restore", async () => {
 		const streamVibe = vi.fn((_d, _e, op) => {
 			if (op === "backupLocal" || op === "backup") {
-				return fakeStream(
-					["Backup written to backups/prod/20260624T0000Z"],
-					0
-				);
+				return fakeStream(["Backup written to backups/prod/20260624T0000Z"], 0);
 			}
 			return fakeStream(["Success: updated"], 0);
 		});
@@ -39,12 +36,25 @@ describe("safe-update", () => {
 		);
 		const fetchFn = vi.fn(async () => ({ ok: true })) as never;
 		const { lines } = buildSafeUpdateStream(
-			{ streamVibe, runVibe, fetchFn, siteUrl: "https://x", ttfbMs: 3000, r2: false },
-			{ workDir: "/opt/s", env: "prod", target: { kind: "plugin", slug: "akismet" } }
+			{
+				streamVibe,
+				runVibe,
+				fetchFn,
+				siteUrl: "https://x",
+				ttfbMs: 3000,
+				r2: false,
+			},
+			{
+				workDir: "/opt/s",
+				env: "prod",
+				target: { kind: "plugin", slug: "akismet" },
+			}
 		);
 		const out = await collect(lines);
 		expect(out.join("\n")).toMatch(/\[done\].*succeeded/i);
-		const restoreStreamed = streamVibe.mock.calls.some((c) => c[2] === "restore");
+		const restoreStreamed = streamVibe.mock.calls.some(
+			(c) => c[2] === "restore"
+		);
 		expect(restoreStreamed).toBe(false);
 	});
 
@@ -70,7 +80,14 @@ describe("safe-update", () => {
 		});
 		const fetchFn = vi.fn(async () => ({ ok: true })) as never;
 		const { lines } = buildSafeUpdateStream(
-			{ streamVibe, runVibe, fetchFn, siteUrl: "https://x", ttfbMs: 3000, r2: false },
+			{
+				streamVibe,
+				runVibe,
+				fetchFn,
+				siteUrl: "https://x",
+				ttfbMs: 3000,
+				r2: false,
+			},
 			{ workDir: "/opt/s", env: "prod", target: { kind: "core" } }
 		);
 		const out = await collect(lines);
@@ -91,8 +108,19 @@ describe("safe-update", () => {
 		const runVibe = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 		const fetchFn = vi.fn(async () => ({ ok: true })) as never;
 		const { lines } = buildSafeUpdateStream(
-			{ streamVibe, runVibe, fetchFn, siteUrl: "https://x", ttfbMs: 3000, r2: false },
-			{ workDir: "/opt/s", env: "prod", target: { kind: "plugin", slug: "akismet" } }
+			{
+				streamVibe,
+				runVibe,
+				fetchFn,
+				siteUrl: "https://x",
+				ttfbMs: 3000,
+				r2: false,
+			},
+			{
+				workDir: "/opt/s",
+				env: "prod",
+				target: { kind: "plugin", slug: "akismet" },
+			}
 		);
 		const out = await collect(lines);
 		expect(calls).not.toContain("restore"); // nothing changed -> no restore

@@ -1,40 +1,44 @@
 import { runVibe, streamVibe, type VibeEnv, type VibeOp } from "./exec";
 import { getRealDeps, launchJob } from "./jobs";
 
+/** Captures the backup directory printed by bin/backup ("Backup written to <p>"). */
+const BACKUP_PATH_RE = /Backup written to (\S+)/;
+const SMOKE_TIMEOUT_MS = 120_000;
+
 export type SafeTarget =
 	| { kind: "plugin" | "theme"; slug: string }
 	| { kind: "core" }
 	| { kind: "allPlugins" };
 
 interface StreamLike {
-	proc: { exited: Promise<number>; kill: () => void };
 	lines: AsyncIterable<string>;
+	proc: { exited: Promise<number>; kill: () => void };
 }
 
 export interface SafeUpdateDeps {
-	streamVibe: (
-		d: string,
-		e: VibeEnv,
-		op: VibeOp,
-		o?: { args?: string[] }
-	) => StreamLike;
+	fetchFn: typeof fetch;
+	/** Whether off-server R2 backup is configured (else use the env-immune local backup). */
+	r2: boolean;
 	runVibe: (
 		d: string,
 		e: VibeEnv,
 		op: VibeOp,
 		o?: { args?: string[]; timeoutMs?: number }
 	) => Promise<{ stdout: string; stderr: string; code: number }>;
-	fetchFn: typeof fetch;
 	siteUrl: string;
+	streamVibe: (
+		d: string,
+		e: VibeEnv,
+		op: VibeOp,
+		o?: { args?: string[] }
+	) => StreamLike;
 	ttfbMs: number;
-	/** Whether off-server R2 backup is configured (else use the env-immune local backup). */
-	r2: boolean;
 }
 
 export interface SafeUpdateParams {
-	workDir: string;
 	env: VibeEnv;
 	target: SafeTarget;
+	workDir: string;
 }
 
 function updateOp(t: SafeTarget): { op: VibeOp; args?: string[] } {
@@ -60,16 +64,66 @@ function describeTarget(t: SafeTarget): string {
 	return `${t.kind} ${t.slug}`;
 }
 
+/** Stream a step's lines under a label; the delegated return is the exit code. */
+async function* streamStep(
+	stream: StreamLike,
+	label: string
+): AsyncGenerator<string, number> {
+	for await (const line of stream.lines) {
+		yield `${label} ${line}`;
+	}
+	return await stream.proc.exited;
+}
+
+/** Stream the backup step, capturing the snapshot path. Returns code + snapshot. */
+async function* backupStep(
+	stream: StreamLike
+): AsyncGenerator<string, { code: number; snapshot: string | null }> {
+	let snapshot: string | null = null;
+	for await (const line of stream.lines) {
+		const cap = line.match(BACKUP_PATH_RE)?.[1];
+		if (cap) {
+			snapshot = cap;
+		}
+		yield `[backup] ${line}`;
+	}
+	return { code: await stream.proc.exited, snapshot };
+}
+
+/** Run smoke + homepage TTFB; the delegated return is whether the site is healthy. */
+async function* verifyStep(
+	deps: SafeUpdateDeps,
+	workDir: string,
+	env: VibeEnv
+): AsyncGenerator<string, boolean> {
+	const smoke = await deps.runVibe(workDir, env, "smoke", {
+		timeoutMs: SMOKE_TIMEOUT_MS,
+	});
+	let ok = smoke.code === 0;
+	yield `[smoke] ${ok ? "ok" : "failed"} (exit ${smoke.code})`;
+	if (!ok) {
+		return false;
+	}
+	const start = Date.now();
+	try {
+		const res = await deps.fetchFn(`${deps.siteUrl}/`);
+		const ttfb = Date.now() - start;
+		ok = (res as { ok: boolean }).ok && ttfb <= deps.ttfbMs;
+		yield `[ttfb] Homepage ${ttfb}ms ${ok ? "✓" : `> ${deps.ttfbMs}ms ✗`}`;
+	} catch (e) {
+		ok = false;
+		yield `[ttfb] request failed: ${String(e)}`;
+	}
+	return ok;
+}
+
 /**
  * Build the safe-update job as a custom { proc, lines } so it slots into the
- * shared launchJob path. `lines` orchestrates backup -> update -> smoke+TTFB and,
- * on any verify failure, auto-restores the snapshot taken seconds earlier. The
- * rollback restore is an INTERNAL step of this job (authorized by the safeUpdate
- * operator gate) — never the admin-gated standalone restore procedure.
+ * shared launchJob path. The rollback restore is an INTERNAL step of this job
+ * (authorized by the safeUpdate operator gate) — never the admin-gated standalone
+ * restore procedure. Return type is inferred (it carries pid: 0 so it satisfies
+ * launchJob's produce(); StreamLike, without pid, is only what we consume).
  */
-// Return type is inferred (it carries pid: 0 so it satisfies launchJob's
-// produce(), which expects the streamVibe shape). StreamLike (no pid) is only the
-// shape safe-update CONSUMES from deps.streamVibe.
 export function buildSafeUpdateStream(
 	deps: SafeUpdateDeps,
 	params: SafeUpdateParams
@@ -87,21 +141,14 @@ export function buildSafeUpdateStream(
 
 	async function* run(): AsyncIterable<string> {
 		const { workDir, env, target } = params;
-		let snapshot: string | null = null;
 		try {
 			// 1. Pre-update backup.
 			yield "[backup] Taking pre-update snapshot…";
 			const backupOp: VibeOp = deps.r2 ? "backup" : "backupLocal";
 			const bk = deps.streamVibe(workDir, env, backupOp);
 			currentKill = bk.proc.kill;
-			for await (const line of bk.lines) {
-				const cap = line.match(/Backup written to (\S+)/)?.[1];
-				if (cap) {
-					snapshot = cap;
-				}
-				yield `[backup] ${line}`;
-			}
-			if ((await bk.proc.exited) !== 0 || !snapshot) {
+			const { code: bkCode, snapshot } = yield* backupStep(bk);
+			if (bkCode !== 0 || !snapshot) {
 				yield "[done] Could not take a pre-update backup — aborting (nothing changed).";
 				exitResolve(1);
 				return;
@@ -116,10 +163,8 @@ export function buildSafeUpdateStream(
 			yield `[update] Updating ${describeTarget(target)}…`;
 			const up = deps.streamVibe(workDir, env, op, args ? { args } : undefined);
 			currentKill = up.proc.kill;
-			for await (const line of up.lines) {
-				yield `[update] ${line}`;
-			}
-			if ((await up.proc.exited) !== 0) {
+			const upCode = yield* streamStep(up, "[update]");
+			if (upCode !== 0) {
 				yield "[done] Update failed; nothing was applied (no restore needed).";
 				exitResolve(1);
 				return;
@@ -129,27 +174,8 @@ export function buildSafeUpdateStream(
 				return;
 			}
 
-			// 3. Verify: smoke + TTFB.
-			yield "[smoke] Running smoke tests…";
-			const smoke = await deps.runVibe(workDir, env, "smoke", {
-				timeoutMs: 120_000,
-			});
-			let ok = smoke.code === 0;
-			yield `[smoke] ${ok ? "ok" : "failed"} (exit ${smoke.code})`;
-			if (ok) {
-				const start = Date.now();
-				try {
-					const res = await deps.fetchFn(`${deps.siteUrl}/`);
-					const ttfb = Date.now() - start;
-					ok = (res as { ok: boolean }).ok && ttfb <= deps.ttfbMs;
-					yield `[ttfb] Homepage ${ttfb}ms ${ok ? "✓" : `> ${deps.ttfbMs}ms ✗`}`;
-				} catch (e) {
-					ok = false;
-					yield `[ttfb] request failed: ${String(e)}`;
-				}
-			}
-
-			// 4. Success, or auto-rollback.
+			// 3. Verify, then succeed or auto-rollback.
+			const ok = yield* verifyStep(deps, workDir, env);
 			if (ok) {
 				yield `[done] Update succeeded. Snapshot retained: ${snapshot}`;
 				exitResolve(0);
@@ -158,12 +184,9 @@ export function buildSafeUpdateStream(
 			yield `[restore] Verification failed — auto-restoring from ${snapshot}…`;
 			const rs = deps.streamVibe(workDir, env, "restore", { args: [snapshot] });
 			currentKill = rs.proc.kill;
-			for await (const line of rs.lines) {
-				yield `[restore] ${line}`;
-			}
-			await rs.proc.exited;
+			yield* streamStep(rs, "[restore]");
 			const post = await deps.runVibe(workDir, env, "smoke", {
-				timeoutMs: 120_000,
+				timeoutMs: SMOKE_TIMEOUT_MS,
 			});
 			yield `[smoke] Post-restore smoke: ${post.code === 0 ? "passed" : "FAILED — investigate"}`;
 			yield "[done] Update rolled back. Check error logs.";
