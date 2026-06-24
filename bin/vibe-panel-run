@@ -196,21 +196,80 @@ validate_arg() {
   esac
 }
 
-# `wp` is special: the panel only ever runs three exact forms. Reject everything
-# else (especially eval / eval-file / db / shell / config). $@ here is the args
-# AFTER the `wp` op token.
+# `wp` is special: re-validate the subcommand at the root boundary. Accepts the
+# pre-existing fixed forms byte-for-byte PLUS the feature #4 per-item forms
+# (structured verb × slug-regex). NEVER reachable: eval / eval-file / db / shell /
+# config / search-replace / install / etc. $@ here is the args AFTER the `wp` op.
+validate_wp_slug() {
+  slug="$1"
+  case "$slug" in
+    *://*) die "wp slug must not be a URL" ;;
+    ''|-*) die "wp slug empty or leading-hyphen: $slug" ;;
+    *[!a-z0-9-]*) die "wp slug fails regex: $slug" ;;
+  esac
+  [ "${#slug}" -le 63 ] || die "wp slug too long: $slug"
+}
+
+validate_wp_version_flag() {
+  case "$1" in
+    --version=*) val="${1#--version=}" ;;
+    *) die "only --version= flag allowed here: $1" ;;
+  esac
+  # semver-ish: 1.2 | 1.2.3 | 1.2.3-beta.1 ; reject anything with extra chars.
+  case "$val" in
+    *[!0-9.a-zA-Z-]*) die "--version= value has illegal chars: $val" ;;
+    [0-9]*.[0-9]*) : ;;
+    *) die "--version= value is not a version: $val" ;;
+  esac
+}
+
 validate_wp_args() {
-  # Accepted: `wp core update`
-  #           `wp plugin update --all`
-  #           `wp plugin list --update=available --format=json`
+  # Fast-path: the four pre-existing FIXED forms keep working byte-for-byte.
   joined="$*"
   case "$joined" in
     "core update") return 0 ;;
     "plugin update --all") return 0 ;;
     "plugin list --update=available --format=json") return 0 ;;
     "cron event run vibe_insights_collect_cron") return 0 ;;
-    *) die "wp subcommand not allowed: wp $joined" ;;
   esac
+  # Structured per-item forms (feature #4). `cron` is NOT a general namespace:
+  # only the one fixed cron form above is allowed; anything else dies below.
+  namespace="${1:-}"; verb="${2:-}"
+  case "$namespace" in
+    plugin|theme|core) : ;;
+    *) die "wp namespace not allowed: $namespace" ;;
+  esac
+  case "$namespace $verb" in
+    "plugin activate"|"plugin deactivate"|"plugin update"|"plugin delete"|\
+    "plugin auto-updates"|\
+    "theme activate"|"theme update"|"theme delete"|"theme auto-updates"|\
+    "core update") : ;;
+    *) die "wp subcommand not allowed: wp $namespace $verb" ;;
+  esac
+  # core update [--version=X] — no slug.
+  if [ "$namespace $verb" = "core update" ]; then
+    [ "$#" -le 3 ] || die "wp core update takes at most one --version= flag"
+    [ "$#" -eq 3 ] && validate_wp_version_flag "$3"
+    return 0
+  fi
+  # auto-updates: `<ns> auto-updates <enable|disable> <slug>` (subverb THEN slug).
+  if [ "$verb" = "auto-updates" ]; then
+    subverb="${3:-}"; slug="${4:-}"
+    case "$subverb" in enable|disable) : ;; *) die "auto-updates needs enable|disable" ;; esac
+    validate_wp_slug "$slug"
+    [ "$#" -eq 4 ] || die "wp auto-updates takes exactly 4 args"
+    return 0
+  fi
+  # activate/deactivate/update/delete <slug> [--version=X (update only)]
+  slug="${3:-}"
+  validate_wp_slug "$slug"
+  if [ "$#" -eq 4 ]; then
+    [ "$verb" = "update" ] || die "$namespace $verb takes no flags"
+    validate_wp_version_flag "$4"
+  elif [ "$#" -gt 4 ]; then
+    die "too many arguments for wp $namespace $verb"
+  fi
+  return 0
 }
 
 # `compose` is special too: the panel's only compose op is the read-only
@@ -375,7 +434,7 @@ case "$sub" in
     validate_op "$op"                      # op in the fixed allowlist
     # Argument re-validation at the root boundary (do NOT trust the caller).
     case "$op" in
-      wp)      validate_wp_args "$@" ;;     # only the 4 exact panel wp forms
+      wp)      validate_wp_args "$@" ;;     # 4 fixed forms + per-item plugin/theme/core (slug-validated)
       compose) validate_compose_args "$@" ;; # only `compose ps --format json`
       env)     validate_env_key "$@" ;;     # exactly one key, non-secret allowlist
       logs|logs-recent) validate_logs_args "$@" ;; # fixed service + tail enums
