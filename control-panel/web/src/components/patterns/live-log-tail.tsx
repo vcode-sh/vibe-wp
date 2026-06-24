@@ -2,15 +2,32 @@ import { useAutoScroll } from "@/lib/live/use-auto-scroll";
 import { useLiveStream } from "@/lib/live/use-live-stream";
 import { client } from "@/lib/orpc/client";
 
+type LogService =
+	| "nginx"
+	| "php"
+	| "wp"
+	| "mariadb"
+	| "redis"
+	| "access"
+	| "all";
+
 export function LiveLogTail({
 	siteId,
 	active,
+	service = "all",
+	filter,
 }: {
 	siteId: string;
 	active: boolean;
+	service?: LogService;
+	filter?: string;
 }) {
 	const live = useLiveStream(
-		(signal) => client.logsFollow({ siteId }, { signal }),
+		(signal) =>
+			client.logsFollow(
+				{ siteId, service, ...(filter ? { filter } : {}) },
+				{ signal }
+			),
 		active
 	);
 	const text = live.lines.slice(-500).join("\n");
