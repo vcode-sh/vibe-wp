@@ -1,6 +1,8 @@
 import { z } from "zod";
 
+import { runVibe } from "../core-bridge/exec";
 import { startJob } from "../core-bridge/jobs";
+import { findSite } from "../core-bridge/sites";
 import { assertSlug, procedureFor } from "../core-bridge/wp-actions";
 
 const SlugInput = z.object({ siteId: z.string(), slug: z.string() });
@@ -81,5 +83,26 @@ export const pluginsRouter = {
 				userId: context.session.user.id,
 				action: "pluginAutoUpdate",
 			});
+		}),
+
+	setAutoUpdateSchedule: procedureFor("schedule.autoUpdate")
+		.input(
+			z.object({
+				siteId: z.string(),
+				cadence: z.enum(["off", "weekly", "daily"]),
+			})
+		)
+		.handler(async ({ input }) => {
+			const site = await findSite(input.siteId);
+			if (!site) {
+				return { ok: false };
+			}
+			const { code } = await runVibe(
+				site.installDir,
+				"prod",
+				"autoUpdateScheduleApply",
+				{ args: [input.cadence], timeoutMs: 30_000 }
+			);
+			return { ok: code === 0 };
 		}),
 };

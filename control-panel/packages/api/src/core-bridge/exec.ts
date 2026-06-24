@@ -154,6 +154,12 @@ export const VIBE_OPS = {
 		stream: false,
 		takesArg: true,
 	},
+	/** Install/remove the scheduled plugin auto-update timer (arg: off|weekly|daily). */
+	autoUpdateScheduleApply: {
+		argv: ["auto-update-schedule-apply"],
+		stream: false,
+		takesArg: true,
+	},
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

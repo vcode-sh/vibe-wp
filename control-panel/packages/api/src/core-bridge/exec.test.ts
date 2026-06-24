@@ -365,6 +365,7 @@ describe("buildVibeArgv", () => {
 	});
 	it("exposes the allowlisted read + operation ops", () => {
 		expect(Object.keys(VIBE_OPS).sort()).toEqual([
+			"autoUpdateScheduleApply",
 			"backup",
 			"backupConfigApply",
 			"backupLocal",
@@ -658,5 +659,16 @@ describe("per-item wp ops (feature #4)", () => {
 		expect(() =>
 			buildVibeArgv("/opt/site", "prod", "wpPluginUpdate", ["--path=/evil"])
 		).toThrow();
+	});
+
+	it("builds the auto-update-schedule-apply argv with the cadence", () => {
+		expect(
+			buildVibeArgv("/opt/site", "prod", "autoUpdateScheduleApply", ["weekly"])
+		).toEqual([
+			"/opt/site/bin/vibe",
+			"prod",
+			"auto-update-schedule-apply",
+			"weekly",
+		]);
 	});
 });

@@ -5,7 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 const { startJob } = vi.hoisted(() => ({
 	startJob: vi.fn(async () => ({ jobId: "job-1" })),
 }));
+const { runVibe } = vi.hoisted(() => ({
+	runVibe: vi.fn(async () => ({ stdout: "", stderr: "", code: 0 })),
+}));
+const { findSite } = vi.hoisted(() => ({
+	findSite: vi.fn(async () => ({ installDir: "/opt/s1" })),
+}));
 vi.mock("../core-bridge/jobs", () => ({ startJob }));
+vi.mock("../core-bridge/exec", () => ({ runVibe }));
+vi.mock("../core-bridge/sites", () => ({ findSite }));
 
 import { pluginsRouter } from "./plugins";
 
@@ -68,5 +76,21 @@ describe("pluginsRouter mutations", () => {
 			})
 		).toThrow(/Invalid/);
 		expect(startJob).not.toHaveBeenCalled();
+	});
+
+	it("setAutoUpdateSchedule runs autoUpdateScheduleApply with the cadence", async () => {
+		runVibe.mockClear();
+		const res = await pluginsRouter.setAutoUpdateSchedule["~orpc"].handler({
+			input: { siteId: "s1", cadence: "daily" },
+			context: ctx,
+		});
+		expect(findSite).toHaveBeenCalledWith("s1");
+		expect(runVibe).toHaveBeenCalledWith(
+			"/opt/s1",
+			"prod",
+			"autoUpdateScheduleApply",
+			expect.objectContaining({ args: ["daily"] })
+		);
+		expect(res).toEqual({ ok: true });
 	});
 });
