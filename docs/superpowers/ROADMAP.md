@@ -1,6 +1,6 @@
 # Vibe WP — Status & Roadmap
 
-Last updated: 2026-06-23. This is the canonical "what's shipped / what's next" record. It supersedes the per-phase status scattered across `docs/superpowers/plans/*` and `docs/product-roadmap.md` (which lag the code). The detailed execution history lives in `.superpowers/sdd/progress.md`.
+Last updated: 2026-06-24. This is the canonical "what's shipped / what's next" record. It supersedes the per-phase status scattered across `docs/superpowers/plans/*` and `docs/product-roadmap.md` (which lag the code). The detailed execution history lives in `.superpowers/sdd/progress.md`.
 
 ---
 
@@ -34,7 +34,7 @@ Grounded in a 2026-06-23 research pass (full dossier in this session's history).
 
 | # | Feature | Exists today | Approach (summary) | Effort | Stakes |
 |---|---------|--------------|--------------------|--------|--------|
-| 1 | **Proper logs** | `logsRecent`/`logsFollow` (nginx/php/wp, tail 200) | Add validated `service` enum (+mariadb/redis/cron/access) + bounded tail; server-side search; redacted download (`logsExport`); Logs UI page | S–M | low |
+| 1 | **Proper logs** ✅ SHIPPED | ~~`logsRecent`/`logsFollow` (nginx/php/wp, tail 200)~~ DONE | Built & merged to main (`ac983d3`, 2026-06-24): validated `service` enum (nginx/php/wp/mariadb/redis/access/all) + bounded tail across the 3 host gates; server-side filter; severity + `cache=` badges; admin-only `logsExport`; router-side IPv4+IPv6/SQL PII masking on recent+export+live; Compose log rotation; Logs UI. 218 api + 72 web tests. **Pending: VPS Phase-5 validation (needs branch deployed + a live site) and `git push` (local merge only).** |
 | 2 | **SMTP relay + server mail** | nothing (mail silently fails) | `msmtp` in WP image rendering `/etc/msmtprc` from `SMTP_*` env; `smtp-config-apply`/`smtp-test` ops; Mail settings card; host-level shared relay (transactional provider or one Postfix null-client) as the idiot-proof default; SPF/DKIM checklist in UI | M | med (deliverability) |
 | 3 | **Companion "Insights" plugin** (foundational) | none (panel reads WP via 3 wp-cli forms) | mu-plugin writes a signed JSON facts drop-file (`wp-content/.vibe/insights.json`); panel reads via new `insights` op (read-only, strict zod schema); exposes plugin/theme inventory+versions+update/active state, Site Health, vuln/EOL signals (host-fetched feed joined by slug), users/last-login | M | med |
 | 4 | **Full plugin/update mgmt + safe-update** | `updatesAvailable` (count) + `updatesApply` (all) | Structured wp allowlist (verbs × strict slug/version regex, no eval/db/path); per-item activate/deactivate/install(wp.org-only)/delete/update + themes + auto-update toggles; **safe-update job** = pre-update backup → update → smoke+TTFB → auto-restore on regression (all primitives exist) | M (+S safe-update) | high (allowlist) |
@@ -49,7 +49,7 @@ Grounded in a 2026-06-23 research pass (full dossier in this session's history).
 - **E. Vulnerability + abandoned-plugin radar with quarantine** (M) — Insights + host-fetched vuln feed → flag CVEs/abandoned, offer safe-update or deactivate.
 
 ### Build order (dependency-aware, quick-wins + foundations first)
-1. **Logs (#1)** — quick win, no new security model.
+1. ~~**Logs (#1)**~~ ✅ **DONE** (merged `ac983d3`, 2026-06-24; VPS validation + push pending). Plan: `plans/2026-06-24-feature-1-logs.md`.
 2. **SMTP relay (#2)** — high user value, self-contained, mirrors existing config-apply.
 3. **Insights plugin (#3)** — the data backbone for #4, #5, C, E.
 4. **Plugin/update mgmt + safe-update (#4)** — daily-driver; needs #3 inventory.
