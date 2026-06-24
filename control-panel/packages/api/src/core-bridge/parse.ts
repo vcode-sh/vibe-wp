@@ -251,7 +251,7 @@ const COMPOSE_LINE =
 	/^([a-zA-Z0-9_-]+?)-\d+\s+\|\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s*(.*)/;
 
 // cron runs wp-cron, so its lines are WordPress activity → "wp".
-// Infra containers (db/redis/adminer/etc.) have no app source → "system".
+// db/mariadb → "mariadb"; redis → "redis"; all other infra → "system".
 // Returns a concrete source for EVERY known service (never null).
 function svcToSource(svc: string): LogLine["source"] {
 	const s = svc.toLowerCase();
@@ -264,12 +264,36 @@ function svcToSource(svc: string): LogLine["source"] {
 	if (s === "wp" || s === "cron" || s.startsWith("wp-")) {
 		return "wp";
 	}
+	if (s === "mariadb" || s === "db") {
+		return "mariadb";
+	}
+	if (s === "redis") {
+		return "redis";
+	}
 	return "system";
+}
+
+const SEV_ERROR = /\b(error|fatal|crit|critical|alert|emerg)\b/i;
+const SEV_WARN = /\b(warn|warning|notice)\b/i;
+const SEV_DEBUG = /\bdebug\b/i;
+
+export function parseSeverity(text: string): LogLine["severity"] {
+	if (SEV_ERROR.test(text)) {
+		return "error";
+	}
+	if (SEV_WARN.test(text)) {
+		return "warn";
+	}
+	if (SEV_DEBUG.test(text)) {
+		return "debug";
+	}
+	return "info";
 }
 
 export function parseLogLines(
 	stdout: string,
-	source: LogLine["source"]
+	source: LogLine["source"],
+	maxLines = 2000
 ): LogLine[] {
 	// `source` seeds carry-forward so continuation lines that arrive before the
 	// first matched prefix inherit the requested filter rather than going blank.
@@ -278,7 +302,7 @@ export function parseLogLines(
 	return stdout
 		.split("\n")
 		.filter((l) => l.trim().length > 0)
-		.slice(-200)
+		.slice(-maxLines)
 		.map((raw, i) => {
 			const m = COMPOSE_LINE.exec(raw);
 			if (m) {
@@ -287,22 +311,26 @@ export function parseLogLines(
 				// (known-but-infra) would wrongly inherit the previous line's source.
 				const when = m[2] ?? "";
 				const lineSource = svcToSource(m[1] ?? "");
+				const text = m[3] ?? "";
 				prevSource = lineSource;
 				prevWhen = when;
 				return {
 					id: String(i),
 					source: lineSource,
-					text: m[3] ?? "",
+					text,
 					whenISO: when,
+					severity: parseSeverity(text),
 				};
 			}
 			// Regex MISS — genuine continuation line (e.g. a multi-line stack trace)
 			// or unparseable output: carry forward the last known values.
+			const text = raw.trim();
 			return {
 				id: String(i),
 				source: prevSource,
-				text: raw.trim(),
+				text,
 				whenISO: prevWhen,
+				severity: parseSeverity(text),
 			};
 		});
 }
