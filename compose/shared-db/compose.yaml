@@ -1,0 +1,35 @@
+name: vibe-wp-shared-db
+
+services:
+  db:
+    build:
+      # context is relative to the DEPLOYED location: /opt/vibe-wp-shared-db/
+      # shared-db-init copies docker/mariadb into /opt/vibe-wp-shared-db/docker/mariadb
+      # so this resolves correctly at runtime.
+      context: ./docker/mariadb
+    image: vibe-wp-shared-db-mariadb
+    restart: unless-stopped
+    env_file: env/shared-db.env
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
+      # NO MARIADB_DATABASE/USER/PASSWORD — per-site DBs+users are created ONLY
+      # by db-provision against the running container.
+    volumes:
+      - shared_db_data:/var/lib/mysql
+    networks:
+      - shared_db
+    # NEVER add a ports: section.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  shared_db_data:
+    driver: local
+
+networks:
+  shared_db:
+    driver: bridge
+    name: vibe-wp-shared-db

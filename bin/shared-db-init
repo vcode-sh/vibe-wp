@@ -1,0 +1,130 @@
+#!/bin/sh
+# shared-db-init — idempotent bring-up of the vibe-wp-shared-db Compose project.
+#
+# Creates /opt/vibe-wp-shared-db, copies docker/mariadb + compose project files,
+# generates MARIADB_ROOT_PASSWORD (only if the env file is absent), writes a 0600
+# root-owned env file, runs `docker compose up -d --build`, and waits for healthy.
+#
+# SF-7: hard-fails if the shared_db_data volume exists but the env file is missing
+#       (don't generate a new root pw that won't match the grant tables).
+# MF-2/MF-4: the root password is written only into the 0600 root-owned env file;
+#             it is never printed to stdout, never passed via argv.
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+REPO_ROOT="$(CDPATH= cd -- "${VIBE_BIN_DIR}/.." && pwd)"
+COMPOSE_SRC="${REPO_ROOT}/compose/shared-db"
+
+die() { echo "shared-db-init: $1" >&2; exit 1; }
+
+# Must run as root.
+[ "$(id -u)" = "0" ] || die "must be run as root"
+
+echo "shared-db-init: setting up ${SHARED_DB_DIR} ..."
+
+# --- SF-7: detect existing volume with missing env file (data/pw mismatch) ------
+volume_exists=0
+if docker volume inspect vibe-wp-shared-db_shared_db_data >/dev/null 2>&1; then
+  volume_exists=1
+fi
+if [ "$volume_exists" = "1" ] && [ ! -f "$SHARED_DB_ENV" ]; then
+  die "FATAL: the shared_db_data volume exists but the env file is missing (${SHARED_DB_ENV}). Generating a new root password would mismatch the grant tables. Restore the env file or remove the volume manually before re-running."
+fi
+
+# --- Create directory structure -----------------------------------------------
+mkdir -p "${SHARED_DB_DIR}/env"
+mkdir -p "${SHARED_DB_DIR}/docker"
+
+# Copy the compose project files (idempotent).
+cp "${COMPOSE_SRC}/compose.yaml" "${SHARED_DB_DIR}/compose.yaml"
+
+# Copy docker/mariadb into the deployed location so compose.yaml's
+# `context: ./docker/mariadb` resolves correctly at /opt/vibe-wp-shared-db/.
+# rsync is preferred; fall back to cp -r.
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete "${REPO_ROOT}/docker/mariadb/" "${SHARED_DB_DIR}/docker/mariadb/"
+else
+  rm -rf "${SHARED_DB_DIR}/docker/mariadb"
+  cp -r "${REPO_ROOT}/docker/mariadb" "${SHARED_DB_DIR}/docker/mariadb"
+fi
+
+# Lock down the deployed directory: root-owned, not world-writable.
+chown -R root:root "${SHARED_DB_DIR}"
+chmod 700 "${SHARED_DB_DIR}"
+chmod 700 "${SHARED_DB_DIR}/env"
+
+# --- Generate or preserve the root password env file --------------------------
+if [ -f "$SHARED_DB_ENV" ]; then
+  echo "shared-db-init: env file already present — preserving existing root password."
+else
+  echo "shared-db-init: generating new MARIADB_ROOT_PASSWORD ..."
+  root_pw="$(openssl rand -hex 32)"
+
+  # Write the env file atomically (temp then mv) with 0600 perms.
+  tmp_env="$(mktemp "${SHARED_DB_DIR}/env/.shared-db.env.XXXXXX")"
+  chmod 600 "$tmp_env"
+  # Copy tuning defaults from the example if it exists, stripping any existing
+  # MARIADB_ROOT_PASSWORD line; then inject the generated one.
+  if [ -f "${COMPOSE_SRC}/env/shared-db.env.example" ]; then
+    grep -v '^MARIADB_ROOT_PASSWORD=' "${COMPOSE_SRC}/env/shared-db.env.example" > "$tmp_env" || true
+  else
+    printf '# Vibe WP shared MariaDB tuning\n' > "$tmp_env"
+    printf 'MARIADB_INNODB_BUFFER_POOL_SIZE=768M\n' >> "$tmp_env"
+    printf 'MARIADB_MAX_CONNECTIONS=300\n' >> "$tmp_env"
+    printf 'SHARED_DB_MAX_USER_CONNECTIONS=25\n' >> "$tmp_env"
+  fi
+  printf 'MARIADB_ROOT_PASSWORD=%s\n' "$root_pw" >> "$tmp_env"
+  unset root_pw
+
+  chown root:root "$tmp_env"
+  mv "$tmp_env" "$SHARED_DB_ENV"
+  chmod 600 "$SHARED_DB_ENV"
+  echo "shared-db-init: root password written to ${SHARED_DB_ENV} (0600 root-only)."
+fi
+
+# Confirm perms are tight (belt-and-suspenders after mv).
+chown root:root "$SHARED_DB_ENV"
+chmod 600 "$SHARED_DB_ENV"
+
+# --- Bring up the Compose project ---------------------------------------------
+echo "shared-db-init: running docker compose up -d --build ..."
+docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
+  up -d --build
+
+# --- Wait for healthy ----------------------------------------------------------
+echo "shared-db-init: waiting for db to become healthy ..."
+max_wait=120
+elapsed=0
+while true; do
+  status="$(docker inspect --format '{{.State.Health.Status}}' \
+    "$(docker compose -f "${SHARED_DB_DIR}/compose.yaml" ps -q db 2>/dev/null)" \
+    2>/dev/null || echo "missing")"
+  case "$status" in
+    healthy)
+      echo "shared-db-init: db is healthy."
+      break
+      ;;
+    starting)
+      : ;;
+    *)
+      if [ "$elapsed" -ge "$max_wait" ]; then
+        die "db did not become healthy within ${max_wait}s (last status: ${status})"
+      fi
+      ;;
+  esac
+  sleep 3
+  elapsed=$((elapsed + 3))
+done
+
+# --- Print non-secret status ---------------------------------------------------
+echo "shared-db-init: done."
+echo ""
+echo "  Project : vibe-wp-shared-db"
+echo "  Location: ${SHARED_DB_DIR}"
+echo "  Env file: ${SHARED_DB_ENV} (0600 root-only)"
+echo "  Network : ${SHARED_DB_NETWORK}"
+echo ""
+echo "  Run 'bin/shared-db-status' for a non-secret JSON status report."

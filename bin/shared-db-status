@@ -1,0 +1,72 @@
+#!/bin/sh
+# shared-db-status — print non-secret JSON status of the vibe-wp-shared-db project.
+#
+# Output: { "present": bool, "healthy": bool, "network": "vibe-wp-shared-db",
+#           "max_connections": N, "buffer_pool": "...", "databases": N }
+#
+# NO passwords, NO per-site credentials, NO root password in output.
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+# --- Check presence -----------------------------------------------------------
+present=false
+healthy=false
+max_connections="null"
+buffer_pool="null"
+db_count="null"
+
+if [ -f "${SHARED_DB_DIR}/compose.yaml" ] && [ -f "$SHARED_DB_ENV" ]; then
+  present=true
+
+  # Determine health via docker inspect (no passwords involved).
+  container_id="$(docker compose -f "${SHARED_DB_DIR}/compose.yaml" ps -q db 2>/dev/null || true)"
+  if [ -n "$container_id" ]; then
+    health_status="$(docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo "unknown")"
+    if [ "$health_status" = "healthy" ]; then
+      healthy=true
+
+      # Query non-secret runtime variables. Errors here are non-fatal: if the
+      # container is not yet fully ready, we still report present+healthy=true.
+      max_connections="$(sdb_mariadb_root \
+        "SELECT @@max_connections;" 2>/dev/null | tr -d '[:space:]' || echo "null")"
+      buffer_pool="$(sdb_mariadb_root \
+        "SELECT @@innodb_buffer_pool_size;" 2>/dev/null | tr -d '[:space:]' || echo "null")"
+      # Count only vibe_* databases (per-site databases provisioned by db-provision).
+      db_count="$(sdb_mariadb_root \
+        "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'vibe\\_%';" \
+        2>/dev/null | tr -d '[:space:]' || echo "null")"
+    fi
+  fi
+fi
+
+# Format max_connections and db_count as JSON numbers if numeric, else null.
+fmt_num() {
+  v="$1"
+  case "$v" in
+    ''|null) printf 'null' ;;
+    *[!0-9]*) printf 'null' ;;
+    *) printf '%s' "$v" ;;
+  esac
+}
+
+# buffer_pool is numeric bytes; emit as string for readability.
+fmt_bytes() {
+  v="$1"
+  case "$v" in
+    ''|null) printf 'null' ;;
+    *[!0-9]*) printf 'null' ;;
+    *) printf '"%s"' "$v" ;;
+  esac
+}
+
+printf '{\n'
+printf '  "present": %s,\n' "$present"
+printf '  "healthy": %s,\n' "$healthy"
+printf '  "network": "%s",\n' "$SHARED_DB_NETWORK"
+printf '  "max_connections": %s,\n' "$(fmt_num "$max_connections")"
+printf '  "buffer_pool": %s,\n' "$(fmt_bytes "$buffer_pool")"
+printf '  "databases": %s\n' "$(fmt_num "$db_count")"
+printf '}\n'
