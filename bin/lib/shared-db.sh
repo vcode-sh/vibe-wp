@@ -110,6 +110,34 @@ sdb_host_pattern() {
   fi
 }
 
+# Dump all databases of the shared server as root.  The root password is
+# delivered via the SAME marker-split stdin + in-container mktemp mechanism as
+# sdb_mariadb_root (MF-2/MF-4: never on argv, never in env MYSQL_PWD).
+# $1 = destination path on the HOST (will be written as a .sql.gz file).
+# stdout from mariadb-dump is piped through gzip on the HOST side and written
+# to $1; any non-zero exit from the in-container dump causes a die (MF-1: no
+# raw mariadb-dump stderr is surfaced to the caller).
+sdb_mariadb_dump_all() {
+  dest="$1"
+  rpw="$(sdb_root_password)"
+  # The marker-split stdin protocol: cred section then a marker then the dump
+  # command (mariadb-dump reads no extra stdin so we only need the marker to
+  # separate the cred from any potential future use; the in-container shell
+  # writes cred to a randomized umask-077 temp and then runs the dump).
+  { printf '[client]\npassword=%s\n__VIBE_DUMP_BEGIN__\n' "$rpw"; } \
+    | docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
+        exec -T db sh -c '
+          umask 077; cf="$(mktemp)"
+          while IFS= read -r l; do [ "$l" = "__VIBE_DUMP_BEGIN__" ] && break; printf "%s\n" "$l" >> "$cf"; done
+          mariadb-dump --defaults-extra-file="$cf" -u root \
+            --all-databases --single-transaction --routines --events
+          rc=$?; rm -f "$cf"; exit $rc
+        ' 2>/dev/null \
+    | gzip > "$dest" \
+    || { unset rpw; sdb_die "mariadb-dump failed (see container logs)"; }
+  unset rpw
+}
+
 # Read SHARED_DB_MAX_USER_CONNECTIONS from the env file; default 25. Reject non-numeric.
 sdb_max_user_connections() {
   val=""
