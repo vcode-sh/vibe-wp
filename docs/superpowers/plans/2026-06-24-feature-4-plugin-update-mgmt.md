@@ -73,20 +73,22 @@
 
 `control-panel/packages/api/src/core-bridge/wrapper-wp-args.test.ts`:
 ```ts
+import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Repo-root wrapper, five levels up from this file's dir.
-const WRAPPER = new URL(
-  "../../../../../bin/vibe-panel-run",
-  import.meta.url
-).pathname;
+// vitest runs under node (vitest.config.ts environment: "node") — use
+// node:child_process, NOT Bun.*. Repo-root pattern matches mu-plugin-mirror.test.ts.
+const here = dirname(fileURLToPath(import.meta.url));
+const WRAPPER = resolve(here, "../../../../../bin/vibe-panel-run");
 
 /** Source the wrapper as a library and invoke validate_wp_args with raw argv.
  *  Returns the exit code: 0 = accepted (returned), 1 = rejected (die). */
 function runValidateWp(...args: string[]): number {
   const script = 'VIBE_PANEL_RUN_LIB=1 . "$1" || exit 99; shift; validate_wp_args "$@"';
-  const proc = Bun.spawnSync(["sh", "-c", script, "sh", WRAPPER, ...args]);
-  return proc.exitCode ?? -1;
+  const res = spawnSync("sh", ["-c", script, "sh", WRAPPER, ...args], { encoding: "utf8" });
+  return res.status ?? -1;
 }
 
 describe("validate_wp_args — existing forms preserved", () => {
@@ -206,7 +208,10 @@ describe("validate_wp_args — injection + policy rejected", () => {
     [["plugin", "activate", "a".repeat(64)]],
     [["plugin", "activate", ""]],
     [["plugin", "update"]],
-  ])("rejects %j", ([args]) => {
+  ])("rejects %j", (args) => {
+    // NOTE: callback is (args), NOT ([args]) — each row's single element IS the
+    // arg array. Destructuring ([args]) would set args to the first STRING and
+    // spread it char-by-char. (Same shape as the Task 1 positive block.)
     expect(runValidateWp(...(args as string[]))).toBe(1);
   });
 });

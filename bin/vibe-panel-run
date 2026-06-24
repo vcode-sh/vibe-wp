@@ -354,6 +354,10 @@ siteinfo() {
   unset IFS
 }
 
+# When sourced as a library (unit tests source this file to call the validate_*
+# functions directly), expose the functions but do NOT dispatch. Normal execution
+# leaves VIBE_PANEL_RUN_LIB unset, so the gate below runs exactly as before.
+if [ "${VIBE_PANEL_RUN_LIB:-}" != "1" ]; then
 sub="${1:-}"
 [ -n "$sub" ] || die "missing subcommand"
 shift || true
@@ -403,3 +407,4 @@ case "$sub" in
     die "unknown subcommand: $sub"
     ;;
 esac
+fi
