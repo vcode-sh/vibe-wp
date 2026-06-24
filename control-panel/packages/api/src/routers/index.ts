@@ -13,6 +13,7 @@ import { settingsRouter } from "./settings";
 import { setupRouter } from "./setup";
 import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
+import { inventoryRouter } from "./inventory";
 import { updatesRouter } from "./updates";
 
 export const appRouter = {
@@ -28,6 +29,7 @@ export const appRouter = {
 	...stagingRouter,
 	...logsRouter,
 	...updatesRouter,
+	...inventoryRouter,
 	...settingsRouter,
 	...devinfoRouter,
 };
