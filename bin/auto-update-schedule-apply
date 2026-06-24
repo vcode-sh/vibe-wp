@@ -1,0 +1,90 @@
+#!/usr/bin/env sh
+set -eu
+umask 022
+# Install, re-render, or remove the scheduled plugin auto-update systemd timer
+# for the selected environment so the panel can change the cadence after install.
+#
+# Models bin/backup-schedule-apply exactly. The unit is named
+#   vibe-wp-autoupdate-<slug>-<env>.timer
+# and its OnCalendar drives an unattended `bin/vibe <env> wp plugin update --all`.
+# Enabled for weekly/daily; disabled + removed for "off".
+#
+# The cadence is the single positional argument (off|weekly|daily) — not a
+# secret, so argv is appropriate. No secrets are ever printed.
+#
+# Requires root (or passwordless sudo) for /etc/systemd/system writes; the panel
+# service runs as root, matching the installer-created backup/monitor timers.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+cadence="${1:-}"
+case "${cadence}" in
+  off|weekly|daily) ;;
+  *)
+    echo "Usage: ./bin/vibe <env> auto-update-schedule-apply <off|weekly|daily>" >&2
+    exit 2
+    ;;
+esac
+
+# Resolve the OnCalendar expression. 04:30 keeps auto-updates clear of the
+# 03:30 backup slot so a scheduled update never races its own backup window.
+on_calendar=""
+case "${cadence}" in
+  daily)  on_calendar="*-*-* 04:30:00" ;;
+  weekly) on_calendar="Sun *-*-* 04:30:00" ;;
+esac
+
+# Authoritative slug is the production COMPOSE_PROJECT_NAME tail
+# (vibe-wp-<slug>-prod), the same value the installer names units after.
+project="$(vibe_env_value COMPOSE_PROJECT_NAME)"
+slug="${project#vibe-wp-}"
+slug="${slug%-${VIBE_ENV}}"
+if [ -z "${slug}" ] || [ "${slug}" = "${project}" ]; then
+  slug="$(basename -- "${VIBE_ROOT}")"
+fi
+
+unit="vibe-wp-autoupdate-${slug}-${VIBE_ENV}"
+service_path="/etc/systemd/system/${unit}.service"
+timer_path="/etc/systemd/system/${unit}.timer"
+
+if [ "$(id -u)" = 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  echo "systemctl not available; cannot manage auto-update timer." >&2
+  exit 1
+fi
+
+if [ "${cadence}" = "off" ]; then
+  ${SUDO} systemctl disable --now "${unit}.timer" >/dev/null 2>&1 || true
+  ${SUDO} rm -f "${timer_path}" "${service_path}"
+  ${SUDO} systemctl daemon-reload
+  echo "Plugin auto-update schedule disabled for ${slug} (${VIBE_ENV})."
+  exit 0
+fi
+
+service="[Unit]
+Description=Vibe WP scheduled plugin auto-update for ${slug} (${VIBE_ENV})
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=${VIBE_ROOT}
+ExecStart=${VIBE_ROOT}/bin/vibe ${VIBE_ENV} wp plugin update --all"
+
+timer="[Unit]
+Description=Scheduled Vibe WP plugin auto-update for ${slug} (${VIBE_ENV})
+[Timer]
+OnCalendar=${on_calendar}
+Persistent=true
+[Install]
+WantedBy=timers.target"
+
+printf '%s\n' "${service}" | ${SUDO} tee "${service_path}" >/dev/null
+printf '%s\n' "${timer}" | ${SUDO} tee "${timer_path}" >/dev/null
+${SUDO} systemctl daemon-reload
+${SUDO} systemctl enable --now "${unit}.timer" >/dev/null
+echo "Plugin auto-update schedule set to ${cadence} for ${slug} (${VIBE_ENV})."

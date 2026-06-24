@@ -34,6 +34,7 @@ Commands:
   promote-files-to-prod --yes Promote managed plugin/theme files to prod
   env <KEY>                  Print a value from the selected env file
   backup-schedule-apply <off|daily|weekly>  Install/remove the scheduled-backup timer
+  auto-update-schedule-apply <off|weekly|daily>  Install/remove the scheduled plugin auto-update timer
   monitor-schedule-apply <on|off>           Install/remove the hourly health-monitor timer
   schedule-status            Print backup cadence, monitor state, and WP debug flags (TAB-separated)
   site-config-apply          Persist per-site WP runtime settings (debug flags) into the env file
@@ -193,6 +194,9 @@ case "${command}" in
     ;;
   backup-schedule-apply)
     "${VIBE_BIN_DIR}/backup-schedule-apply" "$@"
+    ;;
+  auto-update-schedule-apply)
+    "${VIBE_BIN_DIR}/auto-update-schedule-apply" "$@"
     ;;
   monitor-schedule-apply)
     "${VIBE_BIN_DIR}/monitor-schedule-apply" "$@"
