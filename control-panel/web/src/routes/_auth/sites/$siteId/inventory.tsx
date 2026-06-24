@@ -11,6 +11,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
+import { RowActions } from "@/components/plugins/inventory-actions";
+import {
+	AutoUpdateScheduleCard,
+	BulkUpdateBar,
+	CoreUpdateCard,
+} from "@/components/plugins/inventory-cards";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,7 +89,13 @@ function RefreshButton({
 	);
 }
 
-function PluginTable({ plugins }: { plugins: InsightsPlugin[] }) {
+function PluginTable({
+	plugins,
+	siteId,
+}: {
+	plugins: InsightsPlugin[];
+	siteId: string;
+}) {
 	return (
 		<Card>
 			<CardHeader>
@@ -97,6 +109,7 @@ function PluginTable({ plugins }: { plugins: InsightsPlugin[] }) {
 							<TableHead>Version</TableHead>
 							<TableHead>Status</TableHead>
 							<TableHead>Auto-update</TableHead>
+							<TableHead className="w-12" />
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -121,6 +134,9 @@ function PluginTable({ plugins }: { plugins: InsightsPlugin[] }) {
 								<TableCell className="text-muted-foreground text-xs">
 									{autoUpdateLabel(p.auto_update)}
 								</TableCell>
+								<TableCell className="text-right">
+									<RowActions kind="plugin" row={p} siteId={siteId} />
+								</TableCell>
 							</TableRow>
 						))}
 					</TableBody>
@@ -130,7 +146,13 @@ function PluginTable({ plugins }: { plugins: InsightsPlugin[] }) {
 	);
 }
 
-function ThemeTable({ themes }: { themes: InsightsTheme[] }) {
+function ThemeTable({
+	themes,
+	siteId,
+}: {
+	themes: InsightsTheme[];
+	siteId: string;
+}) {
 	return (
 		<Card>
 			<CardHeader>
@@ -144,6 +166,7 @@ function ThemeTable({ themes }: { themes: InsightsTheme[] }) {
 							<TableHead>Version</TableHead>
 							<TableHead>Status</TableHead>
 							<TableHead>Auto-update</TableHead>
+							<TableHead className="w-12" />
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -167,6 +190,9 @@ function ThemeTable({ themes }: { themes: InsightsTheme[] }) {
 								</TableCell>
 								<TableCell className="text-muted-foreground text-xs">
 									{autoUpdateLabel(t.auto_update)}
+								</TableCell>
+								<TableCell className="text-right">
+									<RowActions kind="theme" row={t} siteId={siteId} />
 								</TableCell>
 							</TableRow>
 						))}
@@ -309,8 +335,14 @@ function InventoryContent({
 				</div>
 				<RefreshButton siteId={siteId} />
 			</div>
-			<PluginTable plugins={data.plugins} />
-			<ThemeTable themes={data.themes} />
+			<CoreUpdateCard siteId={siteId} wpCore={data.wp_core} />
+			<BulkUpdateBar
+				hasPluginUpdates={data.plugins.some((p) => p.update_available)}
+				siteId={siteId}
+			/>
+			<PluginTable plugins={data.plugins} siteId={siteId} />
+			<ThemeTable siteId={siteId} themes={data.themes} />
+			<AutoUpdateScheduleCard siteId={siteId} />
 			<SiteHealthSection data={data.site_health} />
 			<SecuritySignals
 				fastcgiCache={data.fastcgi_cache}
