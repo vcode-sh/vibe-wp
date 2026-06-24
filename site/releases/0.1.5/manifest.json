@@ -1,0 +1,20 @@
+{
+  "version": "0.1.5",
+  "publishedAt": "2026-06-24T05:35:40Z",
+  "assets": {
+    "linux-x64": {
+      "path": "/releases/0.1.5/vibe-wp-installer-linux-x64.gz",
+      "url": "https://wp.vcode.sh/releases/0.1.5/vibe-wp-installer-linux-x64.gz",
+      "sha256": "6f8a4ceff7ef34c1899e476f306187deb6c6d55921110e15c765372d4572eb86",
+      "downloadSha256": "32cd6ce739bab4e36f409f4300e96fe4d84c24ad010c5fc77fd310c5374d7291",
+      "compression": "gzip"
+    },
+    "linux-arm64": {
+      "path": "/releases/0.1.5/vibe-wp-installer-linux-arm64.gz",
+      "url": "https://wp.vcode.sh/releases/0.1.5/vibe-wp-installer-linux-arm64.gz",
+      "sha256": "517a60bf36ffe90fcd14a1a56ea72aa2a9e7450c4a22c9e7bb89104b8037ed3c",
+      "downloadSha256": "d44633e30414b4198a0fc180fbd2164f65b3340d977f107e3c582189af1d8c63",
+      "compression": "gzip"
+    }
+  }
+}
