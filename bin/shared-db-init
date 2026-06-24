@@ -99,9 +99,12 @@ echo "shared-db-init: waiting for db to become healthy ..."
 max_wait=240
 elapsed=0
 while true; do
-  status="$(docker inspect --format '{{.State.Health.Status}}' \
-    "$(docker compose -f "${SHARED_DB_DIR}/compose.yaml" ps -q db 2>/dev/null)" \
-    2>/dev/null || echo "missing")"
+  # --env-file is REQUIRED here too: without it the compose.yaml
+  # ${MARIADB_ROOT_PASSWORD:?required} interpolation fails, `ps -q db` errors,
+  # and the empty container id makes `docker inspect` report "missing" forever —
+  # a false timeout even when the DB is healthy.
+  cid="$(docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" ps -q db 2>/dev/null || true)"
+  status="$(docker inspect --format '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "missing")"
   case "$status" in
     healthy)
       echo "shared-db-init: db is healthy."

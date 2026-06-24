@@ -21,8 +21,11 @@ db_count="null"
 if [ -f "${SHARED_DB_DIR}/compose.yaml" ] && [ -f "$SHARED_DB_ENV" ]; then
   present=true
 
-  # Determine health via docker inspect (no passwords involved).
-  container_id="$(docker compose -f "${SHARED_DB_DIR}/compose.yaml" ps -q db 2>/dev/null || true)"
+  # Determine health via docker inspect (no passwords involved). --env-file is
+  # REQUIRED: without it the compose.yaml ${MARIADB_ROOT_PASSWORD:?required}
+  # interpolation fails and `ps -q db` returns nothing, falsely reporting the
+  # healthy container as absent.
+  container_id="$(docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" ps -q db 2>/dev/null || true)"
   if [ -n "$container_id" ]; then
     health_status="$(docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo "unknown")"
     if [ "$health_status" = "healthy" ]; then
