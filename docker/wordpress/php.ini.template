@@ -9,6 +9,7 @@ realpath_cache_ttl = ${PHP_REALPATH_CACHE_TTL}
 expose_php = Off
 display_errors = Off
 log_errors = On
+sendmail_path = ${PHP_SENDMAIL_PATH}
 
 opcache.enable = ${PHP_OPCACHE_ENABLE}
 opcache.enable_cli = ${PHP_OPCACHE_ENABLE_CLI}

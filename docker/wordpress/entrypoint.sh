@@ -19,6 +19,17 @@ export PHP_OPCACHE_REVALIDATE_FREQ="${PHP_OPCACHE_REVALIDATE_FREQ:-2}"
 export PHP_OPCACHE_JIT="${PHP_OPCACHE_JIT:-0}"
 export PHP_OPCACHE_JIT_BUFFER_SIZE="${PHP_OPCACHE_JIT_BUFFER_SIZE:-0}"
 
+export SMTP_MODE="${SMTP_MODE:-off}"
+export SMTP_HOST="${SMTP_HOST:-}"
+export SMTP_PORT="${SMTP_PORT:-587}"
+export SMTP_SECURE="${SMTP_SECURE:-starttls}"
+export SMTP_AUTH="${SMTP_AUTH:-on}"
+export SMTP_USER="${SMTP_USER:-}"
+export SMTP_PASSWORD="${SMTP_PASSWORD:-}"
+export SMTP_FROM="${SMTP_FROM:-}"
+export SMTP_FROM_NAME="${SMTP_FROM_NAME:-}"
+export MSMTP_QUEUE="${MSMTP_QUEUE:-/var/www/html/wp-content/.vibe/mail-queue}"
+
 export PHP_FPM_PM="${PHP_FPM_PM:-dynamic}"
 export PHP_FPM_PM_MAX_CHILDREN="${PHP_FPM_PM_MAX_CHILDREN:-24}"
 export PHP_FPM_PM_START_SERVERS="${PHP_FPM_PM_START_SERVERS:-4}"
@@ -66,6 +77,30 @@ if [ "${WP_CONTENT_FIX_PERMISSIONS:-1}" = "1" ]; then
   fi
 fi
 
+# Map SMTP_SECURE -> msmtp tls/tls_starttls flags.
+case "${SMTP_SECURE}" in
+  starttls) export SMTP_TLS="on";  export SMTP_STARTTLS="on"  ;;
+  tls)      export SMTP_TLS="on";  export SMTP_STARTTLS="off" ;;
+  none|*)   export SMTP_TLS="off"; export SMTP_STARTTLS="off" ;;
+esac
+
+# Resolve sendmail_path per mode; render /etc/msmtprc only when relaying.
+case "${SMTP_MODE}" in
+  relay)
+    envsubst '${SMTP_AUTH} ${SMTP_TLS} ${SMTP_STARTTLS} ${SMTP_HOST} ${SMTP_PORT} ${SMTP_FROM} ${SMTP_USER} ${SMTP_PASSWORD}' \
+      < /usr/local/share/vibe-wp/msmtprc.template > /etc/msmtprc
+    chmod 600 /etc/msmtprc
+    chown www-data:www-data /etc/msmtprc 2>/dev/null || true
+    export PHP_SENDMAIL_PATH="/usr/local/bin/vibe-wp-sendmail -t -i"
+    ;;
+  log)
+    export PHP_SENDMAIL_PATH="/usr/local/bin/vibe-wp-mail-log"
+    ;;
+  off|*)
+    export PHP_SENDMAIL_PATH="/bin/true"
+    ;;
+esac
+
 envsubst '
   ${PHP_MEMORY_LIMIT}
   ${PHP_UPLOAD_MAX_FILESIZE}
@@ -84,6 +119,7 @@ envsubst '
   ${PHP_OPCACHE_REVALIDATE_FREQ}
   ${PHP_OPCACHE_JIT}
   ${PHP_OPCACHE_JIT_BUFFER_SIZE}
+  ${PHP_SENDMAIL_PATH}
 ' < /usr/local/share/vibe-wp/php.ini.template > /usr/local/etc/php/conf.d/zz-vibe-wp.ini
 
 envsubst '
