@@ -29,6 +29,24 @@ Bind **every** task. From the spec (`docs/superpowers/specs/2026-06-23-feature-6
 
 ---
 
+## 🔒 Security review findings (MANDATORY — pre-code adversarial review, 2026-06-24)
+
+The opus security review **confirmed sound**: the least-privilege grant (no `*.*`, no `GRANT OPTION`, no server privileges, no `mysql.*`/cross-`vibe_*` access), the slug regex (provably excludes every SQL metacharacter; the two-`case` + length combo faithfully enforces `^[a-z][a-z0-9-]{0,47}$` under `LC_ALL=C`), the **no `-→_` collision** between distinct valid slugs (`_` is rejected at input, so the inverse map is unambiguous), the no-published-port stance, and `set -eu` aborting before any SQL on an invalid slug. The acceptable cross-tenant *residual* (an attacker with site A's container + site B's *leaked* credential can use B's own scoped credential) is correctly characterized.
+
+These **must-fix** design changes are BINDING on the tasks below:
+
+- **MF-1 — Never let a password reach stderr/the panel.** The provision error handler must NOT echo raw `mariadb` stderr (the SQL contains `IDENTIFIED BY '<pw>'`; a failing statement can echo it). On a non-zero exit, emit a GENERIC message (`"provision SQL failed (see container logs)"`) — never interpolate container stderr. Belt-and-braces: the panel-side `redact()` masks any `IDENTIFIED BY '...'` and any standalone 32/64-hex token.
+- **MF-2 — ONE blessed root-cred delivery; never `env MYSQL_PWD=` (host `ps`) and never `--defaults-extra-file=/dev/stdin` (broken).** Use: host-side `mktemp` 0600 root-owned defaults file (in root's `$TMPDIR`, NOT world-`/tmp`) → piped into the container to a **randomized** in-container path created with `umask 077` → `mariadb --defaults-extra-file="$f"` with the **SQL on a separate fd/file**, then `rm` the in-container temp inside the same `sh -c`. Root pw never on host argv, never on container argv. (See the corrected Task 1 Step 3.)
+- **MF-3 — Provision is deterministic about the password.** `CREATE USER IF NOT EXISTS` keeps a STALE password on a retry/re-run while still printing a fresh one → site can't connect. Fix: after `CREATE USER IF NOT EXISTS`, ALWAYS `ALTER USER … IDENTIFIED BY '<pw>'` so the printed password is the live one. (Migration Task 8 inherits this.)
+- **MF-4 — Randomized temp paths, no fixed `/tmp/.sdbcf`/`/tmp/.sdberr`.** Concurrent provisions race on fixed paths. Use `mktemp` (host + in-container), `umask 077`, trap/inline cleanup on every exit path.
+- **MF-5 — Host-pattern derivation fails closed.** `docker network inspect … {{.Subnet}}` concatenates multiple subnets (dual-stack/IPv6) → the `sed` silently yields garbage or the empty-fallback `'%'` (grant widened to ALL hosts) — REMOVE the silent `host_pat='%'` fallback. Parse only the FIRST IPv4 `A.B.C.D/NN`, compute the pattern from the mask (`/16`→`A.B.%`, `/24`→`A.B.C.%`), and `die` (fail closed) if no IPv4 subnet is found.
+- **MF-6 — Deprovision is exhaustive, not pattern-guessing.** The subnet may change between provision and deprovision → a guessed `host_pat` leaves the real user alive (lingering credential after "purge"). Fix: as root, `SELECT Host FROM mysql.user WHERE User='<ident>'` and `DROP USER IF EXISTS '<ident>'@'<host>'` for EVERY returned host.
+
+**Should-fix / hardening (fold into the relevant task):**
+- **SF-1** document that `CREATE ROUTINE`/`EXECUTE`/definer-rights scoped to the tenant DB is NOT an escalation (a non-`SUPER` user can only set `DEFINER` to itself). SF-2 set `local_infile=0` on the shared server (WordPress doesn't need it). SF-3 the isolation test adds an explicit `SELECT … FROM information_schema.SCHEMATA` cross-tenant-invisibility assertion. SF-4 root rotation enumerates ALL `root@*` rows, rotates each, and asserts the OLD pw is REJECTED afterward (not just that the new one works); no old pw left in a temp/backup. SF-5 the wrapper SOURCES `bin/lib/shared-db.sh` and calls `sdb_validate_slug` (no re-typed regex), with a test asserting wrapper + lib reject an identical attack corpus. SF-6 the wrapper rejects ARITY explicitly (`provision`/`deprovision` = exactly one slug; `init`/`status`/`backup` = zero) — `die` on any extra token. SF-7 `shared-db-init` hard-fails if the `shared_db_data` volume exists but the env file is missing (don't generate a new root pw that won't match the grant tables). SF-8 migration verify uses a table-set + per-table row-count comparison (+checksum where feasible), fail-closed to rollback.
+
+---
+
 ## File Structure
 
 | File | Responsibility | New/Modify |
@@ -156,26 +174,31 @@ sdb_root_password() {
   printf '%s' "$val"
 }
 
-# Run SQL as root against the shared container. Password via --defaults-extra-file
-# on stdin (NEVER argv). $1 = SQL string. Output passes back to caller.
+# Run SQL as root against the shared container. The root password reaches mariadb
+# ONLY as a --defaults-extra-file inside the container (NEVER host or container
+# argv, NEVER env MYSQL_PWD, NEVER a fixed path). $1 = SQL. Returns query output;
+# on error emits a GENERIC message (the SQL contains the per-site password, so raw
+# stderr must NEVER surface — MF-1). Cred + SQL share one stdin, split by a marker;
+# the in-container shell writes the cred to a randomized umask-077 temp (MF-2/MF-4).
 sdb_mariadb_root() {
   sql="$1"
   rpw="$(sdb_root_password)"
-  # The defaults file + the SQL both arrive on the container's stdin: the defaults
-  # file via a process-substitution-free heredoc isn't possible, so write a 0600
-  # temp defaults file, exec the SQL via --execute, and shred the temp.
-  cf="$(mktemp)"; chmod 600 "$cf"; trap 'rm -f "$cf"' EXIT INT TERM
-  printf '[client]\npassword=%s\n' "$rpw" > "$cf"
+  out="$(
+    { printf '[client]\npassword=%s\n__VIBE_SQL_BEGIN__\n' "$rpw"; printf '%s\n' "$sql"; } \
+    | docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
+        exec -T db sh -c '
+          umask 077; cf="$(mktemp)"
+          while IFS= read -r l; do [ "$l" = "__VIBE_SQL_BEGIN__" ] && break; printf "%s\n" "$l" >> "$cf"; done
+          mariadb --defaults-extra-file="$cf" -u root --batch --skip-column-names
+          rc=$?; rm -f "$cf"; exit $rc
+        ' 2>&1
+  )" || { unset rpw out; sdb_die "provision SQL failed (see container logs)"; }
   unset rpw
-  docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
-    exec -T db sh -c 'cat > /tmp/.sdbcf && mariadb --defaults-extra-file=/tmp/.sdbcf -u root --batch --skip-column-names; rc=$?; rm -f /tmp/.sdbcf; exit $rc' \
-    < "$cf" >/dev/null 2>/tmp/.sdberr <<SQL || { rm -f "$cf"; sdb_die "mariadb failed: $(cat /tmp/.sdberr 2>/dev/null | head -1)"; }
-$sql
-SQL
-  rm -f "$cf"; trap - EXIT INT TERM
+  # On success this is the query result (DDL -> empty); NEVER contains a password.
+  printf '%s' "$out"
 }
 ```
-> **Implementer note:** the `sdb_mariadb_root` heredoc-vs-cred-file interleaving above is fiddly — the cred file and the SQL must both reach the container without the password touching argv. Validate this works in Task 3 against a real container BEFORE relying on it; if the dual-stdin is awkward, the robust alternative is: `docker compose exec -T db env MYSQL_PWD="$rpw" mariadb -u root --batch -e "$sql"` (MYSQL_PWD avoids argv but is visible in the container's env — acceptable since it's a transient `exec`; the security reviewer must confirm the chosen approach keeps the root pw off the HOST `ps`). Pick the approach that the isolation test + security review both bless. Document the choice.
+> **Implementer note (security-critical):** this is the single most sensitive mechanism. Task 3's isolation harness MUST verify against a real container that (1) the root password never appears in `ps aux` on the host NOR in the container's process list, (2) no readable temp cred file survives, and (3) a forced SQL error returns the generic message with NO password/stderr leaking to the caller. Do NOT substitute `env MYSQL_PWD=` (it lands in host argv) or `--defaults-extra-file=/dev/stdin` (broken — stdin can't be both the cred file and the SQL).
 
 - [ ] **Step 4: `bin/shared-db-init`** — idempotent: create `/opt/vibe-wp-shared-db`, copy `docker/mariadb` + `compose.yaml`, generate `MARIADB_ROOT_PASSWORD` (`openssl rand -hex 32`) into a 0600 root-owned env file (only if absent — never regenerate over a running DB), `docker compose up -d --build`, wait for healthy. Print non-secret status. Source `bin/lib/shared-db.sh`.
 
@@ -197,27 +220,34 @@ set -eu
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/shared-db.sh"
 [ "$#" -eq 1 ] || sdb_die "usage: db-provision <slug>"
-ident="$(sdb_validate_slug "$1")"          # vibe_<slug-with-underscores>; validated
-# Per-site password: generated HERE, returned ONLY via stdout.
-pw="$(openssl rand -hex 16)"               # 32 hex chars
-# Host-grant pinned to the shared Docker network subnet (read live).
-subnet="$(docker network inspect "$SHARED_DB_NETWORK" --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
-host_pat="$(printf '%s' "$subnet" | sed 's#\.0/[0-9]*$#.%#')"   # 172.x.0.0/16 -> 172.x.%
-[ -n "$host_pat" ] || host_pat='%'         # fallback (still scoped by the grant)
-maxc="$(grep -m1 '^SHARED_DB_MAX_USER_CONNECTIONS=' "$SHARED_DB_ENV" | sed 's/^[^=]*=//')"
-maxc="${maxc:-25}"
-case "$maxc" in ''|*[!0-9]*) maxc=25 ;; esac
-# FIXED SQL TEMPLATE — only the VALIDATED ident, the generated pw, the derived
-# host_pat, and the numeric maxc are substituted. No caller input reaches here.
+ident="$(sdb_validate_slug "$1")"          # vibe_<...>; validated, no SQL metacharacters
+pw="$(openssl rand -hex 16)"               # 32 hex; returned ONLY via stdout
+host_pat="$(sdb_host_pattern)"             # MF-5: first IPv4 subnet -> A.B.%/A.B.C.%; dies (fail-closed) if none
+maxc="$(sdb_max_user_connections)"         # numeric, default 25
+# FIXED SQL TEMPLATE — only the VALIDATED ident, generated pw, derived host_pat,
+# and numeric maxc are substituted; no caller input reaches here. CREATE+ALTER
+# guarantees the printed password is the LIVE one even on re-run (MF-3).
 sdb_mariadb_root "CREATE DATABASE IF NOT EXISTS \`${ident}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${ident}'@'${host_pat}' IDENTIFIED BY '${pw}';
+ALTER USER '${ident}'@'${host_pat}' IDENTIFIED BY '${pw}';
 GRANT ALL PRIVILEGES ON \`${ident}\`.* TO '${ident}'@'${host_pat}' WITH MAX_USER_CONNECTIONS ${maxc};
 FLUSH PRIVILEGES;"
-# Output contract: exactly the password, nothing else.
-printf '%s\n' "$pw"
+printf '%s\n' "$pw"   # output contract: exactly the password, nothing else
 ```
+> Add to `bin/lib/shared-db.sh` (Task 1): `sdb_host_pattern()` — `docker network inspect "$SHARED_DB_NETWORK" --format '{{range .IPAM.Config}}{{println .Subnet}}{{end}}'`, take the FIRST line matching `^[0-9.]+/[0-9]+$` (IPv4 only), compute the pattern from the mask (`/8`→`A.%`, `/16`→`A.B.%`, `/24`→`A.B.C.%`; for other masks fall to the next-wider octet boundary), and `sdb_die` if no IPv4 subnet is found (NEVER return `%`). `sdb_max_user_connections()` — grep the env value, default 25, reject non-numeric.
 
-- [ ] **Step 2: `bin/db-deprovision`:** validate slug → `DROP DATABASE IF EXISTS \`${ident}\`; DROP USER IF EXISTS '${ident}'@'${host_pat}'; FLUSH PRIVILEGES;` (re-derive host_pat live; also try `'${ident}'@'%'` defensively). Silent on success.
+- [ ] **Step 2: `bin/db-deprovision`** — MF-6: drop the DB, then EXHAUSTIVELY drop the user from EVERY host it exists on (don't guess a host pattern that may have changed since provision):
+
+```sh
+ident="$(sdb_validate_slug "$1")"
+hosts="$(sdb_mariadb_root "SELECT Host FROM mysql.user WHERE User='${ident}';")"
+sdb_mariadb_root "DROP DATABASE IF EXISTS \`${ident}\`;"
+for h in $hosts; do
+  sdb_mariadb_root "DROP USER IF EXISTS '${ident}'@'${h}';"
+done
+sdb_mariadb_root "FLUSH PRIVILEGES;"
+```
+Silent on success (the `sdb_mariadb_root` outputs are discarded). The `$h` values come from our own `mysql.user` rows (created by db-provision), not from caller input.
 
 - [ ] **Step 3:** `sh -n` both, chmod +x. Commit. (Real-DB behavior is proven in Task 3.)
 
