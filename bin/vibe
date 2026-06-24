@@ -215,6 +215,12 @@ case "${command}" in
   notify-test)
     "${VIBE_BIN_DIR}/notify-test" "$@"
     ;;
+  smtp-config-apply)
+    "${VIBE_BIN_DIR}/smtp-config-apply" "$@"
+    ;;
+  smtp-test)
+    "${VIBE_BIN_DIR}/smtp-test" "$@"
+    ;;
   backup-verify)
     "${VIBE_BIN_DIR}/backup-verify" "$@"
     ;;
