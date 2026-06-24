@@ -45,6 +45,12 @@ BIN="${REPO_ROOT}/bin"
 SHARED_DB_DIR="${SHARED_DB_DIR:-/opt/vibe-wp-shared-db}"
 SHARED_DB_ENV="${SHARED_DB_DIR}/env/shared-db.env"
 COMPOSE_FILE="${SHARED_DB_DIR}/compose.yaml"
+ENV_FILE="${SHARED_DB_ENV}"
+
+# Wrapper: every docker compose invocation must supply --env-file so the
+# compose.yaml variable interpolation (${MARIADB_ROOT_PASSWORD:?required})
+# succeeds even when the caller's shell environment does not export it.
+DC() { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
 
 # ---------------------------------------------------------------------------
 # Counters and cleanup
@@ -140,7 +146,7 @@ run_as_site_user() {
   # users whose passwords are non-secret at the container boundary; the ROOT password
   # is held to the stricter off-argv standard in sdb_mariadb_root).
   printf '%s\n' "$_sql" \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u "$_user" "--password=${_pw}" "--database=${_db}" \
           --batch --skip-column-names 2>&1
 }
@@ -150,7 +156,7 @@ run_as_site_user_nodb() {
   _user="$1"; _pw_var="$2"; _sql="$3"
   eval "_pw=\"\${${_pw_var}}\""
   printf '%s\n' "$_sql" \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u "$_user" "--password=${_pw}" \
           --batch --skip-column-names 2>&1
 }
@@ -160,7 +166,7 @@ run_as_site_user_nodb() {
 # ---------------------------------------------------------------------------
 echo "==> Pre-flight: checking shared-db container health"
 
-if ! docker compose -f "$COMPOSE_FILE" ps --status running db 2>/dev/null | grep -q db; then
+if ! DC ps --status running db 2>/dev/null | grep -q db; then
   echo "SKIP: shared-db container is not running. Run 'bin/shared-db-init' first."
   exit 1
 fi
@@ -237,7 +243,7 @@ done
 ps_snapshot="$(ps aux 2>/dev/null || ps -ef 2>/dev/null || true)"
 
 # Snapshot container process list.
-container_ps="$(docker compose -f "$COMPOSE_FILE" top db 2>/dev/null || true)"
+container_ps="$(DC top db 2>/dev/null || true)"
 
 # Wait for background provision to complete.
 wait "$bg_pid" 2>/dev/null || true
@@ -274,7 +280,7 @@ echo "==> Phase 3: Own-database access assertions (sitea)"
 # These wrappers run mariadb directly; exit 0 from mariadb = success = PASS for assert_ok.
 _own_create_table() {
   printf 'CREATE TABLE IF NOT EXISTS _vibe_test_t (id INT PRIMARY KEY);\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -282,7 +288,7 @@ assert_ok "OWN-1: vibe_sitea can CREATE TABLE in vibe_sitea" _own_create_table
 
 _own_insert() {
   printf 'INSERT INTO _vibe_test_t (id) VALUES (1) ON DUPLICATE KEY UPDATE id=id;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -290,7 +296,7 @@ assert_ok "OWN-2: vibe_sitea can INSERT into vibe_sitea" _own_insert
 
 _own_select() {
   printf 'SELECT id FROM _vibe_test_t;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -307,7 +313,7 @@ echo "==> Phase 4: Cross-tenant denial assertions"
 # If vibe_sitea somehow could switch to vibe_siteb, mariadb exits 0 → FAIL.
 _deny_use_siteb() {
   printf 'USE vibe_siteb;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" \
           --batch --skip-column-names 2>/dev/null
 }
@@ -316,7 +322,7 @@ assert_deny "DENY-1: vibe_sitea cannot USE vibe_siteb" _deny_use_siteb
 # DENY-2: cannot SELECT from vibe_siteb.*
 _deny_select_siteb() {
   printf 'SELECT * FROM vibe_siteb._vibe_test_t;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -325,7 +331,7 @@ assert_deny "DENY-2: vibe_sitea cannot SELECT from vibe_siteb.*" _deny_select_si
 # DENY-3: cannot SELECT from mysql.user
 _deny_select_mysql_user() {
   printf 'SELECT User, Host FROM mysql.user;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -335,7 +341,7 @@ assert_deny "DENY-3: vibe_sitea cannot SELECT from mysql.user" _deny_select_mysq
 # MariaDB returns "Access denied; you need (at least one of) the GRANT OPTION privilege(s)"
 _deny_grant() {
   printf 'GRANT SELECT ON vibe_sitea.* TO vibe_sitea;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -344,7 +350,7 @@ assert_deny "DENY-4: vibe_sitea cannot GRANT privileges (no GRANT OPTION)" _deny
 # DENY-5: cannot CREATE USER
 _deny_create_user() {
   printf "CREATE USER 'attacker'@'%%' IDENTIFIED BY 'x';\n" \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
           --batch --skip-column-names 2>/dev/null
 }
@@ -357,7 +363,7 @@ echo ""
 echo "==> Phase 5: SHOW DATABASES cross-tenant visibility"
 
 show_dbs="$(printf 'SHOW DATABASES;\n' \
-  | docker compose -f "$COMPOSE_FILE" exec -T db \
+  | DC exec -T db \
       mariadb -u vibe_sitea "--password=${pw_a}" \
         --batch --skip-column-names 2>/dev/null || true)"
 
@@ -371,7 +377,7 @@ echo ""
 echo "==> Phase 6: SF-3 — information_schema.SCHEMATA cross-tenant invisibility"
 
 schemata="$(printf 'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA;\n' \
-  | docker compose -f "$COMPOSE_FILE" exec -T db \
+  | DC exec -T db \
       mariadb -u vibe_sitea "--password=${pw_a}" \
         --batch --skip-column-names 2>/dev/null || true)"
 
@@ -385,7 +391,7 @@ echo ""
 echo "==> Phase 7: SHOW GRANTS scope for vibe_sitea"
 
 grants="$(printf 'SHOW GRANTS FOR CURRENT_USER();\n' \
-  | docker compose -f "$COMPOSE_FILE" exec -T db \
+  | DC exec -T db \
       mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
         --batch --skip-column-names 2>/dev/null || true)"
 
@@ -433,7 +439,7 @@ echo "==> Phase 8: Deprovision sitea — assert DB+user gone, siteb intact"
 
 # DEPR-1: connecting as vibe_sitea must now FAIL.
 depr_result="$(printf 'SELECT 1;\n' \
-  | docker compose -f "$COMPOSE_FILE" exec -T db \
+  | DC exec -T db \
       mariadb -u vibe_sitea "--password=${pw_a}" --database=vibe_sitea \
         --batch --skip-column-names 2>&1 || true)"
 case "$depr_result" in
@@ -447,7 +453,7 @@ esac
 # DEPR-2: siteb must still be accessible.
 _depr_siteb_intact() {
   printf 'SELECT 1;\n' \
-    | docker compose -f "$COMPOSE_FILE" exec -T db \
+    | DC exec -T db \
         mariadb -u vibe_siteb "--password=${pw_b}" --database=vibe_siteb \
           --batch --skip-column-names 2>/dev/null
 }

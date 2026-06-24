@@ -96,7 +96,7 @@ docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
 
 # --- Wait for healthy ----------------------------------------------------------
 echo "shared-db-init: waiting for db to become healthy ..."
-max_wait=120
+max_wait=240
 elapsed=0
 while true; do
   status="$(docker inspect --format '{{.State.Health.Status}}' \
