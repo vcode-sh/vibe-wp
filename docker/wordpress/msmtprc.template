@@ -1,0 +1,14 @@
+# Rendered by vibe-wp-entrypoint at container start into /etc/msmtprc (0600).
+defaults
+  auth           ${SMTP_AUTH}
+  tls            ${SMTP_TLS}
+  tls_starttls   ${SMTP_STARTTLS}
+  tls_certcheck  on
+  logfile        -
+
+account        default
+  host         ${SMTP_HOST}
+  port         ${SMTP_PORT}
+  from         ${SMTP_FROM}
+  user         ${SMTP_USER}
+  password     ${SMTP_PASSWORD}

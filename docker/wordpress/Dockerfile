@@ -11,6 +11,7 @@ RUN set -eux; \
       default-mysql-client \
       gettext-base \
       less \
+      msmtp \
       rsync \
       unzip; \
     yes '' | pecl install redis; \
@@ -24,6 +25,7 @@ RUN set -eux; \
       gettext \
       less \
       mariadb-client \
+      msmtp \
       rsync \
       unzip; \
     apk add --no-cache --virtual .build-deps $PHPIZE_DEPS linux-headers; \
@@ -43,8 +45,12 @@ COPY cron.sh /usr/local/bin/vibe-wp-cron.sh
 COPY php.ini.template /usr/local/share/vibe-wp/php.ini.template
 COPY php-fpm-www.conf.template /usr/local/share/vibe-wp/php-fpm-www.conf.template
 COPY mu-plugins/ /usr/local/share/vibe-wp/mu-plugins/
+COPY msmtprc.template /usr/local/share/vibe-wp/msmtprc.template
+COPY sendmail-shim.sh /usr/local/bin/vibe-wp-sendmail
+COPY mailq-flush.sh /usr/local/bin/vibe-wp-mailq-flush
+COPY mail-log.sh /usr/local/bin/vibe-wp-mail-log
 
-RUN chmod +x /usr/local/bin/vibe-wp-entrypoint.sh /usr/local/bin/vibe-wp-cron.sh
+RUN chmod +x /usr/local/bin/vibe-wp-entrypoint.sh /usr/local/bin/vibe-wp-cron.sh /usr/local/bin/vibe-wp-sendmail /usr/local/bin/vibe-wp-mailq-flush /usr/local/bin/vibe-wp-mail-log
 
 ENTRYPOINT ["/usr/local/bin/vibe-wp-entrypoint.sh"]
 CMD ["php-fpm"]
