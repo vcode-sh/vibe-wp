@@ -267,11 +267,14 @@ function vibe_insights_signals(): array
 function vibe_insights_object_cache(): array
 {
     try {
+        // wp_using_ext_object_cache() returns the uninitialized global (null) when
+        // the object cache isn't set up in the collection context, so cast to bool
+        // to satisfy the panel's strict boolean schema.
         $dropin = file_exists(WP_CONTENT_DIR . '/object-cache.php');
         return array(
-            'enabled'        => wp_using_ext_object_cache(),
+            'enabled'        => (bool) wp_using_ext_object_cache(),
             'type'           => $dropin ? 'redis' : 'none',
-            'dropin_present' => $dropin,
+            'dropin_present' => (bool) $dropin,
         );
     } catch (\Throwable $e) {
         return array('enabled' => false, 'type' => 'none', 'dropin_present' => false);
