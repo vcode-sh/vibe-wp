@@ -118,6 +118,12 @@ x-wordpress-environment: &wordpress-environment
   PHP_FPM_REQUEST_TERMINATE_TIMEOUT: ${PHP_FPM_REQUEST_TERMINATE_TIMEOUT:-120s}
   PHP_FPM_PM_PROCESS_IDLE_TIMEOUT: ${PHP_FPM_PM_PROCESS_IDLE_TIMEOUT:-10s}
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   nginx:
     image: ${NGINX_RUNTIME_IMAGE:-vibe-wp-nginx}
@@ -127,6 +133,7 @@ services:
         NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.29-alpine}
         WORDPRESS_IMAGE: ${WORDPRESS_IMAGE:-wordpress:7.0-php8.5-fpm}
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       wordpress:
         condition: service_healthy
@@ -184,6 +191,7 @@ services:
     build: *wordpress-build
     init: true
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       db:
         condition: service_healthy
@@ -208,6 +216,7 @@ services:
     build: *wordpress-build
     init: true
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       wordpress:
         condition: service_healthy
@@ -226,6 +235,7 @@ services:
       args:
         MARIADB_IMAGE: ${MARIADB_IMAGE:-mariadb:12.3}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MARIADB_DATABASE: ${MARIADB_DATABASE:-wordpress}
       MARIADB_USER: ${MARIADB_USER:-wordpress}
@@ -290,6 +300,7 @@ services:
       args:
         REDIS_IMAGE: ${REDIS_IMAGE:-redis:8-alpine}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me}
       REDIS_BIND: ${REDIS_BIND:-0.0.0.0}
