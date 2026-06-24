@@ -8,12 +8,14 @@ import { inventoryRouter } from "./inventory";
 import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
+import { pluginsRouter } from "./plugins";
 import { provisioningRouter } from "./provisioning";
 import { serverRouter } from "./server";
 import { settingsRouter } from "./settings";
 import { setupRouter } from "./setup";
 import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
+import { themesRouter } from "./themes";
 import { updatesRouter } from "./updates";
 
 export const appRouter = {
@@ -30,6 +32,8 @@ export const appRouter = {
 	...logsRouter,
 	...updatesRouter,
 	...inventoryRouter,
+	...pluginsRouter,
+	...themesRouter,
 	...settingsRouter,
 	...devinfoRouter,
 };
