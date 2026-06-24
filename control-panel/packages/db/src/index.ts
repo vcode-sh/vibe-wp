@@ -15,6 +15,7 @@ import {
 import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
 import { notifyConfig } from "./schema/notify";
+import { smtpConfig } from "./schema/smtp";
 
 const schema = {
 	account,
@@ -29,6 +30,7 @@ const schema = {
 	jobs,
 	backupConfig,
 	notifyConfig,
+	smtpConfig,
 };
 
 export function createDb() {
