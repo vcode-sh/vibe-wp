@@ -64,3 +64,6 @@ export const operationsListQuery = (opts?: {
 	siteId?: string;
 	limit?: number;
 }) => orpc.operationsList.queryOptions({ input: opts ?? {} });
+
+export const inventoryQuery = (siteId: string) =>
+	orpc.siteInventory.queryOptions({ input: { siteId } });

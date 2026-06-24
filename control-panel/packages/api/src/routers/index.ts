@@ -4,6 +4,7 @@ import { backupsRouter } from "./backups";
 import { controlOverviewRouter } from "./control-overview";
 import { devinfoRouter } from "./devinfo";
 import { healthRouter } from "./health";
+import { inventoryRouter } from "./inventory";
 import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
@@ -13,7 +14,6 @@ import { settingsRouter } from "./settings";
 import { setupRouter } from "./setup";
 import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
-import { inventoryRouter } from "./inventory";
 import { updatesRouter } from "./updates";
 
 export const appRouter = {

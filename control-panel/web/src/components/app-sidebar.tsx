@@ -5,6 +5,7 @@ import {
 	HeartPulse,
 	History,
 	LayoutDashboard,
+	PackageOpen,
 	ScrollText,
 	Settings,
 	ShieldCheck,
@@ -38,6 +39,7 @@ const SITE_LINKS: SiteLink[] = [
 	{ label: "Health", to: "/sites/$siteId/health", icon: HeartPulse },
 	{ label: "Backups", to: "/sites/$siteId/backups", icon: CopyCheck },
 	{ label: "Logs", to: "/sites/$siteId/logs", icon: ScrollText },
+	{ label: "Inventory", to: "/sites/$siteId/inventory", icon: PackageOpen },
 	{ label: "Staging", to: "/sites/$siteId/staging", icon: Activity },
 	{
 		label: "Site settings",

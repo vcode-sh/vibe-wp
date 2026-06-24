@@ -185,42 +185,43 @@ export interface RemoveSiteInput {
 }
 
 export interface InsightsPlugin {
-	slug: string;
+	auto_update: boolean | null;
 	name: string;
-	version: string;
+	new_version: string | null;
+	slug: string;
 	status: "active" | "inactive" | "must-use" | "dropin";
 	update_available: boolean;
-	new_version: string | null;
-	auto_update: boolean | null;
+	version: string;
 }
 
 export interface InsightsTheme {
-	slug: string;
+	auto_update: boolean | null;
 	name: string;
-	version: string;
+	new_version: string | null;
+	slug: string;
 	status: "active" | "parent" | "inactive";
 	update_available: boolean;
-	new_version: string | null;
-	auto_update: boolean | null;
+	version: string;
 }
 
 export interface InsightsHealthIssue {
-	label: string;
 	description: string;
+	label: string;
 	test: string;
 }
 
 export interface SiteInsights {
-	schema_version: 1;
-	generated_at: string;
-	site_url: string;
-	wp_core: { version: string; update_available: boolean; new_version: string | null };
-	php_version: string;
 	db: { size_bytes: number; engine: string; server_version: string };
+	fastcgi_cache: { enabled: boolean };
+	generated_at: string;
+	object_cache: {
+		enabled: boolean;
+		type: "redis" | "memcached" | "apcu" | "none";
+		dropin_present: boolean;
+	};
+	php_version: string;
 	plugins: InsightsPlugin[];
-	themes: InsightsTheme[];
-	users: { count: number; admin_count: number; last_login: string | null };
-	site_health: { collected_at: string; critical: InsightsHealthIssue[]; recommended: InsightsHealthIssue[] };
+	schema_version: 1;
 	signals: {
 		xmlrpc_enabled: boolean;
 		file_edit_enabled: boolean;
@@ -231,6 +232,17 @@ export interface SiteInsights {
 		auto_update_core: "minor" | "major" | "off";
 		cron_disabled: boolean;
 	};
-	object_cache: { enabled: boolean; type: "redis" | "memcached" | "apcu" | "none"; dropin_present: boolean };
-	fastcgi_cache: { enabled: boolean };
+	site_health: {
+		collected_at: string;
+		critical: InsightsHealthIssue[];
+		recommended: InsightsHealthIssue[];
+	};
+	site_url: string;
+	themes: InsightsTheme[];
+	users: { count: number; admin_count: number; last_login: string | null };
+	wp_core: {
+		version: string;
+		update_available: boolean;
+		new_version: string | null;
+	};
 }

@@ -14,9 +14,14 @@ export const inventoryRouter = {
 			if (!site) {
 				return null;
 			}
-			const { stdout, code } = await runVibe(site.installDir, "prod", "insights", {
-				timeoutMs: 10_000,
-			});
+			const { stdout, code } = await runVibe(
+				site.installDir,
+				"prod",
+				"insights",
+				{
+					timeoutMs: 10_000,
+				}
+			);
 			if (code !== 0) {
 				return null; // not collected yet (file absent)
 			}
@@ -30,9 +35,14 @@ export const inventoryRouter = {
 			if (!site) {
 				return { ok: false };
 			}
-			const { code } = await runVibe(site.installDir, "prod", "insightsRefresh", {
-				timeoutMs: 60_000,
-			});
+			const { code } = await runVibe(
+				site.installDir,
+				"prod",
+				"insightsRefresh",
+				{
+					timeoutMs: 60_000,
+				}
+			);
 			return { ok: code === 0 };
 		}),
 };
