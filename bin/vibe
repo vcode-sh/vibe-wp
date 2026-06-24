@@ -56,6 +56,20 @@ VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
 . "${VIBE_BIN_DIR}/lib/backup.sh"
 
+# Defense-in-depth re-validation of logs op args (the root wrapper already
+# checked, but bin/vibe must hold even when invoked directly). $1=service,
+# $2=tail. Empty args are allowed; defaults are applied by the case body.
+_validate_logs_args() {
+  case "${1:-all}" in
+    all|nginx|wordpress|cron|db|redis) : ;;
+    *) echo "vibe: invalid logs service: ${1:-}" >&2; exit 1 ;;
+  esac
+  case "${2:-200}" in
+    100|200|500|2000) : ;;
+    *) echo "vibe: invalid logs tail: ${2:-}" >&2; exit 1 ;;
+  esac
+}
+
 case "${command}" in
   compose)
     vibe_compose "$@"
@@ -94,15 +108,27 @@ case "${command}" in
     vibe_compose ps "$@"
     ;;
   logs)
-    # No --timestamps here: the live tail streams raw lines unparsed, so a
-    # nanosecond RFC3339 prefix would render verbatim and clutter the view.
-    # logs-recent keeps --timestamps because its output is parsed for the table.
-    vibe_compose logs -f --tail=200 "$@"
+    # No --timestamps: the live tail streams raw lines unparsed. $1=service
+    # (or "all"), $2=tail. Validate before touching docker.
+    _svc="${1:-all}"
+    _tail="${2:-200}"
+    _validate_logs_args "$_svc" "$_tail"
+    if [ "$_svc" = "all" ]; then
+      vibe_compose logs -f "--tail=${_tail}"
+    else
+      vibe_compose logs -f "--tail=${_tail}" "$_svc"
+    fi
     ;;
   logs-recent)
-    # One-shot tail (no -f) so non-interactive callers like the installer UI
-    # get the latest lines and the command returns instead of streaming forever.
-    vibe_compose logs --no-color --timestamps --tail=200 "$@"
+    # One-shot tail (no -f). --timestamps kept: output is parsed for the table.
+    _svc="${1:-all}"
+    _tail="${2:-200}"
+    _validate_logs_args "$_svc" "$_tail"
+    if [ "$_svc" = "all" ]; then
+      vibe_compose logs --no-color --timestamps "--tail=${_tail}"
+    else
+      vibe_compose logs --no-color --timestamps "--tail=${_tail}" "$_svc"
+    fi
     ;;
   backups)
     # List available backups for this env, one per line, TAB-separated:
