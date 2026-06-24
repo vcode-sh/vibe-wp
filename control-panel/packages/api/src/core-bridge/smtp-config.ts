@@ -9,12 +9,9 @@ import { smtpConfig } from "@control-panel/db/schema/smtp";
 import { eq } from "drizzle-orm";
 
 import { runVibe } from "./exec";
+import { GLOBAL_SITE_ID } from "./backup-config-pure";
 import type { SmtpConfigRow } from "./smtp-config-pure";
-import {
-	GLOBAL_SITE_ID,
-	mergeSmtpConfig,
-	toEnv,
-} from "./smtp-config-pure";
+import { mergeSmtpConfig, toEnv } from "./smtp-config-pure";
 import { findSite } from "./sites";
 
 export type SmtpConfigPatch = Omit<Partial<SmtpConfigRow>, "siteId">;

@@ -19,6 +19,12 @@ import {
 } from "../core-bridge/notify-config";
 import type { NotifyConfigRow } from "../core-bridge/notify-config-pure";
 import {
+	applySmtpConfigToSite,
+	getSmtpConfig,
+	setSmtpConfig,
+} from "../core-bridge/smtp-config";
+import { maskSmtpRow } from "../core-bridge/smtp-config-pure";
+import {
 	applyBackupSchedule,
 	applyDebugFlags,
 	applyFastcgiCache,
@@ -75,6 +81,20 @@ const notifyConfigSetInput = z.object({
 	webhookUrl: z.string().optional(),
 	email: z.string().optional(),
 	alertOnWarn: z.number().int().min(0).max(1).optional(),
+});
+
+const smtpConfigSetInput = z.object({
+	siteId: z.string().min(1),
+	mode: z.enum(["off", "relay", "log"]).optional(),
+	host: z.string().optional(),
+	port: z.number().int().min(1).max(65_535).optional(),
+	secure: z.enum(["starttls", "tls", "none"]).optional(),
+	auth: z.enum(["on", "off"]).optional(),
+	username: z.string().optional(),
+	/** Write-only. Omit/empty to preserve the existing password. */
+	password: z.string().optional(),
+	fromAddress: z.string().optional(),
+	fromName: z.string().optional(),
 });
 
 /**
@@ -170,6 +190,48 @@ export const settingsRouter = {
 				return { ok: false, message: "No site found — deploy a site first." };
 			}
 			const result = await runVibe(site.installDir, "prod", "notifyTest");
+			const message = (result.stdout || result.stderr).trim();
+			return { ok: result.code === 0, message };
+		}),
+
+	smtpConfigGet: adminProcedure
+		.input(z.object({ siteId: z.string().min(1) }))
+		.handler(async ({ input }) => {
+			const [site, global] = await Promise.all([
+				getSmtpConfig(input.siteId),
+				getSmtpConfig(GLOBAL_SITE_ID),
+			]);
+			return { site: maskSmtpRow(site), global: maskSmtpRow(global) };
+		}),
+
+	smtpConfigSet: adminProcedure
+		.input(smtpConfigSetInput)
+		.handler(async ({ input }) => {
+			const { siteId, ...patch } = input;
+			await setSmtpConfig(siteId, patch);
+			await applyToSites(
+				siteId,
+				async () => (await detectSites()).map((s) => s.id),
+				applySmtpConfigToSite
+			);
+			return { ok: true };
+		}),
+
+	smtpTest: adminProcedure
+		.input(z.object({ siteId: z.string().min(1), to: z.string().email() }))
+		.handler(async ({ input }) => {
+			let site =
+				input.siteId === GLOBAL_SITE_ID ? null : await findSite(input.siteId);
+			if (!site) {
+				const sites = await detectSites();
+				site = sites[0] ?? null;
+			}
+			if (!site) {
+				return { ok: false, message: "No site found — deploy a site first." };
+			}
+			const result = await runVibe(site.installDir, "prod", "smtpTest", {
+				env: { SMTP_TEST_TO: input.to },
+			});
 			const message = (result.stdout || result.stderr).trim();
 			return { ok: result.code === 0, message };
 		}),

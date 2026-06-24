@@ -396,6 +396,8 @@ describe("buildVibeArgv", () => {
 			"securityStatus",
 			"siteConfigApply",
 			"smoke",
+			"smtpConfigApply",
+			"smtpTest",
 			"up",
 			"wpCoreUpdate",
 			"wpPluginUpdateAll",
