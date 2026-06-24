@@ -77,3 +77,10 @@ done
 # Atomic, same-filesystem swap into place.
 mv -f "${work}" "${file}"
 echo "SMTP configuration applied to ${file}"
+
+# /etc/msmtprc + sendmail_path are rendered at container start, so a config
+# change only takes effect after wordpress+cron re-render. Recreate them when the
+# stack is running (skipped during provisioning, when the next `up` renders fresh).
+if vibe_compose_service_running wordpress 2>/dev/null; then
+  vibe_compose up -d --no-deps --force-recreate wordpress cron >/dev/null 2>&1 || true
+fi

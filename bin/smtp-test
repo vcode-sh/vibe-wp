@@ -8,23 +8,15 @@ vibe_require_env_file
 # contain spaces (e.g. SMTP_FROM_NAME="My Site") and is unnecessary now that
 # env_keep preserves every SMTP_* key through sudo's env_reset.
 : "${SMTP_TEST_TO:?SMTP_TEST_TO is required}"
-[ "${SMTP_MODE:-off}" = "relay" ] || { echo "SMTP_MODE is not 'relay' — nothing to test."; exit 1; }
-# Render an ephemeral 0600 msmtprc from the env; plain msmtp (no --debug/-v) so
-# the credential is never emitted in the transcript returned to the panel.
-rc="$(mktemp)"; trap 'rm -f "$rc"' EXIT INT TERM
-case "${SMTP_SECURE:-starttls}" in
-  starttls) _tls=on; _stls=on ;; tls) _tls=on; _stls=off ;; *) _tls=off; _stls=off ;;
-esac
-{
-  printf 'defaults\n  auth %s\n  tls %s\n  tls_starttls %s\n  tls_certcheck on\n  logfile -\n' "${SMTP_AUTH:-on}" "$_tls" "$_stls"
-  printf 'account default\n  host %s\n  port %s\n  from %s\n  user %s\n  password %s\n' \
-    "${SMTP_HOST:-}" "${SMTP_PORT:-587}" "${SMTP_FROM:-}" "${SMTP_USER:-}" "${SMTP_PASSWORD:-}"
-} > "$rc"
-chmod 600 "$rc"
+# msmtp + the rendered /etc/msmtprc live in the wordpress container, not the host.
+# Test through the container so we exercise the exact config the site will use.
+if ! vibe_compose exec -T wordpress test -f /etc/msmtprc 2>/dev/null; then
+  echo "SMTP relay is not active (no /etc/msmtprc in the container). Set SMTP_MODE=relay, save, and retry."
+  exit 1
+fi
 set +e
-out="$(printf 'Subject: Vibe WP SMTP test\nFrom: %s\nTo: %s\n\nThis is a Vibe WP SMTP relay test.\n' \
-  "${SMTP_FROM:-}" "${SMTP_TEST_TO}" \
-  | msmtp --file "$rc" "${SMTP_TEST_TO}" 2>&1)"
+out="$(printf 'Subject: Vibe WP SMTP test\nTo: %s\n\nThis is a Vibe WP SMTP relay test.\n' "${SMTP_TEST_TO}" \
+  | vibe_compose exec -T wordpress msmtp --file /etc/msmtprc "${SMTP_TEST_TO}" 2>&1)"
 code=$?
 set -e
 if [ "$code" -eq 0 ]; then
