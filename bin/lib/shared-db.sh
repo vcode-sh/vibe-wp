@@ -19,7 +19,7 @@ sdb_die() { echo "shared-db: $1" >&2; exit 1; }
 sdb_validate_slug() {
   s="$1"
   case "$s" in
-    [a-z][a-z0-9-]*) : ;;
+    [a-z] | [a-z][a-z0-9-]*) : ;;
     *) sdb_die "invalid slug: must start with a lowercase letter" ;;
   esac
   case "$s" in *[!a-z0-9-]*) sdb_die "slug has invalid characters (allowed a-z 0-9 -)";; esac

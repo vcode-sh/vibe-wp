@@ -21,6 +21,13 @@ sdb_mariadb_root "DROP DATABASE IF EXISTS \`${ident}\`;" > /dev/null
 
 # Drop the user from every host it was created on (exhaustive, not pattern-guessing).
 for h in $hosts; do
+  # Defense in depth: $h comes from our own mysql.user rows, but sdb_mariadb_root
+  # merges stderr on the success path — a future MariaDB notice must never be
+  # word-split into this DROP USER statement. Skip any token that is not a valid
+  # host value (i.e. carries an SQL metacharacter or whitespace).
+  case "$h" in
+    '' | *[!0-9A-Za-z._%:-]*) continue ;;
+  esac
   sdb_mariadb_root "DROP USER IF EXISTS '${ident}'@'${h}';" > /dev/null
 done
 

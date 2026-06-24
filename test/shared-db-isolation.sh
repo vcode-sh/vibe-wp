@@ -305,6 +305,14 @@ _own_select() {
 }
 assert_ok "OWN-3: vibe_sitea can SELECT from vibe_sitea" _own_select
 
+# Seed a table in vibe_siteb too (via siteb's own creds) so DENY-2 below is denied
+# by PRIVILEGE on an existing table, not by the table merely being absent.
+_siteb_seed_table() {
+  site_sql vibe_siteb "$pw_b" \
+    'CREATE TABLE IF NOT EXISTS _vibe_test_t (id INT PRIMARY KEY);' vibe_siteb
+}
+assert_ok "OWN-4: vibe_siteb can CREATE TABLE in vibe_siteb (DENY-2 target)" _siteb_seed_table
+
 # ---------------------------------------------------------------------------
 # Phase 4: Cross-tenant denial assertions (sitea CANNOT access siteb or mysql)
 # ---------------------------------------------------------------------------
@@ -400,6 +408,19 @@ assert_not_contains "GRANT-6: grants do not reference vibe_siteb" "vibe_siteb" "
 for _priv in PROCESS FILE RELOAD SHUTDOWN REPLICATION "CREATE USER"; do
   assert_not_contains "GRANT-7-${_priv}: no ${_priv} in grants" "$_priv" "$grants"
 done
+
+# ---------------------------------------------------------------------------
+# Phase 7b: SF-2 — LOAD DATA LOCAL INFILE disabled on the shared server
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> Phase 7b: SF-2 — local_infile disabled on the shared server"
+
+local_infile="$(site_sql vibe_sitea "$pw_a" 'SELECT @@global.local_infile;' || true)"
+case "$local_infile" in
+  0) pass "SF-2: server global local_infile is OFF (0)" ;;
+  *) fail "SF-2: local_infile not disabled (expected 0 — rebuild shared-db image)" \
+       "got: $(printf '%s' "$local_infile" | head -c 80)" ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Phase 8: db-deprovision sitea — assert gone + siteb intact

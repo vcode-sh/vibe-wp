@@ -42,6 +42,10 @@ innodb-buffer-pool-dump-at-shutdown=${MARIADB_INNODB_BUFFER_POOL_DUMP_AT_SHUTDOW
 innodb-buffer-pool-load-at-startup=${MARIADB_INNODB_BUFFER_POOL_LOAD_AT_STARTUP}
 innodb-buffer-pool-dump-pct=${MARIADB_INNODB_BUFFER_POOL_DUMP_PCT}
 
+# Security: LOAD DATA LOCAL INFILE (ON by default; the shared multi-tenant
+# server disables it via MARIADB_LOCAL_INFILE=0 — SF-2).
+local-infile=${MARIADB_LOCAL_INFILE}
+
 # Diagnostics are opt-in for low overhead defaults.
 performance-schema=${MARIADB_PERFORMANCE_SCHEMA}
 slow-query-log=${MARIADB_SLOW_QUERY_LOG}
