@@ -371,7 +371,7 @@ case "$sub" in
     validate_op "$op"                      # op in the fixed allowlist
     # Argument re-validation at the root boundary (do NOT trust the caller).
     case "$op" in
-      wp)      validate_wp_args "$@" ;;     # only the 3 exact panel wp forms
+      wp)      validate_wp_args "$@" ;;     # only the 4 exact panel wp forms
       compose) validate_compose_args "$@" ;; # only `compose ps --format json`
       env)     validate_env_key "$@" ;;     # exactly one key, non-secret allowlist
       logs|logs-recent) validate_logs_args "$@" ;; # fixed service + tail enums
