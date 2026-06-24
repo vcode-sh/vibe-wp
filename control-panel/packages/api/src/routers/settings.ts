@@ -19,12 +19,6 @@ import {
 } from "../core-bridge/notify-config";
 import type { NotifyConfigRow } from "../core-bridge/notify-config-pure";
 import {
-	applySmtpConfigToSite,
-	getSmtpConfig,
-	setSmtpConfig,
-} from "../core-bridge/smtp-config";
-import { maskSmtpRow } from "../core-bridge/smtp-config-pure";
-import {
 	applyBackupSchedule,
 	applyDebugFlags,
 	applyFastcgiCache,
@@ -35,6 +29,13 @@ import {
 } from "../core-bridge/site-config";
 import { ALLOWED_WORDPRESS_IMAGES } from "../core-bridge/site-config-pure";
 import { detectSites, findSite } from "../core-bridge/sites";
+import {
+	applySmtpConfigToSite,
+	getSmtpConfig,
+	setSmtpConfig,
+	smtpTestEnv,
+} from "../core-bridge/smtp-config";
+import { maskSmtpRow } from "../core-bridge/smtp-config-pure";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
 /** Replace the secret with a `hasSecret` boolean — never leak the value. */
@@ -229,8 +230,9 @@ export const settingsRouter = {
 			if (!site) {
 				return { ok: false, message: "No site found — deploy a site first." };
 			}
+			const env = await smtpTestEnv(input.siteId, input.to);
 			const result = await runVibe(site.installDir, "prod", "smtpTest", {
-				env: { SMTP_TEST_TO: input.to },
+				env,
 			});
 			const message = (result.stdout || result.stderr).trim();
 			return { ok: result.code === 0, message };

@@ -3,8 +3,10 @@ set -eu
 VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "${VIBE_BIN_DIR}/lib/vibe.sh"
 vibe_require_env_file
-# Load the env file so SMTP_* (and SMTP_TEST_TO injected by the panel) are set.
-set -a; . "${VIBE_ENV_FILE}"; set +a
+# SMTP_* vars (including SMTP_TEST_TO) are injected via the panel's env (sudoers
+# env_keep). Do NOT source the env file here — sourcing breaks on values that
+# contain spaces (e.g. SMTP_FROM_NAME="My Site") and is unnecessary now that
+# env_keep preserves every SMTP_* key through sudo's env_reset.
 : "${SMTP_TEST_TO:?SMTP_TEST_TO is required}"
 [ "${SMTP_MODE:-off}" = "relay" ] || { echo "SMTP_MODE is not 'relay' — nothing to test."; exit 1; }
 # Render an ephemeral 0600 msmtprc from the env; plain msmtp (no --debug/-v) so

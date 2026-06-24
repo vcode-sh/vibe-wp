@@ -15,7 +15,8 @@
  * bin/panel's `panel_env_keep` is the CONSUMER; the exec.ts env-builder
  * functions are the PRODUCERS. If they drift apart:
  *   - a key present in the builders but MISSING from env_keep silently
- *     re-breaks a panel feature in production (sudo strips it);
+ *     re-breaks a panel feature in production (sudo strips it — SMTP was the
+ *     first real example of this gap being caught in VPS validation);
  *   - a key in env_keep but emitted by NO builder needlessly widens root's
  *     preserved environment.
  *
@@ -37,18 +38,24 @@ import {
 	fastcgiCachePatchToEnv,
 	imagePatchToEnv,
 } from "./site-config-pure";
+import { toEnv as smtpToEnv } from "./smtp-config-pure";
 
 // ---------------------------------------------------------------------------
-// DB seam. backup-config.ts imports @control-panel/db + ./sites; mock both so
-// we can invoke the REAL backupConfigEnv / backupTestEnv (which add the
-// retention key and gate on credential completeness) without a live database.
+// DB seam. backup-config.ts and smtp-config.ts both import @control-panel/db +
+// ./sites; mock all three so we can invoke the REAL env builders without a live
+// database.
 //
-// We resolve a NON-global siteId on purpose: mergeConfig sources `enabled` from
-// the per-site row only (no global fallback), so toEnv only emits the full R2
-// key set when a per-site row carries enabled=1. The mock returns one fully
-// populated row for every getBackupConfig() call (global + per-site), and a
-// findSite() with a domain so a prefix is synthesised → every conditional R2
-// branch (incl. VIBE_BACKUP_R2_PREFIX + the secret) is exercised.
+// For backup: we resolve a NON-global siteId on purpose: mergeConfig sources
+// `enabled` from the per-site row only (no global fallback), so toEnv only
+// emits the full R2 key set when a per-site row carries enabled=1. The mock
+// returns one fully populated row for every getBackupConfig() call (global +
+// per-site), and a findSite() with a domain so a prefix is synthesised → every
+// conditional R2 branch (incl. VIBE_BACKUP_R2_PREFIX + the secret) is
+// exercised.
+//
+// For smtp: the mock returns one fully populated row (including password) so
+// toEnv emits ALL SMTP_* keys (including SMTP_PASSWORD which is gated on
+// cfg.password being non-null/non-empty).
 // ---------------------------------------------------------------------------
 const FULL_BACKUP_ROW = {
 	siteId: "site-1",
@@ -64,6 +71,20 @@ const FULL_BACKUP_ROW = {
 	retention: 7,
 };
 
+const FULL_SMTP_ROW = {
+	siteId: "site-1",
+	mode: "relay",
+	host: "smtp.example.com",
+	port: 587,
+	secure: "starttls",
+	auth: "on",
+	username: "user@example.com",
+	// non-null/non-empty password → toEnv emits SMTP_PASSWORD
+	password: "s3cr3t",
+	fromAddress: "noreply@example.com",
+	fromName: "SMTP Test",
+};
+
 vi.mock("@control-panel/db", () => ({
 	db: {
 		select: () => ({
@@ -75,6 +96,9 @@ vi.mock("@control-panel/db", () => ({
 }));
 vi.mock("@control-panel/db/schema/backups", () => ({
 	backupConfig: { siteId: "siteId" },
+}));
+vi.mock("@control-panel/db/schema/smtp", () => ({
+	smtpConfig: { siteId: "siteId" },
 }));
 vi.mock("./sites", () => ({
 	findSite: () => Promise.resolve({ domain: "example.com" }),
@@ -100,6 +124,8 @@ beforeEach(() => {
  *   backup-config.ts (backupConfigApply) → backupConfigEnv (full creds + retention)
  *   settings.ts     (backupTest)        → backupTestEnv   (subset; already covered)
  *   notify-config.ts (notifyConfigApply) → notify toEnv    (all channels set)
+ *   smtp-config.ts  (smtpConfigApply)   → smtp toEnv      (full config incl. password)
+ *   settings.ts     (smtpTest)          → smtp toEnv + SMTP_TEST_TO
  *
  * jobs.ts streamVibe `extraEnv` has no caller, so it contributes nothing.
  */
@@ -153,6 +179,20 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 	)) {
 		keys.add(k);
 	}
+
+	// smtpConfigApply: full SMTP config (including non-null password) → all
+	// SMTP_* keys. smtpToEnv is a pure function so we call it directly with
+	// FULL_SMTP_ROW (which has a non-empty password, ensuring SMTP_PASSWORD is
+	// emitted — that key is gated on cfg.password being non-null/non-empty).
+	for (const k of Object.keys(smtpToEnv(FULL_SMTP_ROW))) {
+		keys.add(k);
+	}
+
+	// smtpTest: adds SMTP_TEST_TO on top of the SMTP config env map.
+	// smtpTestEnv(siteId, to) = { ...smtpConfigEnv(siteId), SMTP_TEST_TO: to }
+	// SMTP_TEST_TO is the only test-only key not emitted by toEnv, so we add it
+	// explicitly here to ensure it is always covered by the drift guard.
+	keys.add("SMTP_TEST_TO");
 
 	return keys;
 }
@@ -222,12 +262,12 @@ describe("bin/panel env_keep stays in sync with injected env keys", () => {
 		).toEqual([]);
 	});
 
-	it("the two sets are EXACTLY equal (20 keys today)", async () => {
+	it("the two sets are EXACTLY equal (30 keys today)", async () => {
 		const injected = await collectInjectedEnvKeys();
 		const keep = parsePanelEnvKeep();
 		expect(sorted(keep)).toEqual(sorted(injected));
 		// Belt-and-braces: pin the count so a same-size swap can't slip through.
-		expect(injected.size).toBe(20);
-		expect(keep.size).toBe(20);
+		expect(injected.size).toBe(30);
+		expect(keep.size).toBe(30);
 	});
 });
