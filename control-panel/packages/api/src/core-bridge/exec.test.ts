@@ -127,6 +127,7 @@ describe("MODES allowlist", () => {
 			"staging-only",
 			"remove-existing",
 			"update-existing",
+			"shared-db",
 		]);
 	});
 });
