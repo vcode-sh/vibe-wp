@@ -405,6 +405,7 @@ describe("buildVibeArgv", () => {
 			"smtpConfigApply",
 			"smtpTest",
 			"up",
+			"vulnFeedFetch",
 			"wpCoreUpdate",
 			"wpPluginActivate",
 			"wpPluginAutoUpdatesDisable",

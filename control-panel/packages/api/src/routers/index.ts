@@ -11,6 +11,7 @@ import { monitoringRouter } from "./monitoring";
 import { operationsRouter } from "./operations";
 import { pluginsRouter } from "./plugins";
 import { provisioningRouter } from "./provisioning";
+import { securityRadarRouter } from "./security-radar";
 import { securityScoreRouter } from "./security-score";
 import { serverRouter } from "./server";
 import { settingsRouter } from "./settings";
@@ -42,6 +43,7 @@ export const appRouter = {
 	...sharedDbRouter,
 	...securityScoreRouter,
 	...monitoringRouter,
+	...securityRadarRouter,
 };
 
 export type AppRouter = typeof appRouter;

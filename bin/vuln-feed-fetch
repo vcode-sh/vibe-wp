@@ -1,0 +1,133 @@
+#!/usr/bin/env sh
+set -eu
+# Force the C locale so the slug charset guard (*[!a-z0-9-]*) is strictly ASCII
+# (a UTF-8 locale would let [a-z] span accented collation chars, widening it).
+export LC_ALL=C
+
+# bin/vuln-feed-fetch — OPTIONAL, PLUGGABLE CVE-feed fetcher for the control
+# panel's Security Radar (Feature E). SCAFFOLDED OFF by default.
+#
+# CONTRACT
+#   stdin    : plugin slugs, one per line (NOT argv — keeps slugs/secrets off the
+#              process table). Blank/oversized input is ignored safely.
+#   env      : PANEL_VULN_FEED_URL  source endpoint (UNSET => feed OFF => no-op).
+#              PANEL_VULN_FEED_KEY  optional API key, sent as a Bearer header.
+#              Both are env-file-only and arrive through the panel's sudoers
+#              env_keep; this script NEVER echoes the key (not to stdout/stderr).
+#   stdout   : a strict JSON map {"slug":[{id,severity,affected_versions,fixed_in,
+#              source_url}], ...}. When the feed is OFF it prints exactly `{}`.
+#   exit     : 0 on success (incl. the OFF no-op). Any fetch/transport failure is
+#              best-effort: print `{}` and exit 0 so a flaky feed never wedges the
+#              radar (the panel treats `{}` as "no CVE rows").
+#
+# This is a HOST-level op (not per-site): it does not use VIBE_ENV and makes no
+# changes. The OUTPUT SCHEMA is validated again panel-side by parseVulnFeed
+# (strict zod + max-bytes cap) — this script does not need to trust the source.
+#
+# OPEN DECISION (a human must pick a source before `cve` does anything): WPScan
+# (paid key), Patchstack (commercial), or a curated/self-hosted JSON list. None
+# is hardcoded here. The fetcher below assumes the source accepts a POST with a
+# newline-separated slug list and returns the JSON map above; adapt the transform
+# step to the chosen source's response shape when one is licensed.
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  ./bin/vuln-feed-fetch < slugs.txt
+
+Reads plugin slugs from STDIN (one per line) and prints a JSON map of
+known-vulnerability rows per slug. OFF by default: prints `{}` when
+PANEL_VULN_FEED_URL is unset. Never echoes PANEL_VULN_FEED_KEY.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "") : ;;
+  *) echo "vuln-feed-fetch takes no arguments (slugs arrive on stdin)" >&2; exit 1 ;;
+esac
+
+# Default OFF: no source configured -> empty map, success. Nothing is spawned.
+if [ -z "${PANEL_VULN_FEED_URL:-}" ]; then
+  printf '{}\n'
+  exit 0
+fi
+
+# Read + sanitize slugs from stdin. Drop anything that is not a valid wp.org slug
+# (defense in depth — slugs originate from the insights drop-file, but we never
+# trust the caller). Cap the count so a huge stdin can't blow up the request.
+MAX_SLUGS=500
+slugs=""
+count=0
+while IFS= read -r line; do
+  [ "$count" -lt "$MAX_SLUGS" ] || break
+  # Trim CR (in case of CRLF) and surrounding whitespace.
+  s="$(printf '%s' "$line" | tr -d '\r' | tr -d ' \t')"
+  [ -n "$s" ] || continue
+  case "$s" in
+    -*) continue ;;                 # no leading hyphen
+    *[!a-z0-9-]*) continue ;;       # wp.org slug charset only
+  esac
+  [ "${#s}" -le 63 ] || continue
+  slugs="${slugs}${s}
+"
+  count=$((count + 1))
+done
+
+# No usable slugs -> nothing to query.
+if [ -z "$slugs" ]; then
+  printf '{}\n'
+  exit 0
+fi
+
+# Need a transport. Without curl we cannot fetch; degrade to the OFF no-op
+# rather than failing the radar.
+if ! command -v curl >/dev/null 2>&1; then
+  printf '{}\n'
+  exit 0
+fi
+
+# Build the optional auth header as ONE curl argument. We must NOT word-split the
+# header: an operator-supplied key with whitespace or shell metacharacters would
+# otherwise spill into extra argv (or inject curl flags). Stash the `-H` flag and
+# the single `Authorization: Bearer <key>` value as positional params with
+# `set --`, so the curl call can expand "$@" with each kept intact. When the key
+# is unset, "$@" is empty and no auth header is sent (behavior unchanged). curl
+# does not log its own headers and we never echo $PANEL_VULN_FEED_KEY ourselves.
+set --
+if [ -n "${PANEL_VULN_FEED_KEY:-}" ]; then
+  # Defense in depth: reject a key containing whitespace or control characters.
+  # A valid bearer token is a single opaque line; anything with spaces/tabs/CR/LF
+  # or other control bytes is malformed and unsafe to interpolate into a header.
+  case "$PANEL_VULN_FEED_KEY" in
+    *[[:space:]]* | *[[:cntrl:]]*)
+      echo "vuln-feed-fetch: PANEL_VULN_FEED_KEY contains whitespace or control characters; refusing to send auth header" >&2
+      exit 1
+      ;;
+  esac
+  # One header, one argument — no word-splitting. The value stays quoted as a
+  # single positional param, so the key reaches curl verbatim.
+  set -- -H "Authorization: Bearer ${PANEL_VULN_FEED_KEY}"
+fi
+
+# POST the newline-separated slug list as the body. A failure (network, non-2xx,
+# timeout) -> empty map, success exit. We cap the response size with --max-filesize
+# and the whole call with a timeout so a hostile/slow source cannot hang the op.
+# The response is expected to already match the documented JSON contract; it is
+# re-validated panel-side, so we pass it through verbatim.
+response="$(
+  printf '%s' "$slugs" | curl \
+    --silent --show-error --fail \
+    --max-time 12 \
+    --max-filesize 262144 \
+    --data-binary @- \
+    "$@" \
+    "$PANEL_VULN_FEED_URL" 2>/dev/null
+)" || { printf '{}\n'; exit 0; }
+
+# Empty response -> empty map. Otherwise emit verbatim (panel re-validates).
+if [ -z "$response" ]; then
+  printf '{}\n'
+else
+  printf '%s\n' "$response"
+fi

@@ -192,6 +192,12 @@ export const VIBE_OPS = {
 		stream: false,
 		takesArg: true,
 	},
+	// --- Feature E: OPTIONAL CVE feed (scaffolded OFF). Takes NO argv args — the
+	// plugin slugs arrive on STDIN (keeps slugs/secrets off the process table)
+	// and the source URL + key arrive via env (PANEL_VULN_FEED_URL/KEY). Default
+	// OFF: when the source env var is unset the op prints `{}` and exits 0. Driven
+	// only through runVulnFeed (which pipes stdin), never buildVibeArgv extraArgs.
+	vulnFeedFetch: { argv: ["vuln-feed-fetch"], stream: false },
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;
@@ -259,6 +265,71 @@ export async function runVibe(
 	const code = await proc.exited;
 	clearTimeout(timer);
 	return { stdout: redact(stdout), stderr: redact(stderr), code };
+}
+
+/**
+ * Run the OPTIONAL CVE-feed op (Feature E). The plugin slugs are piped on STDIN
+ * (one per line) — NEVER on argv — so they (and any future per-slug query) stay
+ * off the process table. The feed SOURCE URL + KEY arrive via env injection
+ * (PANEL_VULN_FEED_URL / PANEL_VULN_FEED_KEY); both are env-file-only and must be
+ * in bin/panel's sudoers `env_keep` to survive sudo's env_reset, exactly like the
+ * R2/SMTP secrets. DEFAULT = OFF: when PANEL_VULN_FEED_URL is unset we short-
+ * circuit to an empty feed without spawning anything (the bin/ script is a `{}`
+ * no-op too — defense in depth). Output is redacted at the exec boundary like
+ * every other host op; the key is never echoed by the script.
+ *
+ * Returns the op's stdout (a `{slug:[...]}` JSON map, or `{}`); the caller parses
+ * it with parseVulnFeed. Best-effort: a non-zero exit yields empty stdout so a
+ * flaky/blocked feed never wedges the radar.
+ */
+/**
+ * Env keys runVulnFeed injects into the host op (Feature E). Listed here as the
+ * single source of truth so bin/panel's sudoers `env_keep` drift guard
+ * (env-keep-sync.test.ts) stays in sync — sudo's env_reset strips anything not
+ * preserved, so omitting these would silently disable a configured CVE feed.
+ */
+export const VULN_FEED_ENV_KEYS = [
+	"PANEL_VULN_FEED_URL",
+	"PANEL_VULN_FEED_KEY",
+] as const;
+
+export async function runVulnFeed(
+	hostDir: string,
+	slugs: string[],
+	opts: { timeoutMs?: number } = {}
+): Promise<string> {
+	const url = process.env.PANEL_VULN_FEED_URL;
+	if (!url || url.length === 0) {
+		return "{}"; // feed OFF — no spawn, empty map.
+	}
+	const key = process.env.PANEL_VULN_FEED_KEY;
+	const argv = wrapVibeArgv(
+		hostDir,
+		buildVibeArgv(hostDir, "prod", "vulnFeedFetch", [])
+	);
+	const proc = Bun.spawn(argv, {
+		cwd: hostDir,
+		stdin: "pipe",
+		stdout: "pipe",
+		stderr: "pipe",
+		env: {
+			...process.env,
+			PANEL_VULN_FEED_URL: url,
+			...(key ? { PANEL_VULN_FEED_KEY: key } : {}),
+		},
+	});
+	// Slugs on stdin, newline-separated, then close so the script's read returns.
+	const writer = proc.stdin as { write: (s: string) => void; end: () => void };
+	writer.write(`${slugs.join("\n")}\n`);
+	writer.end();
+	const timer = setTimeout(() => proc.kill(), opts.timeoutMs ?? 15_000);
+	const stdout = await new Response(proc.stdout).text();
+	const code = await proc.exited;
+	clearTimeout(timer);
+	if (code !== 0) {
+		return "{}"; // best-effort: a failed feed contributes no CVE rows.
+	}
+	return redact(stdout);
 }
 
 /**

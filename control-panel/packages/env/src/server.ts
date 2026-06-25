@@ -28,6 +28,13 @@ export const env = createEnv({
 		// (operators then rely on the on-demand "Record sample" button). Default
 		// 15 minutes — frequent enough for a readable sparkline, light on the host.
 		PANEL_MONITOR_RECORD_MINUTES: z.string().default("15"),
+		// Feature E: OPTIONAL CVE feed for the Security Radar. BOTH default to
+		// undefined = feed OFF (the vuln-feed-fetch op is a `{}` no-op). When an
+		// operator licenses a source (WPScan/Patchstack/curated JSON — an OPEN
+		// product decision), they point PANEL_VULN_FEED_URL at it; PANEL_VULN_FEED_KEY
+		// is the optional API key. These are env-file-only secrets (never argv/logs).
+		PANEL_VULN_FEED_URL: z.string().optional(),
+		PANEL_VULN_FEED_KEY: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

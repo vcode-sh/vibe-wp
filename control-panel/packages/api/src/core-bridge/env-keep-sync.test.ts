@@ -205,6 +205,13 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 	// explicitly here to ensure it is always covered by the drift guard.
 	keys.add("SMTP_TEST_TO");
 
+	// securityRadar (Feature E): exec.ts runVulnFeed injects the optional CVE-feed
+	// source + key (VULN_FEED_ENV_KEYS). exec.ts imports Bun-only APIs, so we list
+	// the literal key names here (matching VULN_FEED_ENV_KEYS) rather than importing
+	// it into this node-environment test — the same literal pattern as SMTP_TEST_TO.
+	keys.add("PANEL_VULN_FEED_URL");
+	keys.add("PANEL_VULN_FEED_KEY");
+
 	return keys;
 }
 

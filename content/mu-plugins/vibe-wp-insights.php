@@ -81,6 +81,78 @@ function vibe_insights_db(): array
     }
 }
 
+/**
+ * Fetch wp.org metadata for a single plugin slug for the Security Radar's
+ * abandoned-plugin detection: last_updated, active_installs, tested. Cached in a
+ * transient (default 7 days) so collection never hammers api.wordpress.org, and
+ * wrapped in try/catch so a blocked/slow API NEVER wedges insight collection.
+ * Premium/custom plugins have no wp.org entry -> all three fields are null (a
+ * missing date is a WEAK signal the radar deliberately does NOT flag on).
+ * Returns array{last_updated:?string, active_installs:?int, tested:?string}.
+ */
+function vibe_insights_plugin_meta(string $slug): array
+{
+    $null_meta = array('last_updated' => null, 'active_installs' => null, 'tested' => null);
+    try {
+        // Slug guard mirrors the panel's wp.org-style slug regex (defense in depth).
+        if ($slug === '' || !preg_match('/^[a-z0-9][a-z0-9-]{0,62}$/', $slug)) {
+            return $null_meta;
+        }
+        $cache_key = 'vibe_insights_meta_' . $slug;
+        $cached    = get_transient($cache_key);
+        if (is_array($cached)) {
+            return array(
+                'last_updated'    => isset($cached['last_updated']) ? $cached['last_updated'] : null,
+                'active_installs' => isset($cached['active_installs']) ? $cached['active_installs'] : null,
+                'tested'          => isset($cached['tested']) ? $cached['tested'] : null,
+            );
+        }
+        if (!function_exists('plugins_api')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+        }
+        if (!function_exists('plugins_api')) {
+            return $null_meta;
+        }
+        $info = plugins_api('plugin_information', array(
+            'slug'   => $slug,
+            'fields' => array(
+                'last_updated'    => true,
+                'active_installs' => true,
+                'tested'          => true,
+                'sections'        => false,
+                'description'     => false,
+                'screenshots'     => false,
+                'banners'         => false,
+                'icons'           => false,
+                'reviews'         => false,
+                'versions'        => false,
+            ),
+        ));
+        if (is_wp_error($info) || !is_object($info)) {
+            // Cache the negative result (shorter TTL) so a non-wp.org plugin
+            // isn't re-queried every cron run.
+            set_transient($cache_key, $null_meta, DAY_IN_SECONDS);
+            return $null_meta;
+        }
+        // last_updated from wp.org looks like "2021-03-04 5:35pm GMT"; normalize to
+        // an ISO-8601 string the panel can Date.parse(). Fall back to the raw value.
+        $last_updated = null;
+        if (!empty($info->last_updated)) {
+            $ts = strtotime((string) $info->last_updated);
+            $last_updated = $ts !== false ? gmdate('c', $ts) : (string) $info->last_updated;
+        }
+        $meta = array(
+            'last_updated'    => $last_updated,
+            'active_installs' => isset($info->active_installs) ? (int) $info->active_installs : null,
+            'tested'          => !empty($info->tested) ? (string) $info->tested : null,
+        );
+        set_transient($cache_key, $meta, 7 * DAY_IN_SECONDS);
+        return $meta;
+    } catch (\Throwable $e) {
+        return $null_meta;
+    }
+}
+
 function vibe_insights_plugins(): array
 {
     try {
@@ -101,14 +173,24 @@ function vibe_insights_plugins(): array
             $new_ver    = $has_update && isset($plugin_updates->response[$plugin_file]->new_version)
                 ? (string) $plugin_updates->response[$plugin_file]->new_version
                 : null;
+            $is_active  = (function_exists('is_plugin_active') && is_plugin_active($plugin_file));
+            // wp.org metadata only for ACTIVE plugins — that bounds the number of
+            // (transient-cached) api.wordpress.org calls and is exactly the set the
+            // radar evaluates for "abandoned". Inactive plugins get null meta.
+            $meta = $is_active
+                ? vibe_insights_plugin_meta($slug)
+                : array('last_updated' => null, 'active_installs' => null, 'tested' => null);
             $result[]   = array(
                 'slug'             => $slug,
                 'name'             => (string) ($plugin_data['Name'] ?? ''),
                 'version'          => (string) ($plugin_data['Version'] ?? ''),
-                'status'           => (function_exists('is_plugin_active') && is_plugin_active($plugin_file)) ? 'active' : 'inactive',
+                'status'           => $is_active ? 'active' : 'inactive',
                 'update_available' => $has_update,
                 'new_version'      => $new_ver,
                 'auto_update'      => in_array($plugin_file, $auto_update_opt, true) ? true : null,
+                'last_updated'     => $meta['last_updated'],
+                'active_installs'  => $meta['active_installs'],
+                'tested'           => $meta['tested'],
             );
         }
         return $result;

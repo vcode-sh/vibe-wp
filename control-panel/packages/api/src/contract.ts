@@ -249,13 +249,65 @@ export interface RemoveSiteInput {
 }
 
 export interface InsightsPlugin {
+	/** wp.org `active_installs` count, or null for premium/custom plugins. Optional + nullable for back-compat with drop-files predating the field. */
+	active_installs?: number | null;
 	auto_update: boolean | null;
+	/** wp.org `last_updated` (parseable date string), or null when there's no wp.org metadata. Optional + nullable for back-compat. */
+	last_updated?: string | null;
 	name: string;
 	new_version: string | null;
 	slug: string;
 	status: "active" | "inactive" | "must-use" | "dropin";
+	/** wp.org `tested` WP version, or null. Optional + nullable for back-compat. */
+	tested?: string | null;
 	update_available: boolean;
 	version: string;
+}
+
+/** One known-vulnerability row for a plugin slug, sourced from the (optional) CVE feed. */
+export interface CveRef {
+	/** Affected version constraint tokens (e.g. ["<5.3.1"]); empty = all versions. */
+	affected_versions: string[];
+	/** First fixed version, or null when no fix is published yet. */
+	fixed_in: string | null;
+	/** Feed-assigned identifier (CVE id, WPScan uuid, etc). */
+	id: string;
+	severity: "critical" | "high" | "medium" | "low";
+	source_url: string | null;
+}
+
+/** A plugin the Security Radar flagged, with reasons + the suggested remediation. */
+export interface FlaggedPlugin {
+	/** Why an "abandoned" flag fired: stale wp.org date, WP-untested, or both. Null when not abandoned. */
+	abandonedEvidence: "stale" | "untested" | "both" | null;
+	cves: CveRef[];
+	/** Highest severity of the matching CVE rows only (null when no CVE matched). */
+	highestSeverity: "critical" | "high" | "medium" | "low" | null;
+	lastUpdated: string | null;
+	name: string;
+	newVersion: string | null;
+	reasons: ("outdated" | "abandoned" | "cve")[];
+	/** Overall row severity for the GUI — set for EVERY flagged plugin, never null. */
+	severity: "critical" | "high" | "medium" | "low";
+	slug: string;
+	suggestedAction: "update" | "safeUpdate" | "deactivate";
+	/** Author's "tested up to" WP version from wp.org, or null when unknown. */
+	testedUpTo: string | null;
+	version: string;
+	/** Minor WP releases the "tested up to" trails the running WP, when that drove the abandoned flag; else null. */
+	wpMinorsBehind: number | null;
+}
+
+/** The Security Radar result for a site: flagged plugins + rollup counts. */
+export interface SecurityRadar {
+	flagged: FlaggedPlugin[];
+	summary: {
+		abandoned: number;
+		cve: number;
+		highestSeverity: "critical" | "high" | "medium" | "low" | null;
+		outdated: number;
+		total: number;
+	};
 }
 
 export interface InsightsTheme {
