@@ -246,6 +246,14 @@ export const VIBE_OPS = {
 		stream: false,
 		takesArg: true,
 	},
+	// One-click login (Plesk WP-Toolkit parity). Takes the target user id on argv;
+	// the token's sha256 HASH arrives on STDIN (the plaintext token never reaches
+	// the host) — see mintLoginLink. The vibe-wp-sso mu-plugin redeems the token.
+	wpLoginLink: {
+		argv: ["wp-login-link"],
+		stream: false,
+		takesArg: true,
+	},
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

@@ -411,6 +411,7 @@ describe("buildVibeArgv", () => {
 			"up",
 			"vulnFeedFetch",
 			"wpCoreUpdate",
+			"wpLoginLink",
 			"wpPluginActivate",
 			"wpPluginAutoUpdatesDisable",
 			"wpPluginAutoUpdatesEnable",

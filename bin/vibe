@@ -214,6 +214,28 @@ case "${command}" in
     [ "$_rc" -eq 0 ] || { echo "wp-user-set-password: failed to set password" >&2; exit 1; }
     echo "Password updated for WordPress user '$_login' (id $_uid)."
     ;;
+  wp-login-link)
+    # Mint a one-click login: store a single-use, 60s WordPress transient mapping
+    # sha256(token) -> user id. The PANEL generates the token and sends only its
+    # SHA-256 HASH on STDIN — the plaintext token never reaches the host, its
+    # stdout, or any log. The user id is on argv (digits, validated by the panel
+    # wrapper). The hash is re-validated here to be exactly 64 hex chars before it
+    # is interpolated into `wp eval`, so it cannot inject. The vibe-wp-sso
+    # mu-plugin redeems the token on the web path (sets the auth cookie). The id
+    # existence probe + eval read </dev/null so neither consumes the hash on STDIN
+    # before `read` has it (and nothing secret is left on STDIN afterwards).
+    _uid="${1:?wp-login-link needs a numeric user id}"
+    case "$_uid" in ''|*[!0-9]*) echo "wp-login-link: id must be numeric: $_uid" >&2; exit 1 ;; esac
+    IFS= read -r _hash || true
+    case "${_hash:-}" in ''|*[!a-f0-9]*) echo "wp-login-link: token hash must be 64 hex chars" >&2; exit 1 ;; esac
+    [ "${#_hash}" -eq 64 ] || { echo "wp-login-link: token hash must be 64 hex chars" >&2; exit 1; }
+    _login="$(vibe_wp user get "$_uid" --field=user_login --skip-plugins --skip-themes </dev/null 2>/dev/null | tr -d '\r\n')"
+    [ -n "$_login" ] || { echo "wp-login-link: no such user id: $_uid" >&2; exit 1; }
+    vibe_wp eval 'set_transient("vibe_sso_'"$_hash"'", '"$_uid"', 60);' --skip-plugins --skip-themes </dev/null >/dev/null
+    _rc=$?
+    [ "$_rc" -eq 0 ] || { echo "wp-login-link: failed to mint login link" >&2; exit 1; }
+    echo "Login link minted for WordPress user '$_login' (id $_uid), valid 60s."
+    ;;
   backup)
     "${VIBE_BIN_DIR}/backup" "$@"
     ;;

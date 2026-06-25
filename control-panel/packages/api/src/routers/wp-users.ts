@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { listSiteUsers, setWpUserPassword } from "../core-bridge/wp-users";
+import {
+	listSiteUsers,
+	mintLoginLink,
+	setWpUserPassword,
+} from "../core-bridge/wp-users";
 import {
 	hasControlChar,
 	MAX_PASSWORD_LEN,
@@ -47,4 +51,14 @@ export const wpUsersRouter = {
 			await setWpUserPassword(input.siteId, input.userId, input.password);
 			return { ok: true as const };
 		}),
+	// Mint a one-click login URL (admin-only). The URL carries a single-use, 60s
+	// token and is handed straight to the browser — never logged or persisted.
+	wpLoginLink: adminProcedure
+		.input(
+			z.object({
+				siteId: z.string(),
+				userId: z.number().int().positive(),
+			})
+		)
+		.handler(({ input }) => mintLoginLink(input.siteId, input.userId)),
 };

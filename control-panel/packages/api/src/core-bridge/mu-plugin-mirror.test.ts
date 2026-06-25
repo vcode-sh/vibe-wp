@@ -24,4 +24,10 @@ describe("mu-plugin mirror invariant", () => {
 			md5("docker/wordpress/mu-plugins/vibe-wp-environment.php")
 		);
 	});
+
+	it("vibe-wp-sso.php is byte-identical in both locations", () => {
+		expect(md5("content/mu-plugins/vibe-wp-sso.php")).toBe(
+			md5("docker/wordpress/mu-plugins/vibe-wp-sso.php")
+		);
+	});
 });

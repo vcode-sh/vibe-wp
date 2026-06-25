@@ -522,6 +522,34 @@ sync_site_bins() {
   done
 }
 
+# Deliver the platform mu-plugins (content/mu-plugins/vibe-wp-*.php) into each
+# managed site's bind-mounted content/mu-plugins/ so mu-plugin updates reach
+# EXISTING sites — not only newly-provisioned ones (whose mu-plugins are seeded
+# from the image at first boot). mu-plugins load per request, so no restart is
+# needed. Only the platform's own vibe-wp-*.php are touched; a site's custom
+# mu-plugins are left alone. World-readable so the container's www-data can load
+# them (the content/ bind preserves host uid/gid).
+sync_site_mu_plugins() {
+  src_mu="$REPO_DIR/content/mu-plugins"
+  $SUDO test -d "$src_mu" || return 0
+  for root in /opt /srv; do
+    $SUDO test -d "$root" || continue
+    $SUDO find "$root" -maxdepth 4 -type f -path '*/bin/vibe' 2>/dev/null | while IFS= read -r vibebin; do
+      site_dir="${vibebin%/bin/vibe}"
+      case "$site_dir" in
+        "$REPO_DIR"|"$PANEL_DIR") continue ;;
+      esac
+      dest_mu="$site_dir/content/mu-plugins"
+      $SUDO test -d "$dest_mu" || continue
+      for f in "$src_mu"/vibe-wp-*.php; do
+        $SUDO test -f "$f" || continue
+        $SUDO cp -f "$f" "$dest_mu/" 2>/dev/null || true
+      done
+      $SUDO chmod 0644 "$dest_mu"/vibe-wp-*.php 2>/dev/null || true
+    done
+  done
+}
+
 update_panel() {
   env_file="$PANEL_DIR/app/server/.env"
   if ! $SUDO test -f "$env_file"; then
@@ -559,6 +587,8 @@ update_panel() {
   secure_site_env_files
   # Propagate bin/ fixes (env-resolution, wp-cli ops) to existing managed sites.
   sync_site_bins
+  # Propagate mu-plugin updates (e.g. one-click login) to existing managed sites.
+  sync_site_mu_plugins
   echo "panel: update complete"
 }
 

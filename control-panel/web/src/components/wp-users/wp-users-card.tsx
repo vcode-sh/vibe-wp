@@ -15,7 +15,7 @@ import {
 	TableRow,
 } from "@control-panel/ui/components/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound, Users } from "lucide-react";
+import { KeyRound, LogIn, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
@@ -114,6 +114,49 @@ function ResetPasswordDialog({
 	);
 }
 
+function LoginAsButton({ siteId, user }: { siteId: string; user: WpUser }) {
+	const login = useMutation({
+		...orpc.wpLoginLink.mutationOptions(),
+		onError: (err: Error) =>
+			toast.error(err.message || "Couldn't create a login link."),
+	});
+
+	function handleClick() {
+		// Open the tab synchronously inside the click handler so the browser does
+		// not treat the later navigation as a blocked popup; sever the opener back-
+		// reference, then point the tab at the one-click URL once it's minted.
+		const tab = window.open("about:blank", "_blank");
+		if (tab) {
+			tab.opener = null;
+		}
+		login.mutate(
+			{ siteId, userId: user.id },
+			{
+				onSuccess: ({ url }) => {
+					if (tab) {
+						tab.location.href = url;
+					} else {
+						window.location.href = url; // popup blocked — same-tab fallback
+					}
+				},
+				onError: () => tab?.close(),
+			}
+		);
+	}
+
+	return (
+		<Button
+			disabled={login.isPending}
+			onClick={handleClick}
+			size="sm"
+			variant="outline"
+		>
+			<LogIn className="size-3.5" />
+			{login.isPending ? "Opening…" : "Log in as"}
+		</Button>
+	);
+}
+
 function UsersTable({ siteId }: { siteId: string }) {
 	const users = useQuery(orpc.siteUsers.queryOptions({ input: { siteId } }));
 	const [resetUser, setResetUser] = useState<WpUser | null>(null);
@@ -158,14 +201,17 @@ function UsersTable({ siteId }: { siteId: string }) {
 								</div>
 							</TableCell>
 							<TableCell className="text-right">
-								<Button
-									onClick={() => setResetUser(u)}
-									size="sm"
-									variant="outline"
-								>
-									<KeyRound className="size-3.5" />
-									Reset password
-								</Button>
+								<div className="flex justify-end gap-2">
+									<LoginAsButton siteId={siteId} user={u} />
+									<Button
+										onClick={() => setResetUser(u)}
+										size="sm"
+										variant="outline"
+									>
+										<KeyRound className="size-3.5" />
+										Reset password
+									</Button>
+								</div>
 							</TableCell>
 						</TableRow>
 					))}
