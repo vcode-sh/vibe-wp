@@ -483,6 +483,21 @@ pull_latest_source() {
   fi
 }
 
+# Lock per-site env files to 0640 root:$PANEL_USER. They hold secrets (DB +
+# WP-admin passwords, salts, API keys) and must never be world-readable, but the
+# unprivileged panel service still reads their NON-secret fields for the site
+# list + install collision-avoidance. Idempotent + best-effort: fixes files an
+# older build left world-readable (0644). Excludes *.example templates.
+secure_site_env_files() {
+  for root in /opt /srv; do
+    $SUDO test -d "$root" || continue
+    $SUDO find "$root" -maxdepth 5 -type f -path '*/env/*.env' ! -name '*.example' \
+      -exec chgrp "$PANEL_USER" {} + 2>/dev/null || true
+    $SUDO find "$root" -maxdepth 5 -type f -path '*/env/*.env' ! -name '*.example' \
+      -exec chmod 0640 {} + 2>/dev/null || true
+  done
+}
+
 update_panel() {
   env_file="$PANEL_DIR/app/server/.env"
   if ! $SUDO test -f "$env_file"; then
@@ -516,6 +531,8 @@ update_panel() {
 
   echo "panel: updating (domain=$DOMAIN port=$PORT)..."
   deploy_panel
+  # Re-lock any per-site env files an older build left world-readable.
+  secure_site_env_files
   echo "panel: update complete"
 }
 

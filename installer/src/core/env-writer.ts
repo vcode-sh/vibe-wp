@@ -1,3 +1,5 @@
+import { chmod, chown } from "node:fs/promises";
+
 import { backupEnvValues } from "./backup";
 import { monitorEnvValues } from "./monitor";
 import { effectivePerformanceValues } from "./performance";
@@ -5,6 +7,7 @@ import { randomHex, randomPassword, slugFromDomain } from "./secrets";
 import type { InstallerState } from "./types";
 
 const envKeyPattern = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+const numericGidPattern = /^\d+$/;
 const envPlainValuePattern = /^[A-Za-z0-9_./:@-]+$/;
 const lineBreakPattern = /\r?\n/;
 const trailingLineBreakPattern = /\n*$/;
@@ -148,4 +151,52 @@ export async function writeEnvFile(
   }
 
   await Bun.write(path, `${next.join("\n").replace(trailingLineBreakPattern, "")}\n`);
+  await lockEnvFilePerms(path);
+}
+
+// The vibe-panel service account (present only on a panel-managed host) reads
+// env files for site listing + install collision-avoidance. Resolve its gid so
+// we can widen the GROUP — never world — on those hosts; null on standalone/dev.
+const PANEL_SERVICE_GROUP = "vibe-panel";
+
+async function panelServiceGid(): Promise<number | null> {
+  try {
+    const group = await Bun.file("/etc/group").text();
+    for (const line of group.split("\n")) {
+      const [name, , gid] = line.split(":");
+      if (name === PANEL_SERVICE_GROUP && gid && numericGidPattern.test(gid)) {
+        return Number(gid);
+      }
+    }
+  } catch {
+    // /etc/group unreadable (non-Linux dev, sandbox) → treat as no panel group.
+  }
+  return null;
+}
+
+/**
+ * Env files hold secrets (DB + WP-admin passwords, salts, API keys) and must
+ * NEVER be world/other-readable. Lock to 0600 (owner-only). On a panel-managed
+ * host the UNPRIVILEGED panel service still needs to read NON-secret fields
+ * (WP_HOME, ports, project name) for the site list + collision-avoidance, so
+ * widen ONLY the group to the vibe-panel account (root owner keeps containers +
+ * the root wrapper working). Best-effort: a perms tweak must never fail an
+ * install — when not running as root (dev) the chown is skipped and the file
+ * stays 0600, readable by the owner that wrote it.
+ */
+async function lockEnvFilePerms(path: string): Promise<void> {
+  try {
+    await chmod(path, 0o600);
+    const gid = await panelServiceGid();
+    if (gid !== null) {
+      try {
+        await chown(path, 0, gid);
+        await chmod(path, 0o640);
+      } catch {
+        // Not root → keep 0600 owner-only (already applied above).
+      }
+    }
+  } catch {
+    // Never block provisioning on a permissions adjustment.
+  }
 }
