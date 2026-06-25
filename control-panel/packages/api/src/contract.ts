@@ -98,6 +98,44 @@ export interface PerfReport {
 	ttfbMs: number;
 }
 
+/**
+ * One persisted monitor snapshot. `up` is binary (reachable at probe time).
+ * `dnsOk` is APPROXIMATE — derived from HTTP reachability because the monitor
+ * has no dedicated DNS check yet (see monitor-history-pure.ts). `certDaysLeft`
+ * is negative when the certificate has already expired; null when not measured.
+ */
+export interface MonitorSample {
+	certDaysLeft: number | null;
+	dnsOk: 0 | 1 | null;
+	failures: number;
+	httpStatus: number | null;
+	id: string;
+	siteId: string;
+	status: "ok" | "warn" | "fail";
+	up: 0 | 1;
+	warnings: number;
+	whenISO: string;
+}
+
+/**
+ * Latest-state monitoring tile per site for the status view. `uptimePercent` is
+ * an honest fraction-of-probes-reachable over the summary window, NOT an SLA.
+ * `dnsApproximate` flags that `dnsOk` is HTTP-derived, not a real DNS probe.
+ */
+export interface MonitoringSummaryEntry {
+	certDaysLeft: number | null;
+	dnsApproximate: boolean;
+	dnsOk: 0 | 1 | null;
+	domain: string;
+	httpStatus: number | null;
+	lastSampleISO: string | null;
+	sampleCount: number;
+	siteId: string;
+	status: "ok" | "warn" | "fail" | "unknown";
+	up: 0 | 1 | null;
+	uptimePercent: number | null;
+}
+
 export type JobStatus =
 	| "queued"
 	| "running"

@@ -2,6 +2,7 @@ import {
 	pruneHistory,
 	reconcileOrphanedJobs,
 } from "@control-panel/api/core-bridge/jobs-db";
+import { pruneMonitorSamples } from "@control-panel/api/core-bridge/monitor-history";
 
 import { createServerApp } from "./app";
 
@@ -14,5 +15,11 @@ await reconcileOrphanedJobs();
 // A periodic timer (e.g. setInterval at midnight) could be added later if
 // panels accumulate enough traffic to need mid-session pruning.
 await pruneHistory();
+
+// Prune monitor history older than its retention window (90 days) at startup,
+// alongside the job-history prune. A periodic server-side recorder could be
+// added here later so history accrues without a viewer opening the status view;
+// it would reuse the already-allowlisted `monitor` op (no new host capability).
+await pruneMonitorSamples();
 
 export default createServerApp();
