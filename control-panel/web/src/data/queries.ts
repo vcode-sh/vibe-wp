@@ -15,6 +15,12 @@ export const healthQuery = (siteId: string) =>
 export const backupsQuery = (siteId: string) =>
 	orpc.backupsList.queryOptions({ input: { siteId } });
 
+export const backupContentsQuery = (siteId: string, backupId: string) =>
+	orpc.listBackupContents.queryOptions({ input: { siteId, backupId } });
+
+export const offsiteVerifiedQuery = (siteId: string) =>
+	orpc.offsiteVerified.queryOptions({ input: { siteId } });
+
 export interface LogParams {
 	filter?: string;
 	service?: "nginx" | "php" | "wp" | "mariadb" | "redis" | "access" | "all";

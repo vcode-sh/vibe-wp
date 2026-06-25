@@ -8,9 +8,10 @@ import {
 } from "@control-panel/ui/components/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { BackupBrowser } from "@/components/backups/backup-browser";
 import { BackupMenu } from "@/components/backups/backup-menu";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
@@ -19,7 +20,7 @@ import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/data/derive";
-import { backupsQuery } from "@/data/queries";
+import { backupsQuery, offsiteVerifiedQuery } from "@/data/queries";
 import type { BackupRecord } from "@/data/types";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
@@ -27,6 +28,25 @@ import { orpc } from "@/lib/orpc/client";
 export const Route = createFileRoute("/_auth/sites/$siteId/backups")({
 	component: BackupsPage,
 });
+
+function OffsiteVerifiedBadge({ siteId }: { siteId: string }) {
+	const verified = useQuery(offsiteVerifiedQuery(siteId));
+	const data = verified.data;
+	if (!(data && data.hoursAgo !== null)) {
+		return (
+			<Badge variant="outline">
+				<span className="text-muted-foreground">Off-site not yet verified</span>
+			</Badge>
+		);
+	}
+	const label = data.hoursAgo === 0 ? "under 1h ago" : `${data.hoursAgo}h ago`;
+	return (
+		<Badge variant="secondary">
+			<ShieldCheck className="mr-1 size-3.5" />
+			Off-site verified {label}
+		</Badge>
+	);
+}
 
 function locationLabel(loc: BackupRecord["location"]): string {
 	if (loc === "offsite") {
@@ -48,6 +68,7 @@ function BackupsPage() {
 	});
 	const now = new Date();
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
+	const [browsing, setBrowsing] = useState<BackupRecord | null>(null);
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
@@ -102,6 +123,9 @@ function BackupsPage() {
 					subtitle="Local and off-site copies, retention and restore."
 					title="Backups"
 				/>
+				<div>
+					<OffsiteVerifiedBadge siteId={siteId} />
+				</div>
 				<QueryBoundary
 					errorMessage="Couldn't load the backups."
 					hasData={Boolean(backups.data)}
@@ -150,6 +174,13 @@ function BackupsPage() {
 											</TableCell>
 											<TableCell className="text-right">
 												<Button
+													onClick={() => setBrowsing(b)}
+													size="sm"
+													variant="ghost"
+												>
+													Browse…
+												</Button>
+												<Button
 													disabled={isRunning(siteId, "restore")}
 													onClick={() => setRestoring(b)}
 													size="sm"
@@ -185,6 +216,16 @@ function BackupsPage() {
 				reversible
 				title="Restore a backup"
 			/>
+
+			{browsing ? (
+				<BackupBrowser
+					backupId={browsing.id}
+					onOpenChange={(open) => !open && setBrowsing(null)}
+					open={browsing !== null}
+					siteId={siteId}
+					whenLabel={relativeTime(browsing.whenISO, now)}
+				/>
+			) : null}
 		</>
 	);
 }

@@ -12,6 +12,7 @@ import {
 	userRelations,
 	verification,
 } from "./schema/auth";
+import { backupVerification } from "./schema/backup-verification";
 import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
 import { notifyConfig } from "./schema/notify";
@@ -29,6 +30,7 @@ const schema = {
 	auditLog,
 	jobs,
 	backupConfig,
+	backupVerification,
 	notifyConfig,
 	smtpConfig,
 };
