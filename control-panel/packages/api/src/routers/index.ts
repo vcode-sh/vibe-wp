@@ -10,6 +10,7 @@ import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
 import { pluginsRouter } from "./plugins";
 import { provisioningRouter } from "./provisioning";
+import { securityScoreRouter } from "./security-score";
 import { serverRouter } from "./server";
 import { settingsRouter } from "./settings";
 import { setupRouter } from "./setup";
@@ -38,6 +39,7 @@ export const appRouter = {
 	...settingsRouter,
 	...devinfoRouter,
 	...sharedDbRouter,
+	...securityScoreRouter,
 };
 
 export type AppRouter = typeof appRouter;
