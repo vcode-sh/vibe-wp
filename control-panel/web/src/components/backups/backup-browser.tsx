@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { File, Folder, Table2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CheckCircle2, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { FileList, TableList } from "@/components/backups/backup-item-list";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -12,10 +12,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { backupContentsQuery } from "@/data/queries";
-import type { BackupContents, BackupFileEntry } from "@/data/types";
+import type { BackupContents, BackupRecord } from "@/data/types";
 import { authClient } from "@/lib/auth-client";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
@@ -25,119 +24,103 @@ interface PendingItem {
 	name: string;
 }
 
-function formatBytes(bytes: number): string {
-	if (bytes <= 0) {
-		return "—";
-	}
-	if (bytes < 1024) {
-		return `${bytes} B`;
-	}
-	if (bytes < 1_048_576) {
-		return `${Math.round(bytes / 1024)} KB`;
-	}
-	return `${Math.round((bytes / 1_048_576) * 10) / 10} MB`;
+type RestorePhase = "running" | "succeeded" | "failed" | "canceled";
+
+interface RestoreState {
+	item: PendingItem;
+	phase: RestorePhase;
 }
 
-/** Group files by their top-level directory for a shallow, scannable tree. */
-function groupFiles(files: BackupFileEntry[]): [string, BackupFileEntry[]][] {
-	const groups = new Map<string, BackupFileEntry[]>();
-	for (const f of files) {
-		const slash = f.path.indexOf("/");
-		const top = slash === -1 ? "(root)" : f.path.slice(0, slash);
-		const list = groups.get(top) ?? [];
-		list.push(f);
-		groups.set(top, list);
+function consequenceFor(item: PendingItem): string {
+	if (item.kind === "table") {
+		return `This replaces the live database table "${item.name}" with the copy stored in this backup. Before anything changes, we save the current table to a pre-restore safety copy inside the backup folder, so you can undo it. Other tables and your files are untouched.`;
 	}
-	return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-}
-
-function ItemRow({
-	label,
-	meta,
-	icon,
-	canRestore,
-	onRestore,
-}: {
-	label: string;
-	meta?: string;
-	icon: React.ReactNode;
-	canRestore: boolean;
-	onRestore: () => void;
-}) {
-	return (
-		<div className="flex items-center justify-between gap-2 py-1 pl-6 text-sm">
-			<span className="flex min-w-0 items-center gap-2">
-				{icon}
-				<span className="truncate" title={label}>
-					{label}
-				</span>
-			</span>
-			<span className="flex shrink-0 items-center gap-3">
-				{meta ? (
-					<span className="text-muted-foreground text-xs">{meta}</span>
-				) : null}
-				{canRestore ? (
-					<Button onClick={onRestore} size="sm" variant="ghost">
-						Restore this item…
-					</Button>
-				) : null}
-			</span>
-		</div>
-	);
+	return `This replaces the live file wp-content/${item.name} with the copy stored in this backup. Before anything changes, we save the current file to a pre-restore safety copy, so you can undo it. Nothing else on the site is touched.`;
 }
 
 export function BackupBrowser({
 	siteId,
 	backupId,
+	location,
 	whenLabel,
 	open,
 	onOpenChange,
 }: {
 	siteId: string;
 	backupId: string;
+	location: BackupRecord["location"];
 	whenLabel: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }) {
 	const { data: session } = authClient.useSession();
 	const isAdmin = session?.user.role === "admin";
-	const { start, isRunning } = useOperations();
+	const { start, isRunning, getStatus } = useOperations();
 	const [pending, setPending] = useState<PendingItem | null>(null);
+	const [restore, setRestore] = useState<RestoreState | null>(null);
+	const handledRef = useRef(false);
 
 	const contents = useQuery({
 		...backupContentsQuery(siteId, backupId),
 		enabled: open,
 	});
 	const data: BackupContents | undefined = contents.data;
-	const grouped = useMemo(() => groupFiles(data?.files ?? []), [data?.files]);
 
 	const restoreItem = useMutation(orpc.restoreBackupItem.mutationOptions());
+	const restoreDisabled = isRunning(siteId, "restoreItem");
+	const canRestore = Boolean(isAdmin) && !restoreDisabled;
+
+	// Watch the item-restore job to its terminal state so the operator gets a
+	// clear, honest success/failure result instead of the dialog vanishing.
+	useEffect(() => {
+		if (restore?.phase !== "running" || handledRef.current) {
+			return;
+		}
+		const status = getStatus(siteId, "restoreItem");
+		if (status === null) {
+			return;
+		}
+		handledRef.current = true;
+		// getStatus only ever returns a TERMINAL status (succeeded/failed/canceled),
+		// which is exactly our terminal RestorePhase set — adopt it directly.
+		const phase = status as RestorePhase;
+		setRestore((prev) => (prev ? { ...prev, phase } : prev));
+		if (phase === "succeeded") {
+			toast.success("Item restored from the backup.");
+		} else {
+			toast.error(
+				phase === "canceled"
+					? "Restore was canceled."
+					: "Restore failed — the live item was left unchanged."
+			);
+		}
+	}, [restore, getStatus, siteId]);
 
 	async function handleRestoreItem() {
 		if (!pending) {
 			return;
 		}
+		const item = pending;
 		try {
 			const result = await restoreItem.mutateAsync({
 				siteId,
 				backupId,
-				kind: pending.kind,
-				name: pending.name,
+				kind: item.kind,
+				name: item.name,
 			});
+			handledRef.current = false;
+			setRestore({ item, phase: "running" });
 			start({
 				jobId: result.jobId,
-				title: `Restoring ${pending.kind} ${pending.name}`,
+				title: `Restoring ${item.kind} ${item.name}`,
 				kind: "restoreItem",
 				siteId,
 			});
 			setPending(null);
-			onOpenChange(false);
 		} catch {
 			toast.error("Failed to start item restore.");
 		}
 	}
-
-	const restoreDisabled = isRunning(siteId, "restoreItem");
 
 	return (
 		<>
@@ -146,19 +129,32 @@ export function BackupBrowser({
 					<DialogHeader>
 						<DialogTitle>Browse backup</DialogTitle>
 						<DialogDescription>
-							{whenLabel} — restore a single file or table.
+							From {whenLabel} (
+							{location === "both" ? "local + off-site" : location}). Pick a
+							single file or table to restore — the rest of your site is left
+							exactly as it is.
 						</DialogDescription>
 					</DialogHeader>
 
 					{contents.isLoading ? (
 						<p className="py-8 text-center text-muted-foreground text-sm">
-							Reading backup contents…
+							Reading what's inside this backup…
 						</p>
 					) : null}
 					{contents.isError ? (
-						<p className="py-8 text-center text-destructive text-sm">
-							Couldn't read this backup's contents.
-						</p>
+						<div className="py-8 text-center text-sm">
+							<p className="text-destructive">
+								Couldn't read this backup's contents.
+							</p>
+							<Button
+								className="mt-2"
+								onClick={() => contents.refetch()}
+								size="sm"
+								variant="outline"
+							>
+								Try again
+							</Button>
+						</div>
 					) : null}
 
 					{data ? (
@@ -174,89 +170,68 @@ export function BackupBrowser({
 							</TabsList>
 
 							<TabsContent value="files">
-								{data.truncated ? (
-									<Badge className="mb-2" variant="secondary">
-										Listing capped — large file tree
-									</Badge>
-								) : null}
-								<ScrollArea className="h-80 rounded-md border border-border">
-									<div className="p-2">
-										{grouped.map(([dir, files]) => (
-											<div className="mb-2" key={dir}>
-												<span className="flex items-center gap-2 font-medium text-sm">
-													<Folder className="size-4 text-muted-foreground" />
-													{dir}
-												</span>
-												{files.map((f) => (
-													<ItemRow
-														canRestore={Boolean(isAdmin) && !restoreDisabled}
-														icon={
-															<File className="size-3.5 shrink-0 text-muted-foreground" />
-														}
-														key={f.path}
-														label={f.path}
-														meta={formatBytes(f.bytes)}
-														onRestore={() =>
-															setPending({ kind: "file", name: f.path })
-														}
-													/>
-												))}
-											</div>
-										))}
-										{data.files.length === 0 ? (
-											<p className="p-4 text-center text-muted-foreground text-sm">
-												No files in this backup.
-											</p>
-										) : null}
-									</div>
-								</ScrollArea>
+								<FileList
+									canRestore={canRestore}
+									files={data.files}
+									onRestore={(name) => setPending({ kind: "file", name })}
+									truncated={data.truncated}
+								/>
 							</TabsContent>
 
 							<TabsContent value="tables">
-								<ScrollArea className="h-80 rounded-md border border-border">
-									<div className="p-2">
-										{data.tables.map((t) => (
-											<ItemRow
-												canRestore={Boolean(isAdmin) && !restoreDisabled}
-												icon={
-													<Table2 className="size-3.5 shrink-0 text-muted-foreground" />
-												}
-												key={t}
-												label={t}
-												onRestore={() => setPending({ kind: "table", name: t })}
-											/>
-										))}
-										{data.tables.length === 0 ? (
-											<p className="p-4 text-center text-muted-foreground text-sm">
-												No tables in this backup.
-											</p>
-										) : null}
-									</div>
-								</ScrollArea>
+								<TableList
+									canRestore={canRestore}
+									onRestore={(name) => setPending({ kind: "table", name })}
+									tables={data.tables}
+								/>
 							</TabsContent>
 						</Tabs>
 					) : null}
 
+					{restore?.phase === "running" ? (
+						<p className="flex items-center gap-2 text-muted-foreground text-sm">
+							<span className="size-2 animate-pulse rounded-full bg-warning" />
+							Restoring {restore.item.kind} "{restore.item.name}"… follow it in
+							the operations tray.
+						</p>
+					) : null}
+					{restore?.phase === "succeeded" ? (
+						<p className="flex items-center gap-2 text-sm">
+							<CheckCircle2 className="size-4 text-success" />
+							<span className="text-success">
+								Restored {restore.item.kind} "{restore.item.name}". The previous
+								version was saved to a pre-restore safety copy.
+							</span>
+						</p>
+					) : null}
+					{restore?.phase === "failed" || restore?.phase === "canceled" ? (
+						<p className="flex items-center gap-2 text-sm">
+							<XCircle className="size-4 text-destructive" />
+							<span className="text-destructive">
+								Restore of {restore.item.kind} "{restore.item.name}" did not
+								complete — your live site was left unchanged.
+							</span>
+						</p>
+					) : null}
+
 					{data && !isAdmin ? (
 						<p className="text-muted-foreground text-xs">
-							Restoring a single item requires an admin role.
+							Viewing is open to your role, but restoring a single item needs an
+							admin. Ask an admin to restore, or browse to confirm what's
+							inside.
 						</p>
 					) : null}
 				</DialogContent>
 			</Dialog>
 
 			<SafetyConfirm
-				confirmLabel="Restore this item"
-				consequence={
-					pending
-						? `This replaces the live ${pending.kind} "${pending.name}" with the copy from this backup. The current ${pending.kind} is saved to a pre-restore safety copy first, so this can be undone.`
-						: ""
-				}
+				confirmLabel={`Restore this ${pending?.kind ?? "item"}`}
+				consequence={pending ? consequenceFor(pending) : ""}
 				onConfirm={handleRestoreItem}
 				onOpenChange={(o) => !o && setPending(null)}
 				open={pending !== null}
 				reversible
-				title={`Restore a ${pending?.kind ?? "item"}`}
+				title={`Restore one ${pending?.kind ?? "item"}`}
 			/>
 		</>
 	);
