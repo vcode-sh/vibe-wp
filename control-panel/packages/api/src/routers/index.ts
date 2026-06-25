@@ -23,6 +23,7 @@ import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
 import { themesRouter } from "./themes";
 import { updatesRouter } from "./updates";
+import { wpUsersRouter } from "./wp-users";
 
 export const appRouter = {
 	...setupRouter,
@@ -48,6 +49,7 @@ export const appRouter = {
 	...monitoringRouter,
 	...securityRadarRouter,
 	...performanceRouter,
+	...wpUsersRouter,
 };
 
 export type AppRouter = typeof appRouter;

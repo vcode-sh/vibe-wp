@@ -424,6 +424,8 @@ describe("buildVibeArgv", () => {
 			"wpThemeAutoUpdatesEnable",
 			"wpThemeDelete",
 			"wpThemeUpdate",
+			"wpUserList",
+			"wpUserSetPassword",
 		]);
 	});
 });

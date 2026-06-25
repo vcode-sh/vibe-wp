@@ -191,6 +191,25 @@ case "${command}" in
   wp)
     vibe_wp "$@"
     ;;
+  wp-user-set-password)
+    # Set a WordPress user's password. The login is on argv (charset-validated by
+    # the panel wrapper); the NEW PASSWORD arrives on STDIN ONLY — never argv, ps,
+    # or logs. We read it into a shell variable (invisible to `ps`/proc cmdline),
+    # resolve the user id, then pipe the password to `wp eval` over STDIN so
+    # wp_set_password() never receives it on a command line. Runs through the
+    # image entrypoint (vibe_wp), so WORDPRESS_CONFIG_EXTRA/object-cache are set.
+    _login="${1:?wp-user-set-password needs a login}"
+    IFS= read -r _vibe_new_pw || true
+    [ -n "${_vibe_new_pw:-}" ] || { echo "wp-user-set-password: empty password on stdin" >&2; exit 1; }
+    _uid="$(vibe_wp user get "$_login" --field=ID --skip-plugins --skip-themes 2>/dev/null | tr -dc '0-9')"
+    [ -n "$_uid" ] || { _vibe_new_pw=""; echo "wp-user-set-password: no such user: $_login" >&2; exit 1; }
+    printf '%s' "$_vibe_new_pw" | vibe_wp_stdin eval \
+      'wp_set_password(stream_get_contents(STDIN), '"$_uid"');' --skip-plugins --skip-themes
+    _rc=$?
+    _vibe_new_pw=""   # scrub the plaintext from memory
+    [ "$_rc" -eq 0 ] || { echo "wp-user-set-password: failed to set password" >&2; exit 1; }
+    echo "Password updated for WordPress user '$_login' (id $_uid)."
+    ;;
   backup)
     "${VIBE_BIN_DIR}/backup" "$@"
     ;;

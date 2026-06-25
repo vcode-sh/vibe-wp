@@ -42,6 +42,7 @@ const SITE_LINKS: SiteLink[] = [
 	{ label: "Backups", to: "/sites/$siteId/backups", icon: CopyCheck },
 	{ label: "Logs", to: "/sites/$siteId/logs", icon: ScrollText },
 	{ label: "Inventory", to: "/sites/$siteId/inventory", icon: PackageOpen },
+	{ label: "Users", to: "/sites/$siteId/users", icon: UsersRound },
 	{ label: "Staging", to: "/sites/$siteId/staging", icon: Activity },
 	{
 		label: "Site settings",

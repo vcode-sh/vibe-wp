@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { assertSlug, SLUG_RE, tierFor, WP_ACTION_TIERS } from "./wp-actions";
 
 describe("WP_ACTION_TIERS", () => {
-	it("delete is admin, everything else operator", () => {
+	it("delete + user management are admin, maintenance is operator", () => {
 		expect(tierFor("plugin.delete")).toBe("admin");
 		expect(tierFor("theme.delete")).toBe("admin");
 		expect(tierFor("plugin.activate")).toBe("operator");
@@ -11,6 +11,20 @@ describe("WP_ACTION_TIERS", () => {
 		expect(tierFor("core.update")).toBe("operator");
 		expect(tierFor("safeUpdate")).toBe("operator");
 		expect(tierFor("schedule.autoUpdate")).toBe("operator");
+	});
+
+	it("every WordPress user-management action is admin-tier", () => {
+		// Reading user PII, setting passwords, creating/promoting admins, and
+		// minting an authenticated session are never routine operator work.
+		for (const action of [
+			"user.list",
+			"user.setPassword",
+			"user.create",
+			"user.promote",
+			"user.loginLink",
+		] as const) {
+			expect(tierFor(action)).toBe("admin");
+		}
 	});
 
 	it("every action key maps to a known tier", () => {

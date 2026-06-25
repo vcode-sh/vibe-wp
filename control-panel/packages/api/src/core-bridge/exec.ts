@@ -226,6 +226,26 @@ export const VIBE_OPS = {
 	// OFF: when the source env var is unset the op prints `{}` and exits 0. Driven
 	// only through runVulnFeed (which pipes stdin), never buildVibeArgv extraArgs.
 	vulnFeedFetch: { argv: ["vuln-feed-fetch"], stream: false },
+	// WP user management (Plesk WP-Toolkit parity). wpUserList is a single FIXED
+	// read form (validate_wp_args allowlists exactly these non-secret fields — no
+	// password hash). wpUserSetPassword takes the login on argv (charset-validated
+	// at the root boundary) and the NEW password on STDIN ONLY — see
+	// setWpUserPassword, which pipes it like runVulnFeed (never argv/ps).
+	wpUserList: {
+		argv: [
+			"wp",
+			"user",
+			"list",
+			"--fields=ID,user_login,display_name,user_email,roles",
+			"--format=json",
+		],
+		stream: false,
+	},
+	wpUserSetPassword: {
+		argv: ["wp-user-set-password"],
+		stream: false,
+		takesArg: true,
+	},
 } as const;
 
 export type VibeOp = keyof typeof VIBE_OPS;

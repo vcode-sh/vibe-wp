@@ -22,14 +22,99 @@ function runValidateWp(...args: string[]): number {
 	return res.status ?? -1;
 }
 
+/**
+ * Same harness for validate_wp_login — the root-side gate on the user_login that
+ * reaches `wp-user-set-password <login>` on argv. 0 = accepted, 1 = rejected.
+ */
+function runValidateWpLogin(login: string): number {
+	const script =
+		'VIBE_PANEL_RUN_LIB=1 . "$1" || exit 99; shift; validate_wp_login "$1"';
+	const res = spawnSync("sh", ["-c", script, "sh", WRAPPER, login], {
+		encoding: "utf8",
+	});
+	return res.status ?? -1;
+}
+
 describe("validate_wp_args — existing forms preserved", () => {
 	it.each([
 		[["core", "update"]],
 		[["plugin", "update", "--all"]],
 		[["plugin", "list", "--update=available", "--format=json"]],
 		[["cron", "event", "run", "vibe_insights_collect_cron"]],
+		// WP user listing — the single fixed read form (panel Users card).
+		[
+			[
+				"user",
+				"list",
+				"--fields=ID,user_login,display_name,user_email,roles",
+				"--format=json",
+			],
+		],
 	])("accepts %j", (args) => {
 		expect(runValidateWp(...(args as string[]))).toBe(0);
+	});
+});
+
+describe("validate_wp_args — user-list is a single fixed form", () => {
+	it.each([
+		// bare `user` namespace is not a general gateway
+		[["user", "list"]],
+		[["user", "get", "1"]],
+		[["user", "delete", "1"]],
+		// no leaking the password hash via a different field set
+		[["user", "list", "--fields=ID,user_pass", "--format=json"]],
+		[
+			[
+				"user",
+				"list",
+				"--fields=ID,user_login,display_name,user_email,roles",
+				"--format=csv",
+			],
+		],
+		// extra/injected trailing args on the fixed form
+		[
+			[
+				"user",
+				"list",
+				"--fields=ID,user_login,display_name,user_email,roles",
+				"--format=json",
+				"--path=/tmp/evil",
+			],
+		],
+	])("rejects %j", (args) => {
+		expect(runValidateWp(...(args as string[]))).toBe(1);
+	});
+});
+
+describe("validate_wp_login — accepts real WordPress logins", () => {
+	it.each([
+		"admin",
+		"tom.robak",
+		"user_1",
+		"a@b.com",
+		"John Doe",
+		"x".repeat(60),
+	])("accepts %j", (login) => {
+		expect(runValidateWpLogin(login)).toBe(0);
+	});
+});
+
+describe("validate_wp_login — rejects injection + policy violations", () => {
+	it.each([
+		"", // empty
+		"-admin", // leading hyphen (could be read as a flag)
+		"--skip-plugins",
+		"admin; rm -rf /",
+		"admin$(whoami)",
+		"admin`id`",
+		"admin|evil",
+		"admin && evil",
+		"admin>/tmp/x",
+		"../../etc/passwd", // slash is not allowed
+		"admin\nroot", // newline
+		"x".repeat(61), // over the 60-char cap
+	])("rejects %j", (login) => {
+		expect(runValidateWpLogin(login)).toBe(1);
 	});
 });
 

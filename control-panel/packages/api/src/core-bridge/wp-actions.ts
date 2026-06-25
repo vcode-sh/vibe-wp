@@ -24,6 +24,15 @@ export const WP_ACTION_TIERS = {
 	"core.update": "operator",
 	safeUpdate: "operator",
 	"schedule.autoUpdate": "operator",
+	// WordPress user management + one-click login (Plesk WP-Toolkit parity). ALL
+	// admin-tier: they read user PII (emails), set passwords, create/promote
+	// admins, or mint an authenticated wp-admin session — none are routine
+	// operator maintenance. Secrets (passwords) travel on STDIN, never argv.
+	"user.list": "admin",
+	"user.setPassword": "admin",
+	"user.create": "admin",
+	"user.promote": "admin",
+	"user.loginLink": "admin",
 } as const satisfies Record<string, Role>;
 
 export type WpAction = keyof typeof WP_ACTION_TIERS;
