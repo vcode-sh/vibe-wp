@@ -130,6 +130,10 @@ const createSiteBase = z.object({
 	aiOpenAiKey: aiKeySchema,
 	backupSchedule: backupScheduleSchema.optional(),
 	domain: domainSchema,
+	// "Create anyway" from the wizard's DNS step. Lets provisioning proceed while
+	// the primary domain's DNS is still propagating (the installer's dns-preflight
+	// task downgrades the primary-domain check from fatal to a warning).
+	dnsOverride: z.boolean().optional(),
 	monitorEnabled: z.boolean().optional(),
 	performancePreset: performancePresetSchema.optional(),
 	siteTitle: z.string().trim().min(1).max(120).optional(),

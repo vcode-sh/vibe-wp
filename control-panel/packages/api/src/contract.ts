@@ -304,6 +304,12 @@ export interface CreateSiteInput {
 	aiGoogleKey?: string;
 	aiOpenAiKey?: string;
 	backupSchedule?: BackupScheduleInput;
+	/**
+	 * "Create anyway" from the wizard's DNS step — proceed while the primary
+	 * domain's DNS is still propagating. Secondary domains (www/staging) never
+	 * block regardless.
+	 */
+	dnsOverride?: boolean;
 	domain: string;
 	monitorEnabled?: boolean;
 	performancePreset?: PerformancePresetInput;

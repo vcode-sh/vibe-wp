@@ -105,6 +105,13 @@ export interface InstallerState {
   backupR2Enabled: boolean;
   backupRetention: string;
   backupSchedule: BackupSchedule;
+  /**
+   * Operator chose "Create anyway" in the wizard's DNS step. When true, the
+   * dns-preflight task downgrades a non-resolving PRIMARY domain from fatal to a
+   * warning (DNS still propagating). Optional: absent/undefined means no
+   * override — the safe default. Secondary domains (www/staging) warn regardless.
+   */
+  dnsPreflightOverride?: boolean;
   extDbCharset: string;
   extDbHost: string;
   extDbName: string;

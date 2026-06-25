@@ -38,6 +38,12 @@ export function applyNewSiteOverrides(
 		productionDomain: input.domain.trim().toLowerCase(),
 		stagingEnabled: input.stagingEnabled,
 	};
+	// "Create anyway": only set when the operator explicitly overrode the DNS
+	// check, so the installer's dns-preflight task lets a still-propagating
+	// primary domain through. Omitted otherwise → safe default (no override).
+	if (input.dnsOverride) {
+		next.dnsPreflightOverride = true;
+	}
 	if (input.siteTitle) {
 		next.siteTitle = input.siteTitle;
 	}

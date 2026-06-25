@@ -15,7 +15,7 @@ import {
 } from "./wizard-types";
 
 /** Trim and drop empty optional fields so the server sees only real values. */
-function toCreateSiteInput(form: WizardForm): CreateSiteInput {
+function toCreateSiteInput(form: WizardForm, dnsOverride = false): CreateSiteInput {
 	const title = form.siteTitle.trim();
 	// AI keys are optional + secret: send each only when non-empty (trimmed), so
 	// the server never sees an empty "secret". They ride STDIN to the site env.
@@ -25,6 +25,8 @@ function toCreateSiteInput(form: WizardForm): CreateSiteInput {
 	return {
 		adminEmail: form.adminEmail.trim(),
 		backupSchedule: form.backupSchedule,
+		// Only send when the operator chose "Create anyway" (DNS still propagating).
+		...(dnsOverride ? { dnsOverride: true } : {}),
 		domain: form.domain.trim().toLowerCase(),
 		monitorEnabled: form.monitorEnabled,
 		performancePreset: form.performancePreset,
@@ -39,9 +41,12 @@ function toCreateSiteInput(form: WizardForm): CreateSiteInput {
 	};
 }
 
-function toCreateExternalInput(form: WizardForm): CreateExternalInput {
+function toCreateExternalInput(
+	form: WizardForm,
+	dnsOverride = false
+): CreateExternalInput {
 	return {
-		...toCreateSiteInput(form),
+		...toCreateSiteInput(form, dnsOverride),
 		extDbHost: form.extDbHost.trim(),
 		extDbName: form.extDbName.trim(),
 		extDbPassword: form.extDbPassword,
@@ -136,11 +141,15 @@ export function useProvisionWizard(mode: ProvisionMode) {
 			// per-site container. Both return { jobId } for the operations tray.
 			let result: { jobId: string };
 			if (mode === "external") {
-				result = await createExternal.mutateAsync(toCreateExternalInput(form));
+				result = await createExternal.mutateAsync(
+					toCreateExternalInput(form, dnsOverride)
+				);
 			} else if (form.dbMode === "shared") {
-				result = await createSharedDb.mutateAsync(toCreateSiteInput(form));
+				result = await createSharedDb.mutateAsync(
+					toCreateSiteInput(form, dnsOverride)
+				);
 			} else {
-				result = await createSite.mutateAsync(toCreateSiteInput(form));
+				result = await createSite.mutateAsync(toCreateSiteInput(form, dnsOverride));
 			}
 			handledRef.current = false;
 			setTracked(domain);
