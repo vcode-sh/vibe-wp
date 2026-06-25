@@ -17,6 +17,7 @@ import {
 	BulkUpdateBar,
 	CoreUpdateCard,
 } from "@/components/plugins/inventory-cards";
+import { SecurityScoreCard } from "@/components/security/security-score-card";
 import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -335,6 +336,7 @@ function InventoryContent({
 				</div>
 				<RefreshButton siteId={siteId} />
 			</div>
+			<SecurityScoreCard siteId={siteId} />
 			<CoreUpdateCard siteId={siteId} wpCore={data.wp_core} />
 			<BulkUpdateBar
 				hasPluginUpdates={data.plugins.some((p) => p.update_available)}
