@@ -214,15 +214,24 @@ export interface CveRef {
 
 /** A plugin the Security Radar flagged, with reasons + the suggested remediation. */
 export interface FlaggedPlugin {
+	/** Why an "abandoned" flag fired: stale wp.org date, WP-untested, or both. Null when not abandoned. */
+	abandonedEvidence: "stale" | "untested" | "both" | null;
 	cves: CveRef[];
+	/** Highest severity of the matching CVE rows only (null when no CVE matched). */
 	highestSeverity: "critical" | "high" | "medium" | "low" | null;
 	lastUpdated: string | null;
 	name: string;
 	newVersion: string | null;
 	reasons: ("outdated" | "abandoned" | "cve")[];
+	/** Overall row severity for the GUI — set for EVERY flagged plugin, never null. */
+	severity: "critical" | "high" | "medium" | "low";
 	slug: string;
 	suggestedAction: "update" | "safeUpdate" | "deactivate";
+	/** Author's "tested up to" WP version from wp.org, or null when unknown. */
+	testedUpTo: string | null;
 	version: string;
+	/** Minor WP releases the "tested up to" trails the running WP, when that drove the abandoned flag; else null. */
+	wpMinorsBehind: number | null;
 }
 
 /** The Security Radar result for a site: flagged plugins + rollup counts. */

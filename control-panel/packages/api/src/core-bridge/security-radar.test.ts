@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { CveRef, InsightsPlugin, SiteInsights } from "../contract";
 import {
 	ABANDONED_MONTHS,
+	ABANDONED_WP_MINORS,
 	computeSecurityRadar,
 	type VulnFeed,
 	versionInRange,
+	wpMinorsBehind,
 } from "./security-radar";
 
 const NOW = new Date("2026-06-25T00:00:00Z");
@@ -31,12 +33,19 @@ function plugin(over: Partial<InsightsPlugin>): InsightsPlugin {
 	};
 }
 
-function insightsWith(plugins: InsightsPlugin[]): SiteInsights {
+function insightsWith(
+	plugins: InsightsPlugin[],
+	wpVersion = "7.0"
+): SiteInsights {
 	return {
 		schema_version: 1,
 		generated_at: NOW.toISOString(),
 		site_url: "https://x.test",
-		wp_core: { version: "7.0", update_available: false, new_version: null },
+		wp_core: {
+			version: wpVersion,
+			update_available: false,
+			new_version: null,
+		},
 		php_version: "8.5.0",
 		db: { size_bytes: 0, engine: "MariaDB", server_version: "11.4" },
 		plugins,
@@ -133,6 +142,131 @@ describe("computeSecurityRadar — abandoned (age threshold)", () => {
 			NOW
 		);
 		expect(r.flagged).toHaveLength(0);
+	});
+});
+
+describe("computeSecurityRadar — abandoned (tested-up-to vs running WP)", () => {
+	it("flags an active plugin whose 'tested up to' trails the running WP by the threshold", () => {
+		// Running WP 7.0; tested up to 6.0 → 4 minors behind (>= ABANDONED_WP_MINORS).
+		const r = computeSecurityRadar(
+			insightsWith(
+				[
+					plugin({
+						slug: "untested",
+						last_updated: monthsAgo(2), // recent date → only the WP-gap signal applies
+						tested: "6.0",
+					}),
+				],
+				"7.0"
+			),
+			undefined,
+			NOW
+		);
+		expect(r.flagged).toHaveLength(1);
+		const f = r.flagged[0];
+		expect(f?.reasons).toEqual(["abandoned"]);
+		expect(f?.abandonedEvidence).toBe("untested");
+		expect(f?.wpMinorsBehind).toBeGreaterThanOrEqual(ABANDONED_WP_MINORS);
+		expect(f?.testedUpTo).toBe("6.0");
+		expect(f?.suggestedAction).toBe("deactivate");
+	});
+
+	it("does NOT flag a plugin tested against a recent WP minor", () => {
+		// Running 7.0; tested 6.3 → under the threshold (forgiving).
+		const r = computeSecurityRadar(
+			insightsWith(
+				[plugin({ slug: "fine", last_updated: monthsAgo(1), tested: "6.3" })],
+				"7.0"
+			),
+			undefined,
+			NOW
+		);
+		expect(r.flagged).toHaveLength(0);
+	});
+
+	it("does NOT flag when 'tested up to' is ahead of the running WP", () => {
+		const r = computeSecurityRadar(
+			insightsWith(
+				[plugin({ slug: "ahead", last_updated: monthsAgo(1), tested: "7.4" })],
+				"7.0"
+			),
+			undefined,
+			NOW
+		);
+		expect(r.flagged).toHaveLength(0);
+	});
+
+	it("reports 'both' evidence when stale AND untested", () => {
+		const r = computeSecurityRadar(
+			insightsWith(
+				[
+					plugin({
+						slug: "rot",
+						last_updated: monthsAgo(ABANDONED_MONTHS + 6),
+						tested: "5.0",
+					}),
+				],
+				"7.0"
+			),
+			undefined,
+			NOW
+		);
+		expect(r.flagged[0]?.abandonedEvidence).toBe("both");
+	});
+});
+
+describe("computeSecurityRadar — per-row severity (every flagged row)", () => {
+	it("outdated-only → low severity", () => {
+		const r = computeSecurityRadar(
+			insightsWith([
+				plugin({ slug: "old", update_available: true, new_version: "2" }),
+			]),
+			undefined,
+			NOW
+		);
+		expect(r.flagged[0]?.severity).toBe("low");
+		expect(r.summary.highestSeverity).toBe("low");
+	});
+
+	it("abandoned → medium severity even with no CVE", () => {
+		const r = computeSecurityRadar(
+			insightsWith([
+				plugin({
+					slug: "stale",
+					last_updated: monthsAgo(ABANDONED_MONTHS + 2),
+				}),
+			]),
+			undefined,
+			NOW
+		);
+		expect(r.flagged[0]?.severity).toBe("medium");
+		expect(r.summary.highestSeverity).toBe("medium");
+	});
+
+	it("a matching CVE drives severity above the maintenance fallback", () => {
+		const feed: VulnFeed = {
+			crit: [
+				{
+					id: "X",
+					severity: "critical",
+					affected_versions: [],
+					fixed_in: null,
+					source_url: null,
+				},
+			],
+		};
+		const r = computeSecurityRadar(
+			insightsWith([
+				plugin({
+					slug: "crit",
+					version: "1.0.0",
+					last_updated: monthsAgo(ABANDONED_MONTHS + 2),
+				}),
+			]),
+			feed,
+			NOW
+		);
+		expect(r.flagged[0]?.severity).toBe("critical");
 	});
 });
 
@@ -292,5 +426,36 @@ describe("versionInRange", () => {
 	});
 	it("a malformed token fails closed (no match)", () => {
 		expect(versionInRange("1.0.0", ["<"])).toBe(false);
+	});
+});
+
+describe("wpMinorsBehind", () => {
+	it("counts minor releases the tested version trails the running WP", () => {
+		expect(wpMinorsBehind("6.6", "6.6")).toBe(0);
+		expect(wpMinorsBehind("6.5", "6.6")).toBe(1);
+		// 6.2 vs 6.6 → 4 minors behind.
+		expect(wpMinorsBehind("6.2", "6.6")).toBe(4);
+	});
+
+	it("treats a major rollover as a meaningful step (does not reset)", () => {
+		// Running 7.0, tested 6.3 → 1 minor behind (7.0 ordinal just past 6.3).
+		expect(wpMinorsBehind("6.3", "7.0")).toBe(1);
+		// Running 7.0, tested 6.0 → 4 minors behind.
+		expect(wpMinorsBehind("6.0", "7.0")).toBe(4);
+	});
+
+	it("never penalises a 'tested up to' AHEAD of the running WP (returns 0)", () => {
+		expect(wpMinorsBehind("7.4", "7.0")).toBe(0);
+	});
+
+	it("ignores the patch segment (compares major.minor only)", () => {
+		expect(wpMinorsBehind("6.6.3", "6.6.1")).toBe(0);
+	});
+
+	it("returns null when either side is missing or unparseable", () => {
+		expect(wpMinorsBehind(null, "7.0")).toBeNull();
+		expect(wpMinorsBehind("", "7.0")).toBeNull();
+		expect(wpMinorsBehind("6.6", "")).toBeNull();
+		expect(wpMinorsBehind("not-a-version", "7.0")).toBeNull();
 	});
 });
