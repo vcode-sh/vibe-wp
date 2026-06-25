@@ -1,0 +1,304 @@
+#!/usr/bin/env sh
+set -u
+LC_ALL=C
+export LC_ALL
+
+# perf-measure — read-only performance MEASUREMENT for the Smart Performance
+# Advisor (feature #5). It mirrors bin/perf-report's container-exec helpers but,
+# unlike perf-report (which reports since-boot cumulative ratios), it samples
+# PHP-FPM pm.status and Redis INFO over a short window (~2s) so eviction/hit
+# figures are a true RATE delta, not a cumulative since-boot count.
+#
+# On --json (the ONLY mode the control panel uses) it emits a SINGLE non-secret
+# JSON object. It NEVER throws on a missing service and NEVER prints secrets:
+# every field defaults to 0 (or empty) when its service is down or its probe
+# fails. A human table fallback is kept for parity with perf-report.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+perf_json=0
+for _arg in "$@"; do
+  case "${_arg}" in
+    --json) perf_json=1 ;;
+  esac
+done
+
+# Sample window between the two FPM/Redis snapshots, in seconds. Bounded small
+# so the op stays well under the panel's 120s timeout.
+PERF_SAMPLE_SECONDS="${PERF_SAMPLE_SECONDS:-2}"
+
+# Load the env file (non-secret use: REDIS_PASSWORD for redis-cli auth, the
+# PHP_FPM_PM_MAX_CHILDREN fallback, the site URL). Same pattern as perf-report.
+if [ -f "${VIBE_ENV_FILE}" ]; then
+  set -a
+  case "${VIBE_ENV_FILE}" in
+    /*|*/*) env_path="${VIBE_ENV_FILE}" ;;
+    *) env_path="./${VIBE_ENV_FILE}" ;;
+  esac
+  # shellcheck disable=SC1090
+  . "${env_path}"
+  set +a
+fi
+
+compose_config_error="$(vibe_compose config 2>&1 >/dev/null)"
+if [ "$?" -eq 0 ]; then
+  compose_config_ok=1
+else
+  compose_config_ok=0
+fi
+
+service_running() {
+  [ "${compose_config_ok}" -eq 1 ] && vibe_compose_service_exists "$1" \
+    && vibe_compose_service_running "$1"
+}
+
+# --- Host RAM (read in THIS wrapper context — the HOST — never inside a
+# container, so the figures reflect the real box the stack runs on). On a non-
+# Linux host (macOS dev) /proc/meminfo is absent → all zero, which the advisor
+# treats as "unknown host RAM" and emits no upward memory recommendations.
+ram_total_mib=0
+ram_free_mib=0
+ram_available_mib=0
+if [ -r /proc/meminfo ]; then
+  ram_total_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null)"
+  ram_free_kb="$(awk '/^MemFree:/ {print $2; exit}' /proc/meminfo 2>/dev/null)"
+  ram_avail_kb="$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null)"
+  ram_total_mib="$(awk -v k="${ram_total_kb:-0}" 'BEGIN { printf "%d", k / 1024 }')"
+  ram_free_mib="$(awk -v k="${ram_free_kb:-0}" 'BEGIN { printf "%d", k / 1024 }')"
+  ram_available_mib="$(awk -v k="${ram_avail_kb:-0}" 'BEGIN { printf "%d", k / 1024 }')"
+fi
+
+# --- PHP-FPM pm.status. Preferred source is the pool status page (pm.status_path
+# = /fpm-status, see docker/wordpress/php-fpm-www.conf.template) reached over the
+# FPM TCP socket via cgi-fcgi. If cgi-fcgi or the status page is unreachable we
+# fall back to counting php-fpm worker processes from /proc (perf-report does the
+# same), reporting only `active`/`total` best-effort. NEVER throws.
+fpm_active=0
+fpm_idle=0
+fpm_total=0
+fpm_max_children=0
+fpm_listen_queue=0
+fpm_max_active=0
+fpm_slow_requests=0
+fpm_avg_rss_mib=0
+# maxChildren from env (rendered into the pool config by the entrypoint).
+fpm_max_children="${PHP_FPM_PM_MAX_CHILDREN:-0}"
+case "${fpm_max_children}" in
+  ''|*[!0-9]*) fpm_max_children=0 ;;
+esac
+
+if service_running wordpress; then
+  fpm_status="$(vibe_compose exec -T wordpress sh 2>/dev/null <<'SH'
+# Try the FPM status page via cgi-fcgi (scrape mode key:value output). The pool
+# listens on 127.0.0.1:9000 with pm.status_path = /fpm-status.
+if command -v cgi-fcgi >/dev/null 2>&1; then
+  SCRIPT_NAME=/fpm-status SCRIPT_FILENAME=/fpm-status REQUEST_METHOD=GET \
+    cgi-fcgi -bind -connect 127.0.0.1:9000 2>/dev/null \
+    | awk -F': *' '
+        /^active processes:/        { printf "active=%s\n", $2 }
+        /^idle processes:/          { printf "idle=%s\n", $2 }
+        /^total processes:/         { printf "total=%s\n", $2 }
+        /^max children reached:/    { printf "maxactive=%s\n", $2 }
+        /^listen queue:/            { printf "listenqueue=%s\n", $2 }
+        /^slow requests:/           { printf "slow=%s\n", $2 }
+      '
+fi
+SH
+)"
+  # Parse whatever the status page returned (empty when cgi-fcgi is absent).
+  _v="$(printf '%s\n' "${fpm_status}" | sed -n 's/^active=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${_v}" ] && fpm_active="${_v}"
+  _v="$(printf '%s\n' "${fpm_status}" | sed -n 's/^idle=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${_v}" ] && fpm_idle="${_v}"
+  _v="$(printf '%s\n' "${fpm_status}" | sed -n 's/^total=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${_v}" ] && fpm_total="${_v}"
+  _v="$(printf '%s\n' "${fpm_status}" | sed -n 's/^maxactive=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${_v}" ] && fpm_max_active="${_v}"
+  _v="$(printf '%s\n' "${fpm_status}" | sed -n 's/^listenqueue=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${_v}" ] && fpm_listen_queue="${_v}"
+  _v="$(printf '%s\n' "${fpm_status}" | sed -n 's/^slow=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+  [ -n "${_v}" ] && fpm_slow_requests="${_v}"
+
+  # /proc fallback for total + average RSS (always available); used to fill in
+  # active/total when the status page was unreachable, and to inform per-child
+  # memory budgeting in the advisor (avg RSS MiB).
+  proc_fpm="$(vibe_compose exec -T wordpress sh 2>/dev/null <<'SH'
+set +u
+count=0
+total_kb=0
+for status_file in /proc/[0-9]*/status; do
+  [ -r "${status_file}" ] || continue
+  name="$(awk "/^Name:/ {print \$2; exit}" "${status_file}" 2>/dev/null)"
+  case "${name}" in
+    php-fpm*)
+      rss_kb="$(awk "/^VmRSS:/ {print \$2; exit}" "${status_file}" 2>/dev/null)"
+      rss_kb="${rss_kb:-0}"
+      count=$((count + 1))
+      total_kb=$((total_kb + rss_kb))
+      ;;
+  esac
+done
+echo "procs=${count}"
+if [ "${count}" -gt 0 ]; then
+  awk -v kb="${total_kb}" -v c="${count}" 'BEGIN { printf "avgrss=%d\n", (kb / c) / 1024 }'
+else
+  echo "avgrss=0"
+fi
+SH
+)"
+  _procs="$(printf '%s\n' "${proc_fpm}" | sed -n 's/^procs=\([0-9][0-9]*\)$/\1/p' | head -n1)"
+  _avg="$(printf '%s\n' "${proc_fpm}" | sed -n 's/^avgrss=\([0-9][0-9]*\)$/\1/p' | head -n1)"
+  [ -n "${_avg}" ] && fpm_avg_rss_mib="${_avg}"
+  # Fill total/active from /proc only when the status page gave nothing.
+  if [ "${fpm_total}" -eq 0 ] && [ -n "${_procs}" ]; then
+    fpm_total="${_procs}"
+    # The master process is included in the php-fpm count; workers ≈ total-1.
+    [ "${_procs}" -gt 0 ] && fpm_active=$(( _procs > 1 ? _procs - 1 : _procs ))
+  fi
+fi
+
+# --- OPcache (reuse perf-report's PHP probe; extract the runtime fields we need).
+opcache_hit=0
+opcache_used_mib=0
+opcache_free_mib=0
+opcache_wasted_mib=0
+opcache_oom_restarts=0
+if service_running wordpress; then
+  opcache_raw="$(vibe_compose exec -T wordpress php 2>/dev/null <<'PHP'
+<?php
+if (!function_exists('opcache_get_status')) { exit(0); }
+$status = @opcache_get_status(false);
+if (!is_array($status)) { exit(0); }
+$m = $status['memory_usage'] ?? array();
+$s = $status['opcache_statistics'] ?? array();
+printf("hit=%.0f\n", (float) ($s['opcache_hit_rate'] ?? 0));
+printf("used=%d\n", (int) (($m['used_memory'] ?? 0) / 1048576));
+printf("free=%d\n", (int) (($m['free_memory'] ?? 0) / 1048576));
+printf("wasted=%d\n", (int) (($m['wasted_memory'] ?? 0) / 1048576));
+printf("oom=%d\n", (int) ($s['oom_restarts'] ?? 0));
+PHP
+)"
+  _v="$(printf '%s\n' "${opcache_raw}" | sed -n 's/^hit=\([0-9][0-9]*\)$/\1/p' | head -n1)"; [ -n "${_v}" ] && opcache_hit="${_v}"
+  _v="$(printf '%s\n' "${opcache_raw}" | sed -n 's/^used=\([0-9][0-9]*\)$/\1/p' | head -n1)"; [ -n "${_v}" ] && opcache_used_mib="${_v}"
+  _v="$(printf '%s\n' "${opcache_raw}" | sed -n 's/^free=\([0-9][0-9]*\)$/\1/p' | head -n1)"; [ -n "${_v}" ] && opcache_free_mib="${_v}"
+  _v="$(printf '%s\n' "${opcache_raw}" | sed -n 's/^wasted=\([0-9][0-9]*\)$/\1/p' | head -n1)"; [ -n "${_v}" ] && opcache_wasted_mib="${_v}"
+  _v="$(printf '%s\n' "${opcache_raw}" | sed -n 's/^oom=\([0-9][0-9]*\)$/\1/p' | head -n1)"; [ -n "${_v}" ] && opcache_oom_restarts="${_v}"
+fi
+
+# --- Redis: two INFO snapshots PERF_SAMPLE_SECONDS apart so evicted_keys becomes
+# a DELTA (rate over the window) rather than a since-boot cumulative. used_memory
+# and maxmemory are point-in-time (last snapshot). NEVER throws.
+redis_hit=0
+redis_evicted_delta=0
+redis_evicted_total=0
+redis_used_mib=0
+redis_max_mib=0
+redis_frag=0
+redis_snapshot() {
+  vibe_compose exec -T redis sh 2>/dev/null <<'SH'
+if [ -n "${REDIS_PASSWORD:-}" ]; then
+  AUTH="-a ${REDIS_PASSWORD}"
+else
+  AUTH=""
+fi
+# shellcheck disable=SC2086
+redis-cli ${AUTH} --raw INFO 2>/dev/null | tr -d '\r' | awk -F: '
+  /^keyspace_hits:/        { printf "hits=%s\n", $2 }
+  /^keyspace_misses:/      { printf "misses=%s\n", $2 }
+  /^evicted_keys:/         { printf "evicted=%s\n", $2 }
+  /^used_memory:/          { printf "used=%s\n", $2 }
+  /^maxmemory:/            { printf "maxmemory=%s\n", $2 }
+  /^mem_fragmentation_ratio:/ { printf "frag=%s\n", $2 }
+'
+SH
+}
+redis_field() { printf '%s\n' "$1" | sed -n "s/^$2=\\([0-9.][0-9.]*\\)\$/\\1/p" | head -n1; }
+
+if service_running redis; then
+  redis_first="$(redis_snapshot)"
+  # Short sleep between snapshots (best-effort; harmless if absent).
+  sleep "${PERF_SAMPLE_SECONDS}" 2>/dev/null || true
+  redis_second="$(redis_snapshot)"
+
+  _ev1="$(redis_field "${redis_first}" evicted)"; _ev1="${_ev1:-0}"
+  _ev2="$(redis_field "${redis_second}" evicted)"; _ev2="${_ev2:-0}"
+  redis_evicted_total="${_ev2%.*}"
+  redis_evicted_delta="$(awk -v a="${_ev1}" -v b="${_ev2}" 'BEGIN { d = b - a; if (d < 0) d = 0; printf "%d", d }')"
+
+  _h="$(redis_field "${redis_second}" hits)"; _h="${_h:-0}"
+  _m="$(redis_field "${redis_second}" misses)"; _m="${_m:-0}"
+  redis_hit="$(awk -v h="${_h}" -v m="${_m}" 'BEGIN { t = h + m; if (t > 0) printf "%d", (h / t) * 100; else printf "0" }')"
+
+  _u="$(redis_field "${redis_second}" used)"; _u="${_u:-0}"
+  redis_used_mib="$(awk -v b="${_u}" 'BEGIN { printf "%d", b / 1048576 }')"
+  _mm="$(redis_field "${redis_second}" maxmemory)"; _mm="${_mm:-0}"
+  redis_max_mib="$(awk -v b="${_mm}" 'BEGIN { printf "%d", b / 1048576 }')"
+  _f="$(redis_field "${redis_second}" frag)"; _f="${_f:-0}"
+  redis_frag="$(awk -v v="${_f}" 'BEGIN { printf "%.2f", v + 0 }')"
+fi
+
+# --- InnoDB buffer pool: read ratio = 1 - reads/read_requests (% served from the
+# in-memory pool). Plus the configured pool size and the free-pages percentage.
+innodb_ratio=0
+innodb_pool_mib=0
+innodb_free_pct=0
+if service_running db; then
+  innodb_raw="$(vibe_compose exec -T db sh 2>/dev/null <<'SH'
+mariadb -N -u"${MARIADB_USER}" -p"${MARIADB_PASSWORD}" -e "
+  SHOW GLOBAL STATUS WHERE Variable_name IN
+    ('Innodb_buffer_pool_read_requests','Innodb_buffer_pool_reads',
+     'Innodb_buffer_pool_pages_free','Innodb_buffer_pool_pages_total');
+  SHOW VARIABLES WHERE Variable_name = 'innodb_buffer_pool_size';
+" 2>/dev/null
+SH
+)"
+  _req="$(printf '%s\n' "${innodb_raw}" | awk '/Innodb_buffer_pool_read_requests/ {print $2; exit}')"
+  _reads="$(printf '%s\n' "${innodb_raw}" | awk '/Innodb_buffer_pool_reads/ {print $2; exit}')"
+  _pfree="$(printf '%s\n' "${innodb_raw}" | awk '/Innodb_buffer_pool_pages_free/ {print $2; exit}')"
+  _ptotal="$(printf '%s\n' "${innodb_raw}" | awk '/Innodb_buffer_pool_pages_total/ {print $2; exit}')"
+  _size="$(printf '%s\n' "${innodb_raw}" | awk '/innodb_buffer_pool_size/ {print $2; exit}')"
+  innodb_ratio="$(awk -v rq="${_req:-0}" -v rd="${_reads:-0}" 'BEGIN { if (rq > 0) printf "%d", (1 - (rd / rq)) * 100; else printf "0" }')"
+  innodb_free_pct="$(awk -v f="${_pfree:-0}" -v t="${_ptotal:-0}" 'BEGIN { if (t > 0) printf "%d", (f / t) * 100; else printf "0" }')"
+  innodb_pool_mib="$(awk -v b="${_size:-0}" 'BEGIN { printf "%d", b / 1048576 }')"
+fi
+
+# --- FastCGI cache hit ratio: keep perf-report's coarse 2-request HIT probe
+# (0|100). Documented as coarse — the advisor must not over-weight it.
+fastcgi_hit=0
+site_url="${VIBE_PERF_URL:-${WP_HOME:-http://localhost:${HTTP_PORT:-8080}}}"
+site_url="${site_url%/}/"
+if command -v curl >/dev/null 2>&1; then
+  curl -sS -o /dev/null --max-time 10 "${site_url}" >/dev/null 2>&1 || true
+  fc_hdr="$(curl -sS -o /dev/null -D - --max-time 10 "${site_url}" 2>/dev/null \
+    | grep -i '^X-FastCGI-Cache:' | tail -n1 | tr -d '\r' | sed 's/^[^:]*:[[:space:]]*//')"
+  [ "${fc_hdr}" = "HIT" ] && fastcgi_hit=100
+fi
+
+if [ "${perf_json}" = "1" ]; then
+  printf '{'
+  printf '"host":{"ramTotalMiB":%d,"ramFreeMiB":%d,"ramAvailableMiB":%d},' \
+    "${ram_total_mib}" "${ram_free_mib}" "${ram_available_mib}"
+  printf '"fpm":{"active":%d,"idle":%d,"total":%d,"maxChildren":%d,"listenQueue":%d,"maxActiveReached":%d,"slowRequests":%d,"avgRssMiB":%d},' \
+    "${fpm_active}" "${fpm_idle}" "${fpm_total}" "${fpm_max_children}" \
+    "${fpm_listen_queue}" "${fpm_max_active}" "${fpm_slow_requests}" "${fpm_avg_rss_mib}"
+  printf '"opcache":{"hitRatePercent":%d,"usedMiB":%d,"freeMiB":%d,"wastedMiB":%d,"oomRestarts":%d},' \
+    "${opcache_hit}" "${opcache_used_mib}" "${opcache_free_mib}" "${opcache_wasted_mib}" "${opcache_oom_restarts}"
+  printf '"redis":{"hitRatePercent":%d,"evictedKeysDelta":%d,"evictedKeysTotal":%d,"usedMemoryMiB":%d,"maxMemoryMiB":%d,"fragmentationRatio":%s},' \
+    "${redis_hit}" "${redis_evicted_delta}" "${redis_evicted_total}" "${redis_used_mib}" "${redis_max_mib}" "${redis_frag:-0}"
+  printf '"innodb":{"bufferPoolReadRatioPercent":%d,"bufferPoolSizeMiB":%d,"bufferPoolFreePct":%d},' \
+    "${innodb_ratio}" "${innodb_pool_mib}" "${innodb_free_pct}"
+  printf '"fastcgi":{"hitRatePercent":%d},' "${fastcgi_hit}"
+  printf '"window":{"sampleMs":%d,"samples":2}' \
+    "$(awk -v s="${PERF_SAMPLE_SECONDS}" 'BEGIN { printf "%d", s * 1000 }')"
+  printf '}\n'
+else
+  printf 'Performance measurement (%s)\n' "${VIBE_ENV}"
+  printf '  host RAM total/free/avail MiB : %d / %d / %d\n' "${ram_total_mib}" "${ram_free_mib}" "${ram_available_mib}"
+  printf '  fpm active/idle/total/max     : %d / %d / %d / %d\n' "${fpm_active}" "${fpm_idle}" "${fpm_total}" "${fpm_max_children}"
+  printf '  fpm listenQueue/maxActive     : %d / %d\n' "${fpm_listen_queue}" "${fpm_max_active}"
+  printf '  opcache hit used/free MiB     : %d / %d / %d (oom %d)\n' "${opcache_hit}" "${opcache_used_mib}" "${opcache_free_mib}" "${opcache_oom_restarts}"
+  printf '  redis hit evictedD used/max   : %d / %d / %d / %d MiB\n' "${redis_hit}" "${redis_evicted_delta}" "${redis_used_mib}" "${redis_max_mib}"
+  printf '  innodb readRatio poolMiB free : %d / %d / %d\n' "${innodb_ratio}" "${innodb_pool_mib}" "${innodb_free_pct}"
+  printf '  fastcgi hit                   : %d\n' "${fastcgi_hit}"
+fi

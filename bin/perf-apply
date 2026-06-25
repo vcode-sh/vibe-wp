@@ -1,0 +1,280 @@
+#!/usr/bin/env sh
+set -eu
+umask 077
+LC_ALL=C
+export LC_ALL
+
+# perf-apply — MUTATING performance-tuning writer for feature #5 (Smart
+# Performance Advisor). HIGH-RISK + NOT-YET-VALIDATED on a real VPS: raising
+# pm.max_children / innodb buffer pool / opcache / redis maxmemory together can
+# over-commit RAM and trigger the OOM-killer or a failed MariaDB start. It is
+# admin-gated in the panel and shipped behind the experimental label. The
+# advisor/preview is the shippable surface; this writer is the scaffolded side.
+#
+# It mirrors bin/site-config-apply's atomic-rename + managed-key allowlist
+# writer, but with a FIXED PERF_KEY_ALLOWLIST = exactly the advisor's tunable
+# keys. Before writing it:
+#   (a) snapshots the current values of the managed keys to env/<env>.perf.bak,
+#   (b) upserts only keys that are BOTH in PERF_KEY_ALLOWLIST AND named by the
+#       caller in VIBE_PERF_KEYS (same contract as site-config-apply),
+#   (c) validates each value's shape (integer for counts, /^[0-9]+[MmGg]?[Bb]?$/
+#       for memory sizes), and
+#   (d) RE-ASSERTS reservedMiB <= 85% host RAM at THIS root boundary before
+#       committing — distrusting the panel's math entirely.
+# `perf-apply --rollback` restores the managed keys from the sidecar snapshot.
+#
+# Values arrive via the environment (VIBE_PERF_<KEY>), NEVER on argv — identical
+# transport to site-config-apply so there is no argv metacharacter surface.
+# A wordpress+db container recreate is required for the rendered config to take
+# effect (the entrypoints re-render from env); the apply JOB triggers that.
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+vibe_require_env_file
+file="${VIBE_ENV_FILE}"
+sidecar="${file}.perf.bak"
+
+# The FIXED allowlist of keys this command may write. MUST equal the advisor's
+# tunable set (control-panel/packages/api/src/core-bridge/perf-advisor.ts
+# PERF_TUNABLE_KEYS) AND the panel exec.ts contract. Counts are integers;
+# the *_SIZE / *MAXMEMORY / *MEMORY_LIMIT keys are byte-size strings.
+PERF_KEY_ALLOWLIST="PHP_FPM_PM_MAX_CHILDREN PHP_FPM_PM_START_SERVERS PHP_FPM_PM_MIN_SPARE_SERVERS PHP_FPM_PM_MAX_SPARE_SERVERS MARIADB_INNODB_BUFFER_POOL_SIZE PHP_OPCACHE_MEMORY_CONSUMPTION REDIS_MAXMEMORY WP_MEMORY_LIMIT"
+
+# Per-FPM-child memory budget (MiB) used when re-deriving reservedMiB at the root
+# boundary. Mirrors the advisor default. OS reserve (MiB) held back from the cap.
+PERF_PER_CHILD_MIB="${PERF_PER_CHILD_MIB:-64}"
+PERF_OS_RESERVE_MIB="${PERF_OS_RESERVE_MIB:-512}"
+PERF_RAM_CAP_PERCENT=85
+
+die() {
+  echo "perf-apply: $1" >&2
+  exit 2
+}
+
+# Membership test against a space-separated list (POSIX-safe, no arrays).
+in_list() {
+  needle="$1"
+  list="$2"
+  for item in ${list}; do
+    [ "${item}" = "${needle}" ] && return 0
+  done
+  return 1
+}
+
+# Read a single KEY's current value from the env file WITHOUT sourcing it (so no
+# env content can execute). Strips surrounding quotes. Empty when absent.
+env_read() {
+  k="$1"
+  [ -f "${file}" ] || { printf ''; return 0; }
+  line="$(grep -m1 "^${k}=" "${file}" 2>/dev/null || true)"
+  val="${line#*=}"
+  case "${val}" in
+    \"*\") val="${val#\"}"; val="${val%\"}" ;;
+    \'*\') val="${val#\'}"; val="${val%\'}" ;;
+  esac
+  printf '%s' "${val}"
+}
+
+# Convert a memory-size string (e.g. 512M, 1G, 256mb, 268435456) to MiB. Used
+# only for the reserved-RAM cap math; the writer stores the original string.
+size_to_mib() {
+  raw="$1"
+  case "${raw}" in
+    ''|*[!0-9MmGgKkBb]*) printf '0'; return 0 ;;
+  esac
+  num="$(printf '%s' "${raw}" | sed -n 's/^\([0-9][0-9]*\).*/\1/p')"
+  [ -n "${num}" ] || { printf '0'; return 0; }
+  unit="$(printf '%s' "${raw}" | sed -n 's/^[0-9][0-9]*\([A-Za-z]*\)$/\1/p' | tr 'A-Z' 'a-z')"
+  case "${unit}" in
+    g|gb)  awk -v n="${num}" 'BEGIN { printf "%d", n * 1024 }' ;;
+    k|kb)  awk -v n="${num}" 'BEGIN { printf "%d", n / 1024 }' ;;
+    ''|b)  awk -v n="${num}" 'BEGIN { printf "%d", n / 1048576 }' ;;
+    *)     printf '%s' "${num}" ;;  # m|mb already MiB
+  esac
+}
+
+# Host RAM in MiB, read from /proc/meminfo at THIS root boundary (never trusting
+# a panel-supplied figure). 0 on a non-Linux host.
+host_ram_mib() {
+  if [ -r /proc/meminfo ]; then
+    kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null)"
+    awk -v k="${kb:-0}" 'BEGIN { printf "%d", k / 1024 }'
+  else
+    printf '0'
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Rollback mode: restore the managed keys from the sidecar snapshot, then exit.
+# ---------------------------------------------------------------------------
+if [ "${1:-}" = "--rollback" ]; then
+  [ -f "${sidecar}" ] || die "no perf snapshot to roll back to (${sidecar} missing)"
+  # The sidecar holds KEY=value lines for the managed keys captured pre-apply.
+  # We feed them through the same validated upsert path below by exporting them
+  # and declaring them via VIBE_PERF_KEYS, so rollback can never write a value
+  # the forward path would have rejected.
+  changed_keys=""
+  while IFS= read -r entry || [ -n "${entry}" ]; do
+    case "${entry}" in
+      ''|\#*) continue ;;
+    esac
+    k="${entry%%=*}"
+    in_list "${k}" "${PERF_KEY_ALLOWLIST}" || continue
+    v="${entry#*=}"
+    case "${v}" in
+      \"*\") v="${v#\"}"; v="${v%\"}" ;;
+      \'*\') v="${v#\'}"; v="${v%\'}" ;;
+    esac
+    export "VIBE_PERF_${k}=${v}"
+    changed_keys="${changed_keys} ${k}"
+  done < "${sidecar}"
+  VIBE_PERF_KEYS="${changed_keys# }"
+  export VIBE_PERF_KEYS
+  ROLLBACK=1
+else
+  ROLLBACK=0
+fi
+
+# All edits are staged on a working copy that inherits the env file's mode/owner
+# (cp -p), then swapped in with a single atomic rename — identical to
+# site-config-apply, so the real env file (which holds secrets) is never seen
+# truncated or half-written and keeps its 0600 permissions.
+work="${file}.vibe-perf.$$"
+line="${work}.line"
+trap 'rm -f "${work}" "${line}"' EXIT INT TERM
+cp -p "${file}" "${work}"
+
+sq_escape() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+env_upsert() {
+  key="$1"
+  val="$2"
+  val="$(printf '%s' "${val}" | tr -d '\r\n')"
+  quoted="$(sq_escape "${val}")"
+  found=0
+  {
+    while IFS= read -r entry || [ -n "${entry}" ]; do
+      case "${entry}" in
+        "${key}="*)
+          printf '%s=%s\n' "${key}" "${quoted}"
+          found=1
+          ;;
+        *) printf '%s\n' "${entry}" ;;
+      esac
+    done < "${work}"
+    [ "${found}" -eq 1 ] || printf '%s=%s\n' "${key}" "${quoted}"
+  } > "${line}"
+  cat "${line}" > "${work}"
+}
+
+# Validate a single managed value's SHAPE. Counts are bare integers; the memory
+# keys accept an optional M/G/K + optional B suffix. Anything else is fatal — the
+# writer must not trust the caller (env files are sourced as root downstream).
+validate_perf_value() {
+  vkey="$1"
+  vval="$2"
+  case "${vkey}" in
+    PHP_FPM_PM_MAX_CHILDREN|PHP_FPM_PM_START_SERVERS|PHP_FPM_PM_MIN_SPARE_SERVERS|PHP_FPM_PM_MAX_SPARE_SERVERS|PHP_OPCACHE_MEMORY_CONSUMPTION)
+      case "${vval}" in
+        ''|*[!0-9]*) die "non-integer value for ${vkey}: ${vval}" ;;
+      esac
+      ;;
+    MARIADB_INNODB_BUFFER_POOL_SIZE|REDIS_MAXMEMORY|WP_MEMORY_LIMIT)
+      # /^[0-9]+[MmGgKk]?[Bb]?$/
+      case "${vval}" in
+        ''|*[!0-9MmGgKkBb]*) die "non-size value for ${vkey}: ${vval}" ;;
+        [0-9]*) : ;;
+        *) die "size for ${vkey} must start with a digit: ${vval}" ;;
+      esac
+      ;;
+    *) die "unsupported managed key: ${vkey}" ;;
+  esac
+}
+
+# Build the FINAL proposed value for a managed key: the caller-supplied value if
+# named + present, otherwise the current env-file value (so unspecified memory
+# keys still count toward the reserved-RAM cap with their existing size).
+proposed_value() {
+  pkey="$1"
+  if in_list "${pkey}" "${changed_set}"; then
+    eval "pv=\${VIBE_PERF_${pkey}:-__VIBE_UNSET__}"
+    [ "${pv}" = "__VIBE_UNSET__" ] || { printf '%s' "${pv}"; return 0; }
+  fi
+  env_read "${pkey}"
+}
+
+# The caller MUST declare which managed keys it is changing via VIBE_PERF_KEYS.
+changed_set="${VIBE_PERF_KEYS:-}"
+
+# Validate every declared key is managed + has a valid value BEFORE any cap math.
+for key in ${changed_set}; do
+  in_list "${key}" "${PERF_KEY_ALLOWLIST}" || die "refusing to write unmanaged key: ${key}"
+  eval "val=\${VIBE_PERF_${key}:-__VIBE_UNSET__}"
+  [ "${val}" = "__VIBE_UNSET__" ] && continue
+  validate_perf_value "${key}" "${val}"
+done
+
+# --- HARD INVARIANT re-asserted at the root boundary (distrust the panel):
+# reservedMiB = maxChildren*perChildMiB + innodbBufferPool + opcacheMemory
+#             + redisMaxmemory + wpMemoryLimit + OS reserve
+# must be <= PERF_RAM_CAP_PERCENT% of host RAM. We compute it from the PROPOSED
+# state (caller values where supplied, current env file otherwise). On a host
+# where RAM is unknown (0) we SKIP the cap (dev/non-Linux) — but the panel only
+# ever calls this in prod where /proc/meminfo exists.
+ram_mib="$(host_ram_mib)"
+if [ "${ram_mib}" -gt 0 ]; then
+  mc="$(proposed_value PHP_FPM_PM_MAX_CHILDREN)"
+  case "${mc}" in ''|*[!0-9]*) mc=0 ;; esac
+  innodb_mib="$(size_to_mib "$(proposed_value MARIADB_INNODB_BUFFER_POOL_SIZE)")"
+  opcache_mib="$(proposed_value PHP_OPCACHE_MEMORY_CONSUMPTION)"
+  case "${opcache_mib}" in ''|*[!0-9]*) opcache_mib=0 ;; esac
+  redis_mib="$(size_to_mib "$(proposed_value REDIS_MAXMEMORY)")"
+  wp_mib="$(size_to_mib "$(proposed_value WP_MEMORY_LIMIT)")"
+
+  reserved_mib="$(awk \
+    -v mc="${mc}" -v pc="${PERF_PER_CHILD_MIB}" \
+    -v ib="${innodb_mib}" -v op="${opcache_mib}" \
+    -v rd="${redis_mib}" -v wp="${wp_mib}" -v os="${PERF_OS_RESERVE_MIB}" \
+    'BEGIN { printf "%d", (mc * pc) + ib + op + rd + wp + os }')"
+  cap_mib="$(awk -v r="${ram_mib}" -v p="${PERF_RAM_CAP_PERCENT}" \
+    'BEGIN { printf "%d", (r * p) / 100 }')"
+  if [ "${reserved_mib}" -gt "${cap_mib}" ]; then
+    die "refusing to apply: reserved ${reserved_mib} MiB exceeds ${PERF_RAM_CAP_PERCENT}% of ${ram_mib} MiB host RAM (cap ${cap_mib} MiB)"
+  fi
+fi
+
+# Snapshot the CURRENT values of every managed key before writing, so --rollback
+# can restore the exact prior state. Skip when this IS a rollback (don't clobber
+# the snapshot we are restoring from).
+if [ "${ROLLBACK}" -eq 0 ]; then
+  snap_tmp="${sidecar}.$$"
+  : > "${snap_tmp}"
+  for key in ${PERF_KEY_ALLOWLIST}; do
+    cur="$(env_read "${key}")"
+    [ -n "${cur}" ] || continue
+    printf '%s=%s\n' "${key}" "${cur}" >> "${snap_tmp}"
+  done
+  # Inherit secure perms from the env file; atomically swap into place.
+  chmod 0600 "${snap_tmp}" 2>/dev/null || true
+  mv -f "${snap_tmp}" "${sidecar}"
+fi
+
+# Upsert only keys that are BOTH managed AND explicitly named by the caller.
+wrote=0
+for key in ${changed_set}; do
+  eval "val=\${VIBE_PERF_${key}:-__VIBE_UNSET__}"
+  [ "${val}" = "__VIBE_UNSET__" ] && continue
+  env_upsert "${key}" "${val}"
+  wrote=$((wrote + 1))
+done
+
+# Atomic, same-filesystem swap into place.
+mv -f "${work}" "${file}"
+if [ "${ROLLBACK}" -eq 1 ]; then
+  echo "Performance settings rolled back from ${sidecar} (${wrote} keys)"
+else
+  echo "Performance settings applied to ${file} (${wrote} keys; snapshot ${sidecar})"
+fi

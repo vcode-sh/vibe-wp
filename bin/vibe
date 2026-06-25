@@ -28,6 +28,8 @@ Commands:
   harden [--dry-run] [--ssh-key-only]  Apply host hardening (firewall, fail2ban, auto-updates)
   doctor-runtime             Run runtime checks
   perf-report                Print a read-only performance report
+  perf-measure [--json]      Sample FPM/OPcache/Redis/InnoDB/host RAM over a short window (advisor input)
+  perf-apply [--rollback]    EXPERIMENTAL: write advisor-suggested tunables (env-transported); --rollback restores the snapshot
   smoke                      Run smoke tests
   cache-flush                Flush object cache and Nginx page cache
   refresh-from-prod --yes    Refresh this staging env from prod
@@ -243,6 +245,12 @@ case "${command}" in
     ;;
   perf-report)
     "${VIBE_BIN_DIR}/perf-report" "$@"
+    ;;
+  perf-measure)
+    "${VIBE_BIN_DIR}/perf-measure" "$@"
+    ;;
+  perf-apply)
+    "${VIBE_BIN_DIR}/perf-apply" "$@"
     ;;
   smoke)
     "${VIBE_BIN_DIR}/smoke" "$@"
