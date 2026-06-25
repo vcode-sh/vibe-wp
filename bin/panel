@@ -522,13 +522,15 @@ sync_site_bins() {
   done
 }
 
-# Deliver the platform mu-plugins (content/mu-plugins/vibe-wp-*.php) into each
-# managed site's bind-mounted content/mu-plugins/ so mu-plugin updates reach
-# EXISTING sites — not only newly-provisioned ones (whose mu-plugins are seeded
-# from the image at first boot). mu-plugins load per request, so no restart is
-# needed. Only the platform's own vibe-wp-*.php are touched; a site's custom
-# mu-plugins are left alone. World-readable so the container's www-data can load
-# them (the content/ bind preserves host uid/gid).
+# Deliver the platform mu-plugins (content/mu-plugins/vibe-wp-*.php) to each
+# managed site so mu-plugin updates (e.g. one-click login) reach EXISTING sites,
+# not only newly-provisioned ones (whose mu-plugins are seeded from the image at
+# first boot). mu-plugins load per request, so no restart is needed. Only the
+# platform's own vibe-wp-*.php are touched; a site's custom mu-plugins are left
+# alone. We deliver TWO ways because prod sites mount wp-content as a named Docker
+# VOLUME (not the ./content bind): (1) copy into the site's host content/mu-plugins
+# for bind-topology sites, and (2) `docker cp` into the running wordpress
+# container so volume-topology sites get them too (persists across recreate).
 sync_site_mu_plugins() {
   src_mu="$REPO_DIR/content/mu-plugins"
   $SUDO test -d "$src_mu" || return 0
@@ -539,13 +541,26 @@ sync_site_mu_plugins() {
       case "$site_dir" in
         "$REPO_DIR"|"$PANEL_DIR") continue ;;
       esac
+
+      # (1) host bind copy
       dest_mu="$site_dir/content/mu-plugins"
-      $SUDO test -d "$dest_mu" || continue
+      if $SUDO test -d "$dest_mu"; then
+        for f in "$src_mu"/vibe-wp-*.php; do
+          $SUDO test -f "$f" || continue
+          $SUDO cp -f "$f" "$dest_mu/" 2>/dev/null || true
+        done
+        $SUDO chmod 0644 "$dest_mu"/vibe-wp-*.php 2>/dev/null || true
+      fi
+
+      # (2) into the running container (covers the named-volume prod topology).
+      # env 'prod' auto-resolves to the site's real topology (bin/lib/vibe.sh).
+      wp_cid="$("$site_dir/bin/vibe" prod compose ps -q wordpress 2>/dev/null | head -1)"
+      [ -n "$wp_cid" ] || continue
       for f in "$src_mu"/vibe-wp-*.php; do
         $SUDO test -f "$f" || continue
-        $SUDO cp -f "$f" "$dest_mu/" 2>/dev/null || true
+        $SUDO docker cp "$f" "$wp_cid:/var/www/html/wp-content/mu-plugins/$(basename "$f")" 2>/dev/null || true
       done
-      $SUDO chmod 0644 "$dest_mu"/vibe-wp-*.php 2>/dev/null || true
+      $SUDO docker exec "$wp_cid" sh -c 'chown www-data:www-data /var/www/html/wp-content/mu-plugins/vibe-wp-*.php 2>/dev/null; chmod 0644 /var/www/html/wp-content/mu-plugins/vibe-wp-*.php 2>/dev/null' 2>/dev/null || true
     done
   done
 }
