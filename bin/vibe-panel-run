@@ -297,17 +297,19 @@ validate_wp_slug() {
   [ "${#slug}" -le 63 ] || die "wp slug too long: $slug"
 }
 
-# A WordPress user_login. WP itself permits letters, digits, space, and . _ @ -
-# (sanitize_user). We allow exactly that set and nothing else, so the login is
-# safe to pass as a single quoted argv token to wp-cli — no shell metacharacter,
-# no '/', no leading hyphen. The login is NOT a secret (the password is STDIN).
-validate_wp_login() {
-  login="$1"
-  case "$login" in
-    ''|-*) die "wp login empty or leading-hyphen: $login" ;;
-    *[!A-Za-z0-9._@\ -]*) die "wp login has illegal characters: $login" ;;
+# A WordPress user ID — the target of wp-user-set-password. We address users by
+# their numeric id (NOT by login): the panel already has the unambiguous id from
+# the user-list read, and `wp user get <login>` would otherwise treat a numeric
+# or email-shaped login as an id/email and reset a different account. Digits only
+# (no sign, no whitespace, no leading-hyphen flag injection), 1..9 digits so it
+# is a single safe argv token and a plausible row id.
+validate_wp_user_id() {
+  id="$1"
+  case "$id" in
+    ''|*[!0-9]*) die "wp user id must be a positive integer: $id" ;;
   esac
-  [ "${#login}" -le 60 ] || die "wp login too long: $login"
+  [ "${#id}" -le 9 ] || die "wp user id too long: $id"
+  [ "$id" -ge 1 ] || die "wp user id must be >= 1: $id"
 }
 
 validate_wp_version_flag() {
@@ -624,10 +626,10 @@ case "$sub" in
       vuln-feed-fetch)                     # ZERO argv args — slugs arrive on STDIN
         [ "$#" -eq 0 ] || die "vuln-feed-fetch takes no arguments (slugs are stdin-only)"
         ;;
-      wp-user-set-password)                # <login> on argv; the new password is
-        # read from STDIN ONLY (never argv/ps/logs), mirroring vuln-feed-fetch.
-        [ "$#" -eq 1 ] || die "wp-user-set-password takes exactly one arg (the login)"
-        validate_wp_login "$1"
+      wp-user-set-password)                # <numeric id> on argv; the new password
+        # is read from STDIN ONLY (never argv/ps/logs), mirroring vuln-feed-fetch.
+        [ "$#" -eq 1 ] || die "wp-user-set-password takes exactly one arg (the user id)"
+        validate_wp_user_id "$1"
         ;;
       perf-apply)                          # mutating perf-tuning writer (feature #5)
         # Only `--rollback` or NO args may reach the writer on argv. The tunable

@@ -23,13 +23,15 @@ function runValidateWp(...args: string[]): number {
 }
 
 /**
- * Same harness for validate_wp_login — the root-side gate on the user_login that
- * reaches `wp-user-set-password <login>` on argv. 0 = accepted, 1 = rejected.
+ * Same harness for validate_wp_user_id — the root-side gate on the numeric user
+ * id that reaches `wp-user-set-password <id>` on argv. We address users by id
+ * (not login) so wp-cli can't read a numeric/email-shaped login as an id/email
+ * and reset the wrong account. 0 = accepted, 1 = rejected.
  */
-function runValidateWpLogin(login: string): number {
+function runValidateWpUserId(id: string): number {
 	const script =
-		'VIBE_PANEL_RUN_LIB=1 . "$1" || exit 99; shift; validate_wp_login "$1"';
-	const res = spawnSync("sh", ["-c", script, "sh", WRAPPER, login], {
+		'VIBE_PANEL_RUN_LIB=1 . "$1" || exit 99; shift; validate_wp_user_id "$1"';
+	const res = spawnSync("sh", ["-c", script, "sh", WRAPPER, id], {
 		encoding: "utf8",
 	});
 	return res.status ?? -1;
@@ -86,35 +88,27 @@ describe("validate_wp_args — user-list is a single fixed form", () => {
 	});
 });
 
-describe("validate_wp_login — accepts real WordPress logins", () => {
-	it.each([
-		"admin",
-		"tom.robak",
-		"user_1",
-		"a@b.com",
-		"John Doe",
-		"x".repeat(60),
-	])("accepts %j", (login) => {
-		expect(runValidateWpLogin(login)).toBe(0);
+describe("validate_wp_user_id — accepts positive integer ids", () => {
+	it.each(["1", "5", "42", "12345", "999999999"])("accepts %j", (id) => {
+		expect(runValidateWpUserId(id)).toBe(0);
 	});
 });
 
-describe("validate_wp_login — rejects injection + policy violations", () => {
+describe("validate_wp_user_id — rejects non-ids + injection", () => {
 	it.each([
 		"", // empty
-		"-admin", // leading hyphen (could be read as a flag)
-		"--skip-plugins",
-		"admin; rm -rf /",
-		"admin$(whoami)",
-		"admin`id`",
-		"admin|evil",
-		"admin && evil",
-		"admin>/tmp/x",
-		"../../etc/passwd", // slash is not allowed
-		"admin\nroot", // newline
-		"x".repeat(61), // over the 60-char cap
-	])("rejects %j", (login) => {
-		expect(runValidateWpLogin(login)).toBe(1);
+		"0", // must be >= 1
+		"-1", // negative / leading hyphen (flag injection)
+		"1.5", // not an integer
+		"5; id", // shell metacharacters
+		"5 6", // whitespace / multi-token
+		"admin", // a login, not an id
+		"a@b.com", // an email-shaped login
+		"1e3", // exponent notation
+		"0x5", // hex
+		"1234567890", // 10 digits — over the cap
+	])("rejects %j", (id) => {
+		expect(runValidateWpUserId(id)).toBe(1);
 	});
 });
 

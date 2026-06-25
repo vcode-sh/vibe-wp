@@ -192,21 +192,25 @@ case "${command}" in
     vibe_wp "$@"
     ;;
   wp-user-set-password)
-    # Set a WordPress user's password. The login is on argv (charset-validated by
-    # the panel wrapper); the NEW PASSWORD arrives on STDIN ONLY — never argv, ps,
-    # or logs. We read it into a shell variable (invisible to `ps`/proc cmdline),
-    # resolve the user id, then pipe the password to `wp eval` over STDIN so
-    # wp_set_password() never receives it on a command line. Runs through the
-    # image entrypoint (vibe_wp), so WORDPRESS_CONFIG_EXTRA/object-cache are set.
-    _login="${1:?wp-user-set-password needs a login}"
-    IFS= read -r _vibe_new_pw || true
-    [ -n "${_vibe_new_pw:-}" ] || { echo "wp-user-set-password: empty password on stdin" >&2; exit 1; }
-    _uid="$(vibe_wp user get "$_login" --field=ID --skip-plugins --skip-themes 2>/dev/null | tr -dc '0-9')"
-    [ -n "$_uid" ] || { _vibe_new_pw=""; echo "wp-user-set-password: no such user: $_login" >&2; exit 1; }
-    printf '%s' "$_vibe_new_pw" | vibe_wp_stdin eval \
+    # Set a WordPress user's password BY NUMERIC ID. The id is on argv (digits
+    # only, validated by the panel wrapper); the NEW PASSWORD arrives on STDIN
+    # ONLY — never argv, ps, or logs. We deliberately do NOT read the password
+    # into a shell variable: a line-oriented `read` truncates a password that
+    # contains a newline (locking the user out), and a shell var cannot hold a
+    # NUL byte. Instead STDIN is piped straight into `wp eval`, which consumes
+    # the WHOLE stream via stream_get_contents(STDIN) — the exact bytes the panel
+    # wrote, nothing lost. Resolving by id (not login) avoids wp-cli's user
+    # fetcher treating a numeric/email-shaped login as an id/email and hitting a
+    # different account. The id-existence probe reads </dev/null so it cannot
+    # swallow the password waiting on STDIN. Runs through the image entrypoint
+    # (vibe_wp), so WORDPRESS_CONFIG_EXTRA/object-cache are set.
+    _uid="${1:?wp-user-set-password needs a numeric user id}"
+    case "$_uid" in ''|*[!0-9]*) echo "wp-user-set-password: id must be numeric: $_uid" >&2; exit 1 ;; esac
+    _login="$(vibe_wp user get "$_uid" --field=user_login --skip-plugins --skip-themes </dev/null 2>/dev/null | tr -d '\r\n')"
+    [ -n "$_login" ] || { echo "wp-user-set-password: no such user id: $_uid" >&2; exit 1; }
+    vibe_wp_stdin eval \
       'wp_set_password(stream_get_contents(STDIN), '"$_uid"');' --skip-plugins --skip-themes
     _rc=$?
-    _vibe_new_pw=""   # scrub the plaintext from memory
     [ "$_rc" -eq 0 ] || { echo "wp-user-set-password: failed to set password" >&2; exit 1; }
     echo "Password updated for WordPress user '$_login' (id $_uid)."
     ;;

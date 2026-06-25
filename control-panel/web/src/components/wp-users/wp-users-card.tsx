@@ -76,7 +76,7 @@ function ResetPasswordDialog({
 					onSubmit={(e) => {
 						e.preventDefault();
 						if (valid && !reset.isPending) {
-							reset.mutate({ siteId, login: user.login, password: next });
+							reset.mutate({ siteId, userId: user.id, password: next });
 						}
 					}}
 				>
