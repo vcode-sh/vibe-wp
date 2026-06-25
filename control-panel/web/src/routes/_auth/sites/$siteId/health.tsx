@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { PerformanceAdvisorCard } from "@/components/health/performance-advisor-card";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { VerdictTile } from "@/components/patterns/verdict-tile";
@@ -131,6 +132,7 @@ function HealthPage() {
 									) : null}
 								</QueryBoundary>
 							) : null}
+							<PerformanceAdvisorCard siteId={siteId} />
 						</>
 					) : null}
 				</QueryBoundary>
