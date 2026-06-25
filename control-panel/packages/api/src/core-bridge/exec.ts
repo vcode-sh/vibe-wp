@@ -1,7 +1,7 @@
 import { redact } from "./redact";
 import { mergeLineStreams } from "./stream-merge";
 
-export type VibeEnv = "local" | "stage" | "prod" | "external";
+export type VibeEnv = "local" | "stage" | "prod" | "external" | "shared-db";
 
 /**
  * Privilege boundary. In production the panel server runs as the unprivileged

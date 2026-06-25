@@ -97,7 +97,7 @@ validate_site_dir() {
 # Validate the env token against the fixed set the stack supports.
 validate_env() {
   case "$1" in
-    local|stage|prod|external) : ;;
+    local|stage|prod|external|shared-db) : ;;
     *) die "invalid env: $1" ;;
   esac
 }
