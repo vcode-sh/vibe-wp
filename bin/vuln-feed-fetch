@@ -87,14 +87,27 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 0
 fi
 
-# Build auth header WITHOUT putting the key on the process argv: pass it via a
-# header file read from stdin redirection is awkward in POSIX sh, so we use
-# curl's --header with the value sourced from the env var directly. curl does not
-# log its own headers and we never echo $PANEL_VULN_FEED_KEY ourselves.
-auth_args=""
+# Build the optional auth header as ONE curl argument. We must NOT word-split the
+# header: an operator-supplied key with whitespace or shell metacharacters would
+# otherwise spill into extra argv (or inject curl flags). Stash the `-H` flag and
+# the single `Authorization: Bearer <key>` value as positional params with
+# `set --`, so the curl call can expand "$@" with each kept intact. When the key
+# is unset, "$@" is empty and no auth header is sent (behavior unchanged). curl
+# does not log its own headers and we never echo $PANEL_VULN_FEED_KEY ourselves.
+set --
 if [ -n "${PANEL_VULN_FEED_KEY:-}" ]; then
-  # shellcheck disable=SC2089
-  auth_args="-H Authorization:Bearer ${PANEL_VULN_FEED_KEY}"
+  # Defense in depth: reject a key containing whitespace or control characters.
+  # A valid bearer token is a single opaque line; anything with spaces/tabs/CR/LF
+  # or other control bytes is malformed and unsafe to interpolate into a header.
+  case "$PANEL_VULN_FEED_KEY" in
+    *[[:space:]]* | *[[:cntrl:]]*)
+      echo "vuln-feed-fetch: PANEL_VULN_FEED_KEY contains whitespace or control characters; refusing to send auth header" >&2
+      exit 1
+      ;;
+  esac
+  # One header, one argument — no word-splitting. The value stays quoted as a
+  # single positional param, so the key reaches curl verbatim.
+  set -- -H "Authorization: Bearer ${PANEL_VULN_FEED_KEY}"
 fi
 
 # POST the newline-separated slug list as the body. A failure (network, non-2xx,
@@ -108,7 +121,7 @@ response="$(
     --max-time 12 \
     --max-filesize 262144 \
     --data-binary @- \
-    ${auth_args} \
+    "$@" \
     "$PANEL_VULN_FEED_URL" 2>/dev/null
 )" || { printf '{}\n'; exit 0; }
 
