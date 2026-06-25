@@ -13,6 +13,7 @@ import { runVibe } from "./exec";
 import type {
 	BackupCadence,
 	MonitorState,
+	SecurityFixKind,
 	SiteSettings,
 	WordpressImage,
 } from "./site-config-pure";
@@ -22,6 +23,7 @@ import {
 	imagePatchToEnv,
 	isAllowedWordpressImage,
 	parseScheduleStatus,
+	securityFixToEnv,
 } from "./site-config-pure";
 import { findSite } from "./sites";
 
@@ -127,6 +129,28 @@ export async function applyDebugFlags(
 	const site = await requireSite(siteId);
 	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
 		env,
+	});
+	ensureOk("site-config-apply", siteId, result);
+	return { restartRequired: true };
+}
+
+/**
+ * Apply a one-click security hardening fix by writing a single boolean key into
+ * the site env file (disableXmlRpc -> VIBE_WP_DISABLE_XMLRPC, disableFileEdit ->
+ * DISALLOW_FILE_EDIT). Both keys are honored only when the container renders its
+ * wp-config / MU-plugin behavior at start, so this returns restartRequired: true
+ * — the env write itself never restarts anything (the caller surfaces a watchable
+ * "Restart now" lifecycle job). The 0|1 value is revalidated by the root shell
+ * writer. The Insights signal (xmlrpc_enabled / file_edit_enabled) reflects the
+ * change only on the NEXT collection AFTER the restart, so the score updates then.
+ */
+export async function applySecurityFix(
+	siteId: string,
+	fix: SecurityFixKind
+): Promise<{ restartRequired: boolean }> {
+	const site = await requireSite(siteId);
+	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
+		env: securityFixToEnv(fix),
 	});
 	ensureOk("site-config-apply", siteId, result);
 	return { restartRequired: true };

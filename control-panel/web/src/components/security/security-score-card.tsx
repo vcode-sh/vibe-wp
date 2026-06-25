@@ -2,17 +2,13 @@
  * SecurityScoreCard — per-site security posture, derived from the Insights
  * mu-plugin (WordPress) and the host security-status. Shows a graded score, the
  * summary counts, and a prioritized list of findings. Each finding's `fix` maps
- * to an EXISTING panel action; the Fix control routes there rather than running
- * a mutation here. Fixes without a wired action (XML-RPC / file-edit) render a
- * disabled control with a "coming soon" hint. `null` from the query means
- * insights aren't collected yet — show the refresh-inventory empty state.
+ * to an EXISTING panel action; the Fix control either routes there (debug / core
+ * / plugins / host) or, for the two env-backed hardening toggles (XML-RPC /
+ * file-edit), runs the applySecurityFix mutation directly with a confirm. `null`
+ * from the query means insights aren't collected yet — show the refresh-inventory
+ * empty state.
  */
 
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@control-panel/ui/components/tooltip";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
@@ -22,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { inventoryQuery, securityScoreQuery } from "@/data/queries";
+import { useOperations } from "@/lib/operations/operations-provider";
 import { type client, orpc } from "@/lib/orpc/client";
 
 /** Derived from the typed oRPC client so the type tracks the server without a
@@ -90,8 +87,98 @@ function SeverityBadge({ severity }: { severity: Severity }) {
 	);
 }
 
-/** Maps a finding's `fix` to an existing route, or to a disabled "coming soon"
- * control. `null` fixes are informational (Site Health) — no control. */
+/** Copy for the two env-backed one-click hardening fixes. */
+const SECURITY_FIX_COPY: Record<
+	"disableXmlRpc" | "disableFileEdit",
+	{ confirm: string; success: string }
+> = {
+	disableXmlRpc: {
+		confirm:
+			"Disable XML-RPC for this site? This stops pingback DDoS amplification and XML-RPC brute-forcing. Apps that rely on XML-RPC (some legacy mobile/Jetpack flows) will stop working.",
+		success: "XML-RPC will be disabled. Restart the site to apply it.",
+	},
+	disableFileEdit: {
+		confirm:
+			"Disable the dashboard theme/plugin file editor for this site? This sets DISALLOW_FILE_EDIT — an admin-account compromise can no longer edit server code from wp-admin.",
+		success: "File editor will be disabled. Restart the site to apply it.",
+	},
+};
+
+/**
+ * One-click hardening control for the two env-backed fixes (XML-RPC / file-edit).
+ * Writes the env key via applySecurityFix, then — since the value is only honored
+ * when the container renders wp-config / the MU plugin at start — offers a
+ * "Restart now" action that fires the streamed lifecycleRestart job. The score
+ * only reflects the change on the NEXT insights collection after the restart, so
+ * the operator should press "Re-check" once the restart finishes.
+ */
+function SecurityFixButton({
+	siteId,
+	fix,
+}: {
+	siteId: string;
+	fix: "disableXmlRpc" | "disableFileEdit";
+}) {
+	const qc = useQueryClient();
+	const { start } = useOperations();
+	const apply = useMutation(orpc.applySecurityFix.mutationOptions());
+	const restart = useMutation(orpc.lifecycleRestart.mutationOptions());
+	const copy = SECURITY_FIX_COPY[fix];
+
+	async function triggerRestart() {
+		try {
+			const result = await restart.mutateAsync({ siteId });
+			start({
+				jobId: result.jobId,
+				title: `Restarting ${siteId}`,
+				kind: "restart",
+				siteId,
+			});
+		} catch {
+			toast.error("Failed to restart the site.");
+		}
+	}
+
+	async function handleFix() {
+		// biome-ignore lint/suspicious/noAlert: a host-changing fix needs an explicit operator confirm.
+		if (!window.confirm(copy.confirm)) {
+			return;
+		}
+		try {
+			const result = await apply.mutateAsync({ siteId, fix });
+			await qc.invalidateQueries(securityScoreQuery(siteId));
+			if (result.restartRequired) {
+				toast.success(copy.success, {
+					action: {
+						label: "Restart now",
+						onClick: () => {
+							triggerRestart();
+						},
+					},
+				});
+			} else {
+				toast.success(copy.success);
+			}
+		} catch {
+			toast.error("Failed to apply the fix. Operator role required.");
+		}
+	}
+
+	return (
+		<Button
+			disabled={apply.isPending || restart.isPending}
+			onClick={handleFix}
+			size="sm"
+			variant="outline"
+		>
+			{apply.isPending ? "Applying…" : "Fix"}
+		</Button>
+	);
+}
+
+/** Maps a finding's `fix` to an existing route, or to the one-click hardening
+ * mutation (XML-RPC / file-edit). `null` fixes are informational (Site Health) —
+ * no control. */
 function FixAffordance({
 	finding,
 	siteId,
@@ -140,22 +227,8 @@ function FixAffordance({
 		);
 	}
 
-	// disableXmlRpc / disableFileEdit — no one-click action wired yet.
-	return (
-		<Tooltip>
-			<TooltipTrigger
-				render={
-					<Button disabled size="sm" variant="outline">
-						Fix
-					</Button>
-				}
-			/>
-			<TooltipContent>
-				One-click fix coming soon — set DISALLOW_FILE_EDIT / disable XML-RPC
-				manually for now.
-			</TooltipContent>
-		</Tooltip>
-	);
+	// disableXmlRpc / disableFileEdit — env-backed one-click hardening toggles.
+	return <SecurityFixButton fix={fix.kind} siteId={siteId} />;
 }
 
 function FindingRow({

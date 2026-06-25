@@ -9,6 +9,7 @@ import {
 	computeSecurityScore,
 	type SecurityScore,
 } from "../core-bridge/security-score";
+import { applySecurityFix } from "../core-bridge/site-config";
 import { findSite } from "../core-bridge/sites";
 import { operatorProcedure } from "../procedures";
 
@@ -51,4 +52,29 @@ export const securityScoreRouter = {
 
 			return computeSecurityScore(insights, host);
 		}),
+
+	/**
+	 * Apply a one-click security hardening fix (disable XML-RPC / file editing) by
+	 * writing a single boolean key into the site env file. Returns restartRequired
+	 * so the UI offers a watchable "Restart now" lifecycle job — both keys are read
+	 * only when the container renders wp-config / MU-plugin behavior at start, so
+	 * the fix is inert until then. The score reflects the change on the NEXT
+	 * insights collection after the restart.
+	 *
+	 * Role: operatorProcedure per the feature scope (these are pure hardening
+	 * toggles that only ever tighten security and can never leak secrets). NOTE the
+	 * other siteConfigApply callers (siteDebugSet/siteFastcgiCacheSet/sitePhpImageSet)
+	 * are adminProcedure — this divergence is intentional but a human should confirm
+	 * the RBAC choice (see the feature's OPEN DECISION).
+	 */
+	applySecurityFix: operatorProcedure
+		.input(
+			z.object({
+				siteId: z.string().min(1),
+				fix: z.enum(["disableXmlRpc", "disableFileEdit"]),
+			})
+		)
+		.handler(
+			async ({ input }) => await applySecurityFix(input.siteId, input.fix)
+		),
 };

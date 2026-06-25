@@ -7,6 +7,7 @@ import {
 	imagePatchToEnv,
 	isAllowedWordpressImage,
 	parseScheduleStatus,
+	securityFixToEnv,
 } from "./site-config-pure";
 
 describe("envBool", () => {
@@ -159,5 +160,29 @@ describe("fastcgiCachePatchToEnv", () => {
 			NGINX_FASTCGI_CACHE: "off",
 			VIBE_SITE_CONFIG_KEYS: "NGINX_FASTCGI_CACHE",
 		});
+	});
+});
+
+describe("securityFixToEnv", () => {
+	it("maps disableXmlRpc to VIBE_WP_DISABLE_XMLRPC=1, naming only that key", () => {
+		expect(securityFixToEnv("disableXmlRpc")).toEqual({
+			VIBE_WP_DISABLE_XMLRPC: "1",
+			VIBE_SITE_CONFIG_KEYS: "VIBE_WP_DISABLE_XMLRPC",
+		});
+	});
+
+	it("maps disableFileEdit to DISALLOW_FILE_EDIT=1, naming only that key", () => {
+		expect(securityFixToEnv("disableFileEdit")).toEqual({
+			DISALLOW_FILE_EDIT: "1",
+			VIBE_SITE_CONFIG_KEYS: "DISALLOW_FILE_EDIT",
+		});
+	});
+
+	it("only ever sets the value to 1 (a security fix never loosens)", () => {
+		for (const fix of ["disableXmlRpc", "disableFileEdit"] as const) {
+			const env = securityFixToEnv(fix);
+			const named = env.VIBE_SITE_CONFIG_KEYS;
+			expect(env[named]).toBe("1");
+		}
 	});
 });

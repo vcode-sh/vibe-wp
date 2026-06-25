@@ -76,7 +76,10 @@ env_upsert() {
 # debug flags map onto vibe_wp_env_bool() lookups in the WordPress image
 # entrypoint; WORDPRESS_IMAGE is the FROM build arg that fixes the PHP version
 # and is only honored on a rebuild (vibe up --build), not a plain restart.
-managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG WORDPRESS_IMAGE NGINX_FASTCGI_CACHE"
+# DISALLOW_FILE_EDIT (entrypoint -> wp-config) and VIBE_WP_DISABLE_XMLRPC (read by
+# the vibe-wp-environment MU plugin) are the one-click security hardening toggles;
+# both are 0|1 booleans honored at container start, so a restart applies them.
+managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG WORDPRESS_IMAGE NGINX_FASTCGI_CACHE DISALLOW_FILE_EDIT VIBE_WP_DISABLE_XMLRPC"
 
 # The curated allowlist of WordPress runtime images the panel may select. This
 # MUST stay in lockstep with ALLOWED_WORDPRESS_IMAGES in the control panel
