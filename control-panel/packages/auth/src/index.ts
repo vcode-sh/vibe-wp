@@ -20,7 +20,20 @@ export function createAuth() {
 
 	return betterAuth({
 		database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
-		trustedOrigins: [env.CORS_ORIGIN],
+		// The primary magic-DNS origin (CORS_ORIGIN) is ALWAYS trusted. When the
+		// owner applies a custom panel domain, bin/panel-domain-apply writes
+		// PANEL_EXTRA_TRUSTED_ORIGIN into the panel env, ADDING that origin here so
+		// better-auth accepts requests on BOTH hosts. We do NOT change baseURL
+		// (below): it stays the magic-DNS BETTER_AUTH_URL so the existing session
+		// never breaks — trustedOrigins is what lets requests arrive on the custom
+		// host. Both hosts are same-origin to their own page loads (Caddy serves
+		// web + /rpc + /api/auth under each), so the sameSite:lax cookie still rides.
+		trustedOrigins: [
+			env.CORS_ORIGIN,
+			...(env.PANEL_EXTRA_TRUSTED_ORIGIN
+				? [env.PANEL_EXTRA_TRUSTED_ORIGIN]
+				: []),
+		],
 		emailAndPassword: {
 			enabled: true,
 			minPasswordLength: 8,

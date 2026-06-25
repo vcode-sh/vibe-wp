@@ -2,16 +2,19 @@
  * Step 2 of the onboarding wizard: "Your control panel address".
  *
  * Shows the live, HTTPS-secured panel URL (the magic-DNS sslip.io host on a
- * fresh install) with a copy button, plus DNS guidance for owners who want a
- * custom domain: the exact A record to create and a pointer to Settings for
- * applying it. We deliberately do NOT pretend to apply a custom domain here —
- * applying one is a privileged Caddy/origin switch handled in Settings.
+ * fresh install) with a copy button, AND a working "Use a custom domain
+ * (optional)" expander: the owner can enter panel.yourdomain.com, see the exact
+ * A record to create, run a live DNS preflight, and Apply it right here during
+ * onboarding (setup-gated). The magic-DNS card stays shown above as the always-
+ * working fallback — applying a custom domain is purely additive and can never
+ * lock anyone out.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Copy, Globe, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 
 import { Loader } from "@/components/loader";
+import { PanelDomainForm } from "@/components/settings/panel-domain-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +24,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { panelAccessQuery } from "@/data/queries";
+import { panelAccessQuery, setupPanelDnsPreflightQuery } from "@/data/queries";
+import { orpc } from "@/lib/orpc/client";
 
 function CopyButton({ value }: { value: string }) {
 	const [copied, setCopied] = useState(false);
@@ -53,13 +57,15 @@ export function PanelAddressStep({
 	onBack: () => void;
 	onContinue: () => void;
 }) {
-	const { data, isLoading } = useQuery(panelAccessQuery());
+	const access = useQuery(panelAccessQuery());
+	const apply = useMutation(orpc.setupPanelDomainApply.mutationOptions());
+	const [showCustom, setShowCustom] = useState(false);
 
-	if (isLoading || !data) {
+	if (access.isLoading || !access.data) {
 		return <Loader />;
 	}
 
-	const ip = data.ip ?? "your-server-ip";
+	const data = access.data;
 
 	return (
 		<div className="grid gap-5">
@@ -93,7 +99,7 @@ export function PanelAddressStep({
 						</Badge>
 						{data.isMagicDns ? (
 							<span className="text-muted-foreground text-xs">
-								Automatic address — no DNS setup needed.
+								Automatic address — no DNS setup needed. It always works.
 							</span>
 						) : null}
 					</div>
@@ -103,30 +109,34 @@ export function PanelAddressStep({
 			<Card>
 				<CardHeader>
 					<CardTitle className="text-base">
-						Want a custom domain? (optional)
+						Use a custom domain (optional)
 					</CardTitle>
 					<CardDescription>
-						Prefer something like <code>panel.yourdomain.com</code>? Point it at
-						this server, then apply it in Settings.
+						Prefer something like <code>panel.yourdomain.com</code>? Add it now
+						— the address above keeps working, so you can't get locked out.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="grid gap-3">
-					<div className="grid gap-1.5">
-						<span className="text-muted-foreground text-xs">
-							1. Create this DNS record at your domain registrar:
-						</span>
-						<code className="block rounded-sm bg-muted px-3 py-2 font-mono text-sm">
-							panel.yourdomain.com&nbsp;&nbsp;A&nbsp;&nbsp;{ip}
-						</code>
-					</div>
-					<p className="text-muted-foreground text-xs">
-						2. Once it resolves, open{" "}
-						<span className="font-medium text-foreground">
-							Settings → Panel domain
-						</span>{" "}
-						to switch the panel over to your domain. You don't need to do this
-						now — the address above works today.
-					</p>
+					{showCustom ? (
+						<PanelDomainForm
+							access={data}
+							isApplying={apply.isPending}
+							onApplied={() => access.refetch()}
+							onApply={(domain) => apply.mutateAsync({ domain })}
+							preflightQuery={(domain) => setupPanelDnsPreflightQuery(domain)}
+						/>
+					) : (
+						<div>
+							<Button
+								onClick={() => setShowCustom(true)}
+								type="button"
+								variant="outline"
+							>
+								<Globe className="size-4" />
+								Set up a custom domain
+							</Button>
+						</div>
+					)}
 				</CardContent>
 			</Card>
 

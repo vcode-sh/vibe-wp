@@ -21,6 +21,15 @@ export const env = createEnv({
 		// unprivileged panel reaches the host only via `sudo -n <runner> …`.
 		// Optional: unset in dev/local, where the panel spawns directly.
 		PANEL_PRIVILEGED_RUNNER: z.string().optional(),
+		// An OPTIONAL custom control-panel domain (e.g. https://panel.theirsite.com)
+		// ADDED to the panel's trusted origins ALONGSIDE the primary magic-DNS origin
+		// (BETTER_AUTH_URL / CORS_ORIGIN stay primary). Written by bin/panel-domain-apply
+		// into the panel's OWN env file (NOT injected via sudo opts.env — so it stays
+		// out of bin/panel's panel_env_keep and the env-keep drift test). Lets
+		// better-auth + CORS accept requests on BOTH the magic-DNS host and the custom
+		// domain without invalidating the existing magic-DNS session. Unset = no custom
+		// domain configured yet.
+		PANEL_EXTRA_TRUSTED_ORIGIN: z.url().optional(),
 		// How often (minutes) the panel records a fresh monitor sample for every
 		// site, so uptime/cert/DNS history accrues without anyone opening the
 		// status view. Reuses the already-allowlisted `monitor` op (no new host

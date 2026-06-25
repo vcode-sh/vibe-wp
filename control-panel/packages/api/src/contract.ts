@@ -352,6 +352,39 @@ export interface DnsPreflightResult {
 	resolvedIp: string | null;
 }
 
+/**
+ * The control panel's public address. `url`/`host`/`ip` describe the PRIMARY
+ * magic-DNS address (always reachable — it can never be removed). `customDomain`
+ * / `customUrl` describe an OPTIONAL custom domain the owner has applied on top;
+ * both are null until one is configured. The GUI shows the magic-DNS URL as the
+ * always-working fallback and the custom URL (if any) as the preferred address.
+ */
+export interface PanelAccess {
+	/** The applied custom panel domain (host only), or null when none is set. */
+	customDomain: string | null;
+	/** https://<customDomain>, or null when none is set. */
+	customUrl: string | null;
+	host: string;
+	ip: string | null;
+	isMagicDns: boolean;
+	url: string;
+}
+
+/**
+ * Result of applying a custom control-panel domain. `status` is "ok" only when the
+ * domain already resolves to this host AND answers over HTTPS; otherwise "pending"
+ * (DNS not pointing here yet — the cert issues automatically once it propagates).
+ * `magicUrl` is the always-working magic-DNS fallback the owner can never lose;
+ * `customUrl` is the new https://<domain>. `message` is an idiot-proof one-liner.
+ */
+export interface PanelDomainApplyResult {
+	customUrl: string;
+	magicUrl: string;
+	message: string;
+	status: "ok" | "pending";
+	url: string;
+}
+
 export interface InsightsPlugin {
 	/** wp.org `active_installs` count, or null for premium/custom plugins. Optional + nullable for back-compat with drop-files predating the field. */
 	active_installs?: number | null;

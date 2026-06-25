@@ -230,6 +230,15 @@ deploy_panel() {
   $SUDO install -d -m 0755 "$PANEL_DIR"
   $SUDO install -d -m 0700 "$PANEL_DIR/data"
 
+  # Preserve an applied custom-panel-domain trusted origin across re-deploys. The
+  # GUI's panel-domain-apply writes PANEL_EXTRA_TRUSTED_ORIGIN into this env file;
+  # since we rewrite the env wholesale below, read it from the LIVE env BEFORE the
+  # `rm -rf "$PANEL_DIR/app"` (line further down) wipes it, then re-emit it. Without
+  # this, every `bin/panel update` would silently drop the custom domain's trusted
+  # origin and the panel would stop accepting auth/CORS on the custom host until
+  # re-applied. Empty when no custom domain has been applied (the common case).
+  EXTRA_TRUSTED_ORIGIN="$($SUDO grep -m1 '^PANEL_EXTRA_TRUSTED_ORIGIN=' "$PANEL_DIR/app/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+
   # Least-privilege account + the root-owned host-exec wrapper + sudoers rule.
   # Done up-front so the systemd unit can run as vibe-panel and the server's
   # PANEL_PRIVILEGED_RUNNER points at a wrapper that already exists.
@@ -259,6 +268,13 @@ deploy_panel() {
     "PANEL_INSTALLER_BIN=$PANEL_DIR/bin/vibe-wp-installer" \
     "PANEL_PRIVILEGED_RUNNER=$PANEL_DIR/bin/vibe-panel-run" \
     | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null )
+  # Re-emit a preserved custom-panel-domain trusted origin (see the read above).
+  # Appended only when one was applied; the value is a metachar-free https URL that
+  # panel-domain-apply already strictly validated, so it is safe to append verbatim.
+  if [ -n "$EXTRA_TRUSTED_ORIGIN" ]; then
+    printf 'PANEL_EXTRA_TRUSTED_ORIGIN=%s\n' "$EXTRA_TRUSTED_ORIGIN" \
+      | $SUDO tee -a "$PANEL_DIR/app/server/.env" >/dev/null
+  fi
   $SUDO chown "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/app/server/.env"
   $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
 

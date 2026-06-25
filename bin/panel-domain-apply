@@ -1,0 +1,301 @@
+#!/bin/sh
+set -eu
+# Force the C locale so every `case` charset guard (e.g. *[!a-z0-9.-]*) is
+# strictly ASCII. In a UTF-8 locale a range/class can span accented collation
+# characters, widening what the hostname guard accepts — this value lands in a
+# Caddy config file, so we keep the validation byte-exact.
+export LC_ALL=C
+#
+# panel-domain-apply <domain> — ADD a custom domain to the control panel,
+# ALONGSIDE the always-working magic-DNS host. SAFE + ADDITIVE by design:
+#
+#   - The magic-DNS host (derived from BETTER_AUTH_URL) is NEVER removed or
+#     replaced. We only ADD the custom domain to the panel Caddy site's address
+#     header, so the panel stays reachable on its original URL even if the custom
+#     domain's DNS or cert is not ready. You cannot get locked out.
+#   - `caddy validate` runs BEFORE any reload; on validate OR reload failure the
+#     previous snippet is restored and the op exits non-zero. Caddy never runs a
+#     broken config.
+#   - The custom origin is ADDED to the panel's trusted origins by writing
+#     PANEL_EXTRA_TRUSTED_ORIGIN into the panel's OWN env file (0600), matching how
+#     bin/panel writes ACCESS_ORIGIN. BETTER_AUTH_URL / CORS_ORIGIN are left on the
+#     magic-DNS origin, so the existing session/cookie is never invalidated.
+#
+# Mirrors caddy-www-apply's stage -> validate -> swap -> reload -> restore pattern,
+# but targets the PANEL site config (/etc/caddy/sites-enabled/vibe-wp-panel.caddy)
+# and the panel's env file. Reads no secrets and prints none. Idempotent:
+# re-applying the same domain is a no-op success.
+#
+# This op is run as root via the sudoers-gated wrapper bin/vibe-panel-run
+# (subcommand `panel-domain`), which re-validates the domain at the root boundary.
+# It validates the domain INDEPENDENTLY here too (defense in depth).
+
+PANEL_DIR="${PANEL_DIR:-/opt/vibe-wp-panel}"
+# PANEL_CADDY / PANEL_CADDYFILE are overridable ONLY for tests; production always
+# uses the real /etc/caddy paths. They carry no privilege (the op runs as root via
+# the wrapper regardless), so an override cannot widen the boundary.
+PANEL_CADDY="${PANEL_CADDY:-/etc/caddy/sites-enabled/vibe-wp-panel.caddy}"
+CADDYFILE="${PANEL_CADDYFILE:-/etc/caddy/Caddyfile}"
+PANEL_ENV="$PANEL_DIR/app/server/.env"
+PANEL_UNIT="vibe-wp-panel"
+# Dedicated least-privilege account the panel runs as (matches bin/panel).
+PANEL_USER="${PANEL_USER:-vibe-panel}"
+
+die() { echo "panel-domain-apply: $1" >&2; exit 1; }
+
+# Run file writes + caddy + systemctl as root directly when already root, else sudo.
+if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
+
+domain="${1:-}"
+[ -n "$domain" ] || die "usage: panel-domain-apply <domain>"
+
+# ---------------------------------------------------------------------------
+# STRICT domain validation. This value is written into a Caddy config file AND an
+# env file, so injection is the top risk. We use a POSITIVE allowlist: the domain
+# must be all-lowercase, a valid FQDN of >=2 labels (each 1-63 chars, no leading/
+# trailing dash), total length <=253, contain ONLY [a-z0-9.-], no "..", and must
+# not be a reserved/test name. The first guard is a metachar allowlist case so no
+# shell/Caddy metacharacter (space ; | & $ ` < > ( ) { } * ? ! / : etc.) can ever
+# survive. (See validate_panel_domain in bin/vibe-panel-run — the load-bearing
+# root-boundary copy; this is the in-op defense-in-depth copy.)
+# ---------------------------------------------------------------------------
+validate_domain() {
+  d="$1"
+  [ -n "$d" ] || die "domain is empty"
+  # Length cap first (cheap, bounds everything below).
+  [ "${#d}" -le 253 ] || die "domain too long (>253): $d"
+  # POSITIVE allowlist: ONLY lowercase letters, digits, dot, hyphen. Any other
+  # byte (uppercase, whitespace, Caddy/shell metachar, '/') is rejected outright.
+  case "$d" in
+    *[!a-z0-9.-]*) die "domain has illegal characters (only a-z 0-9 . - allowed): $d" ;;
+  esac
+  # Structural guards.
+  case "$d" in
+    .*|*.) die "domain must not start or end with a dot: $d" ;;
+    *..*) die "domain must not contain '..': $d" ;;
+    -*|*-) die "domain must not start or end with a dash: $d" ;;
+    *.*) : ;;  # require at least one dot (>=2 labels)
+    *) die "domain must be a fully-qualified name with a dot: $d" ;;
+  esac
+  # Per-label checks: 1-63 chars, no leading/trailing dash.
+  oifs="$IFS"
+  IFS=.
+  for label in $d; do
+    [ -n "$label" ] || { IFS="$oifs"; die "empty label in domain: $d"; }
+    [ "${#label}" -le 63 ] || { IFS="$oifs"; die "label longer than 63 chars: $label"; }
+    case "$label" in
+      -*|*-) IFS="$oifs"; die "label starts or ends with a dash: $label" ;;
+    esac
+  done
+  IFS="$oifs"
+  # Reserved / non-routable suffixes (cannot get a real cert there).
+  case "$d" in
+    localhost|*.localhost|*.test|*.invalid|*.example|*.example.com|*.example.net|*.example.org)
+      die "domain uses a reserved/test name: $d" ;;
+  esac
+}
+
+validate_domain "$domain"
+
+# ---------------------------------------------------------------------------
+# Derive the existing magic-DNS / primary origin host from BETTER_AUTH_URL. This
+# host STAYS as the panel's primary site address — we never remove it. We do not
+# source the env file (so no env content can execute); we grep one key.
+# ---------------------------------------------------------------------------
+read_env_value() {
+  # read_env_value <file> <key>  → prints the value (quotes stripped), empty if absent.
+  f="$1"; k="$2"
+  $SUDO test -f "$f" || { echo ""; return 0; }
+  line="$($SUDO grep -m1 "^${k}=" "$f" 2>/dev/null || true)"
+  val="${line#*=}"
+  case "$val" in
+    \"*\") val="${val#\"}"; val="${val%\"}" ;;
+    \'*\') val="${val#\'}"; val="${val%\'}" ;;
+  esac
+  echo "$val"
+}
+
+host_of() {
+  url="$1"
+  [ -n "$url" ] || { echo ""; return 0; }
+  rest="${url#*://}"
+  rest="${rest%%/*}"
+  rest="${rest%%:*}"
+  echo "$rest"
+}
+
+# ---------------------------------------------------------------------------
+# Add the custom origin to the panel's trusted origins by writing
+# PANEL_EXTRA_TRUSTED_ORIGIN=https://<domain> into the panel's OWN env file.
+# Same pattern bin/panel uses for ACCESS_ORIGIN: umask-guarded rewrite, keep the
+# file vibe-panel:vibe-panel 0600. We do NOT touch BETTER_AUTH_URL / CORS_ORIGIN.
+# Defined early so the idempotent already-configured path below can reuse it.
+# Sets PANEL_ENV_CHANGED=1 only when it actually rewrites the file.
+# ---------------------------------------------------------------------------
+PANEL_ENV_CHANGED=0
+apply_trusted_origin() {
+  origin="https://$domain"
+  $SUDO test -f "$PANEL_ENV" || die "panel env file missing: $PANEL_ENV"
+  current="$(read_env_value "$PANEL_ENV" PANEL_EXTRA_TRUSTED_ORIGIN)"
+  if [ "$current" = "$origin" ]; then
+    return 0   # already set — no env rewrite, no restart needed.
+  fi
+  tmp_env="$(mktemp "${TMPDIR:-/tmp}/vibe-panel-env.XXXXXX")"
+  (
+    umask 077
+    # Copy every line EXCEPT a prior PANEL_EXTRA_TRUSTED_ORIGIN, then append ours.
+    $SUDO grep -v '^PANEL_EXTRA_TRUSTED_ORIGIN=' "$PANEL_ENV" > "$tmp_env" 2>/dev/null || true
+    printf 'PANEL_EXTRA_TRUSTED_ORIGIN=%s\n' "$origin" >> "$tmp_env"
+  )
+  $SUDO install -o "$PANEL_USER" -g "$PANEL_USER" -m 0600 "$tmp_env" "$PANEL_ENV"
+  rm -f "$tmp_env"
+  PANEL_ENV_CHANGED=1
+}
+
+auth_url="$(read_env_value "$PANEL_ENV" BETTER_AUTH_URL)"
+[ -n "$auth_url" ] || die "cannot read BETTER_AUTH_URL from $PANEL_ENV (panel installed?)"
+magic_host="$(host_of "$auth_url")"
+[ -n "$magic_host" ] || die "cannot parse the panel's primary host from BETTER_AUTH_URL"
+
+# The custom domain must DIFFER from the magic-DNS host — adding the same host
+# twice is meaningless and we must never collapse the always-working fallback.
+[ "$domain" != "$magic_host" ] || die "custom domain equals the panel's current host ($magic_host); nothing to do"
+
+[ -f "$PANEL_CADDY" ] || die "panel Caddy snippet not found: $PANEL_CADDY (panel installed?)"
+
+# ---------------------------------------------------------------------------
+# Locate the FIRST address-header line (`<addresses> {`) in the panel snippet and
+# rebuild the address list ADDITIVELY: keep every existing token, drop any stale
+# copy of THIS custom domain, then append it once. We tokenize + rebuild (rather
+# than regex-substitute) so the result is deterministic on GNU + BSD tools and
+# never produces doubled/edge commas. The magic-DNS host is among the existing
+# tokens and is ALWAYS preserved.
+# ---------------------------------------------------------------------------
+header_no="$($SUDO grep -n -m1 '{[[:space:]]*$' "$PANEL_CADDY" | cut -d: -f1 || true)"
+[ -n "$header_no" ] || die "could not locate the address line in $PANEL_CADDY"
+header_line="$($SUDO sed -n "${header_no}p" "$PANEL_CADDY")"
+
+# Is the custom domain already an exact token in the header? Then this is a no-op
+# at the Caddy level — still ensure the env trusted origin is set, then exit.
+header_has_domain() {
+  printf '%s' "$1" \
+    | sed 's/{[[:space:]]*$//; s/,/ /g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' \
+    | tr ' ' '\n' \
+    | grep -qx "$domain"
+}
+
+if header_has_domain "$header_line"; then
+  apply_trusted_origin
+  if [ "$PANEL_ENV_CHANGED" = 1 ]; then
+    $SUDO systemctl restart "$PANEL_UNIT" >/dev/null 2>&1 || true
+  fi
+  echo "status=ok"
+  echo "domain=$domain"
+  echo "magic_host=$magic_host"
+  echo "panel: custom domain already configured ($domain). Magic-DNS host still works: https://$magic_host"
+  exit 0
+fi
+
+# Build the new header: tokenize the address part (everything before the `{`),
+# preserve order, drop any pre-existing copy of $domain, then append $domain once.
+addr_part="${header_line%\{*}"
+new_addr=""
+append_token() {
+  if [ -z "$new_addr" ]; then new_addr="$1"; else new_addr="$new_addr, $1"; fi
+}
+old_ifs="$IFS"
+IFS=' 	,'
+for tok in $addr_part; do
+  [ -n "$tok" ] || continue
+  [ "$tok" = "$domain" ] && continue   # collapse any stale duplicate
+  append_token "$tok"
+done
+IFS="$old_ifs"
+append_token "$domain"
+new_header="$new_addr {"
+
+# ---------------------------------------------------------------------------
+# Stage the edit on a temp copy, rewrite ONLY the header line via awk (so the
+# replacement text is never re-interpreted as a sed regex/replacement), keep a
+# .bak of the live snippet, swap in, validate the WHOLE Caddyfile, reload. On any
+# failure restore the .bak and exit non-zero so Caddy never runs a broken config.
+# ---------------------------------------------------------------------------
+work="$(mktemp "${TMPDIR:-/tmp}/vibe-panel-domain.XXXXXX")"
+trap 'rm -f "$work" "$work.snip"' EXIT INT TERM
+$SUDO cp -p "$PANEL_CADDY" "$work.snip" 2>/dev/null || cp -p "$PANEL_CADDY" "$work.snip"
+awk -v ln="$header_no" -v repl="$new_header" \
+  'NR==ln{print repl; next} {print}' "$work.snip" > "$work"
+rm -f "$work.snip"
+
+backup="$PANEL_CADDY.vibe-panel-domain.bak.$$"
+restore_snippet() {
+  $SUDO cp -p "$backup" "$PANEL_CADDY" 2>/dev/null || true
+  $SUDO rm -f "$backup" 2>/dev/null || true
+}
+$SUDO cp -p "$PANEL_CADDY" "$backup"
+
+if ! $SUDO install -m 0644 "$work" "$PANEL_CADDY"; then
+  echo "panel-domain-apply: failed to write $PANEL_CADDY" >&2
+  restore_snippet
+  exit 1
+fi
+
+if command -v caddy >/dev/null 2>&1; then
+  if ! $SUDO caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
+    echo "panel-domain-apply: Caddy config invalid after edit — rolling back $PANEL_CADDY" >&2
+    restore_snippet
+    exit 1
+  fi
+  if ! $SUDO systemctl reload caddy >/dev/null 2>&1; then
+    echo "panel-domain-apply: systemctl reload caddy failed — rolling back $PANEL_CADDY" >&2
+    restore_snippet
+    exit 1
+  fi
+else
+  # This op exists to validate + reload Caddy. With no caddy binary we can do
+  # neither, so refuse rather than persist an un-applied edit that reports success.
+  echo "panel-domain-apply: caddy not installed — cannot validate/reload; rolling back $PANEL_CADDY" >&2
+  restore_snippet
+  exit 1
+fi
+
+$SUDO rm -f "$backup" 2>/dev/null || true
+
+# Trusted origin (env file) — added AFTER Caddy succeeded so a Caddy rollback
+# leaves the env untouched too.
+apply_trusted_origin
+
+# Restart the panel ONLY if the env actually changed (the server reads its env
+# once at module import, so it must restart to pick up the new trusted origin).
+# Caddy already serves the custom host, so even if the restart is briefly delayed
+# the magic-DNS session keeps working throughout.
+if [ "$PANEL_ENV_CHANGED" = 1 ]; then
+  $SUDO systemctl restart "$PANEL_UNIT" >/dev/null 2>&1 || \
+    echo "panel-domain-apply: WARN could not restart $PANEL_UNIT — restart it manually to finish enabling $domain" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# Best-effort verify (NEVER fails the op). Briefly poll the custom domain's DNS
+# A record and an HTTPS HEAD. If it resolves to this host and answers over HTTPS,
+# report status=ok; otherwise status=pending (the cert issues automatically once
+# DNS propagates). DNS-not-pointing-yet is SUCCESS at the Caddy/auth level.
+# ---------------------------------------------------------------------------
+my_ip="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
+resolved="$(getent ahostsv4 "$domain" 2>/dev/null | awk 'NR==1{print $1}' || true)"
+
+status="pending"
+if [ -n "$my_ip" ] && [ "$resolved" = "$my_ip" ]; then
+  # DNS points here — try an HTTPS HEAD (cert may still be issuing on first hit).
+  if curl -fsS -I --max-time 8 "https://$domain/" >/dev/null 2>&1; then
+    status="ok"
+  fi
+fi
+
+echo "status=$status"
+echo "domain=$domain"
+echo "magic_host=$magic_host"
+if [ "$status" = "ok" ]; then
+  echo "panel: custom domain live and secured (https://$domain). Magic-DNS host still works: https://$magic_host"
+else
+  echo "panel: custom domain added (https://$domain). DNS not detected here yet — it will secure automatically once your A record (-> ${my_ip:-this server}) propagates. Magic-DNS host still works: https://$magic_host"
+fi

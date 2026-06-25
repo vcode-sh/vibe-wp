@@ -35,6 +35,13 @@
 #     no other bin/panel subcommand (install/uninstall/reset-password) is
 #     reachable. assert_root_owned guards a planted bin/panel. Its OWN subcommand
 #     — NOT in OP_ALLOWLIST.
+#   - `panel-domain <domain>` ADDS a custom domain to the control-panel Caddy site
+#     ALONGSIDE the magic-DNS host (never replacing it) and adds it to the panel's
+#     trusted origins. The domain is STRICTLY re-validated HERE at the root boundary
+#     (validate_panel_domain — the load-bearing copy; the panel is the untrusted
+#     caller) before resolving the root-owned bin/panel-domain-apply and exec'ing it
+#     DETACHED via systemd-run (so the panel restart at the end survives). Its OWN
+#     subcommand — NOT in OP_ALLOWLIST.
 set -eu
 # Force the C locale so every `case` charset guard (e.g. the slug regex
 # *[!a-z0-9-]*) is strictly ASCII. In a UTF-8 locale a range like [a-z] can span
@@ -419,6 +426,45 @@ validate_shared_db_op() {
   die "shared-db op not allowed: $op"
 }
 
+# --- panel-domain: STRICT hostname re-validation at the root boundary. This is
+# the LOAD-BEARING copy (the panel is the untrusted caller; bin/panel-domain-apply
+# re-validates too as defense in depth). The value lands in a Caddy config file
+# AND an env file, so injection is the top risk: a POSITIVE allowlist (`case
+# *[!a-z0-9.-]*` die) rejects every shell/Caddy metachar, '/', and uppercase. The
+# value must be a valid FQDN of >=2 labels, each 1-63 chars with no leading/
+# trailing dash, total <=253, no '..', and not a reserved/test name. Defined above
+# the dispatch guard so unit tests can source the wrapper as a lib and exercise it.
+validate_panel_domain() {
+  d="$1"
+  [ -n "$d" ] || die "panel domain is empty"
+  [ "${#d}" -le 253 ] || die "panel domain too long (>253): $d"
+  # POSITIVE allowlist: ONLY lowercase letters, digits, dot, hyphen survive.
+  case "$d" in
+    *[!a-z0-9.-]*) die "panel domain has illegal characters (only a-z 0-9 . - allowed): $d" ;;
+  esac
+  case "$d" in
+    .*|*.) die "panel domain must not start or end with a dot: $d" ;;
+    *..*) die "panel domain must not contain '..': $d" ;;
+    -*|*-) die "panel domain must not start or end with a dash: $d" ;;
+    *.*) : ;;  # require at least one dot (>=2 labels)
+    *) die "panel domain must be a fully-qualified name with a dot: $d" ;;
+  esac
+  oifs="$IFS"
+  IFS=.
+  for label in $d; do
+    [ -n "$label" ] || { IFS="$oifs"; die "empty label in panel domain: $d"; }
+    [ "${#label}" -le 63 ] || { IFS="$oifs"; die "panel domain label longer than 63 chars: $label"; }
+    case "$label" in
+      -*|*-) IFS="$oifs"; die "panel domain label starts or ends with a dash: $label" ;;
+    esac
+  done
+  IFS="$oifs"
+  case "$d" in
+    localhost|*.localhost|*.test|*.invalid|*.example|*.example.com|*.example.net|*.example.org)
+      die "panel domain uses a reserved/test name: $d" ;;
+  esac
+}
+
 # --- siteinfo: scan roots, print ONLY non-secret fields as TAB-separated rows.
 # Columns: installDir  slug  domain  prodPort  stagePort  hasStaging  stagingDomain
 # slug          = COMPOSE_PROJECT_NAME minus the vibe-wp- prefix and -prod/-stage suffix
@@ -642,6 +688,38 @@ case "$sub" in
     # Fallback (no systemd-run): detach via setsid + nohup so the SIGTERM the
     # panel restart sends to its own process group does not reach the updater.
     exec setsid sh -c 'exec nohup "$0" update >/dev/null 2>&1' "$pu_panel"
+    ;;
+  panel-domain)
+    # panel-domain <domain> — ADD a custom domain to the control-panel Caddy site
+    # ALONGSIDE the magic-DNS host (additive; the magic-DNS host is NEVER removed)
+    # and add it to the panel's trusted origins. EXACTLY one arg; the domain is
+    # STRICTLY re-validated HERE at the root boundary (validate_panel_domain — do
+    # NOT trust the panel) before anything is touched. The domain travels as a
+    # single argv element (never a shell string).
+    [ $# -eq 1 ] || die "panel-domain takes exactly one domain argument"
+    pd_domain="$1"
+    validate_panel_domain "$pd_domain"
+    pd_bin="$PANEL_HOST_DIR/bin"
+    assert_root_owned "$pd_bin" "panel-domain bin dir"
+    pd_script="$pd_bin/panel-domain-apply"
+    [ -f "$pd_script" ] || die "panel-domain-apply missing: $pd_script"
+    assert_root_owned "$pd_script" "panel-domain-apply script"
+    [ -x "$pd_script" ] || die "panel-domain-apply is not executable: $pd_script"
+    # CRITICAL: the script ends in `systemctl restart vibe-wp-panel`, which SIGTERMs
+    # the panel server (our caller's parent). Run it in a TRANSIENT systemd unit so
+    # it is reparented to systemd and survives the panel restart; the domain is
+    # passed as a single argv element. Output goes to the journal the panel can tail.
+    pd_unit="vibe-wp-panel-domain"
+    if command -v systemd-run >/dev/null 2>&1; then
+      systemctl reset-failed "$pd_unit" >/dev/null 2>&1 || true
+      exec systemd-run --collect --unit="$pd_unit" \
+        --property=Description="Vibe WP panel custom-domain apply" \
+        --setenv=PANEL_HOST_DIR="$PANEL_HOST_DIR" \
+        "$pd_script" "$pd_domain"
+    fi
+    # Fallback (no systemd-run): detach via setsid + nohup so the SIGTERM the panel
+    # restart sends to its own process group does not reach the apply op.
+    exec setsid sh -c 'exec nohup "$0" "$1" >/dev/null 2>&1' "$pd_script" "$pd_domain"
     ;;
   shared-db)
     # shared-db <op> [slug]  — host-level ops for the ONE shared MariaDB project.

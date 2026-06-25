@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
+import { PanelDomainCard } from "@/components/settings/panel-domain-card";
 import { ServerMaintenanceCard } from "@/components/settings/server-maintenance-card";
 import { SharedDbCard } from "@/components/settings/shared-db-card";
 import { TopBar } from "@/components/top-bar";
@@ -114,6 +115,7 @@ function ServerPage() {
 						</Card>
 					</QueryBoundary>
 				</div>
+				<PanelDomainCard />
 				<SharedDbCard />
 				<ServerMaintenanceCard />
 				{/* Site lifecycle (stop/start/restart) needs a site-scoped UI — tracked as a follow-up. */}

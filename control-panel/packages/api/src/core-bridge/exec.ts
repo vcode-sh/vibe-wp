@@ -1,3 +1,4 @@
+import { isPanelHostname } from "./panel-domain";
 import { redact } from "./redact";
 import { mergeLineStreams } from "./stream-merge";
 
@@ -576,6 +577,135 @@ export function streamPanelUpdate(opts: { timeoutMs?: number } = {}) {
 		[
 			"journalctl",
 			"--unit=vibe-wp-panel-update.service",
+			"--follow",
+			"--lines=200",
+			"--no-pager",
+		],
+		{ timeoutMs: deadline }
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Panel custom-domain apply. A SERVER-level op (the panel's Caddy site + origin
+// are owned by bin/panel, not a per-site bin/vibe), so it maps to its OWN
+// top-level bin/vibe-panel-run subcommand (`panel-domain`), gated on
+// PANEL_PRIVILEGED_RUNNER exactly like wrapPanelUpdateArgv. The domain is the only
+// caller input — re-validated with the shared strict isPanelHostname() BEFORE the
+// spawn (the root wrapper re-validates regardless). It travels as a single argv
+// element, NEVER interpolated into a shell string. No VIBE_OPS entry, no opts.env
+// injection → no panel_env_keep change.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the argv for the panel custom-domain apply. With a privileged runner
+ * (prod): `["sudo","-n",runner,"panel-domain",domain]` — the root wrapper
+ * re-validates the domain, asserts bin/panel-domain-apply is root-owned, and runs
+ * it DETACHED (systemd-run) so the panel's self-restart at the end can't kill it.
+ * Without a runner (dev): spawn the repo bin/panel-domain-apply directly.
+ *
+ * THROWS if the domain fails isPanelHostname — the value lands in a Caddy config
+ * file, so an invalid host must never reach the spawn (the wrapper would reject it
+ * too, but failing here keeps a bad value off the process table entirely).
+ */
+export function wrapPanelDomainArgv(domain: string): string[] {
+	if (!isPanelHostname(domain)) {
+		throw new Error(`Refusing invalid panel domain: ${domain}`);
+	}
+	const runner = privilegedRunner();
+	if (runner) {
+		return ["sudo", "-n", runner, "panel-domain", domain];
+	}
+	const hostDir = process.env.PANEL_HOST_DIR ?? ".";
+	return [`${hostDir}/bin/panel-domain-apply`, domain];
+}
+
+/** Parsed result of a panel-domain apply (the op prints `status=…` k=v lines). */
+export interface PanelDomainRunResult {
+	code: number;
+	status: "ok" | "pending";
+	stdout: string;
+}
+
+/**
+ * Parse the apply op's k=v stdout into a status. The op prints `status=ok` only
+ * when the custom domain already resolves to this host AND answers over HTTPS;
+ * otherwise `status=pending` (DNS not pointing yet — the cert issues once it
+ * propagates). Anything else (a crash before the status line) is treated as
+ * pending so the GUI never claims a false "live".
+ */
+export function parsePanelDomainStatus(stdout: string): "ok" | "pending" {
+	for (const line of stdout.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed === "status=ok") {
+			return "ok";
+		}
+		if (trimmed === "status=pending") {
+			return "pending";
+		}
+	}
+	return "pending";
+}
+
+/**
+ * Run the panel custom-domain apply and return its parsed status. Used in DEV
+ * (no privileged runner): the op runs in-process and we read its stdout directly.
+ *
+ * In PROD the op detaches itself (systemd-run) and restarts the panel, so its
+ * stdout does NOT come back here — the procedure layer uses a streamed/journal
+ * job (streamPanelDomain) instead and the GUI re-reads panelAccess to confirm.
+ * The domain is re-validated by wrapPanelDomainArgv before spawning.
+ */
+export async function runPanelDomain(
+	domain: string,
+	opts: { timeoutMs?: number } = {}
+): Promise<PanelDomainRunResult> {
+	const argv = wrapPanelDomainArgv(domain);
+	const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+	const timer = setTimeout(() => proc.kill(), opts.timeoutMs ?? 120_000);
+	const [stdout, stderr] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	const code = await proc.exited;
+	clearTimeout(timer);
+	const merged = redact(stdout + stderr);
+	return { status: parsePanelDomainStatus(merged), stdout: merged, code };
+}
+
+/**
+ * Stream the panel custom-domain apply as a `{ proc, lines }` job.
+ *
+ * Mirrors streamPanelUpdate: in prod the apply op detaches (transient
+ * vibe-wp-panel-domain unit) and its LAST step restarts the panel server (us). If
+ * we streamed the op's own stdout the panel restart would tear our process group
+ * down mid-apply. Instead we kick the detached apply off, then follow the
+ * transient unit's JOURNAL — those lines survive the panel restart, so once the
+ * panel is back the web client reconnects and sees the result. In dev (no runner)
+ * there is no detach, so we stream bin/panel-domain-apply's own stdout directly.
+ */
+export function streamPanelDomain(
+	domain: string,
+	opts: { timeoutMs?: number } = {}
+) {
+	// Validate BEFORE building argv (wrapPanelDomainArgv throws on bad input too).
+	const argv = wrapPanelDomainArgv(domain);
+	const runner = privilegedRunner();
+	const deadline = opts.timeoutMs ?? STREAM_TIMEOUT_MS;
+	if (!runner) {
+		// Dev: run the apply directly and stream its stdout/stderr.
+		return spawnStream(argv, { timeoutMs: deadline });
+	}
+	// Prod: launch the detached apply (fire-and-forget — the wrapper execs
+	// systemd-run, which returns once the transient unit starts), then follow the
+	// unit's journal so the lines survive the panel's self-restart.
+	const launch = Bun.spawn(argv, { stdout: "ignore", stderr: "ignore" });
+	launch.exited.catch(() => {
+		// ignored: status is reported via the journalctl stream below.
+	});
+	return spawnStream(
+		[
+			"journalctl",
+			"--unit=vibe-wp-panel-domain.service",
 			"--follow",
 			"--lines=200",
 			"--no-pager",

@@ -91,6 +91,14 @@ export const sharedDbStatusQuery = () => orpc.sharedDbStatus.queryOptions();
 export const dnsPreflightQuery = (domain: string) =>
 	orpc.dnsPreflight.queryOptions({ input: { domain } });
 
+/**
+ * Setup-gated DNS preflight for the onboarding custom-panel-domain expander.
+ * Public (the owner doesn't exist yet) but server-side it only runs while the
+ * panel still needs setup. Used pre-auth on the /setup panel-address step.
+ */
+export const setupPanelDnsPreflightQuery = (domain: string) =>
+	orpc.setupPanelDnsPreflight.queryOptions({ input: { domain } });
+
 export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) =>
 	orpc.monitoringHistory.queryOptions({ input: { siteId, sinceDays } });
 

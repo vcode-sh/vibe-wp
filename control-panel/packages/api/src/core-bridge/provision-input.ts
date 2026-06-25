@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isPanelHostname, normalizePanelDomain } from "./panel-domain";
+
 /**
  * Zod input schemas for the provisioning router. These MIRROR the installer's
  * own rules (installer/src/core/validation.ts) so the panel rejects bad input
@@ -63,6 +65,24 @@ export const domainSchema = z
 	.string()
 	.refine((v) => validateDomainValue(v) === null, {
 		message: "Enter a real domain with DNS pointing to this VPS.",
+	});
+
+/**
+ * STRICTER schema for a CONTROL-PANEL custom domain (panel.theirsite.com). The
+ * value lands in a Caddy config file AND an env file, so it requires the strict
+ * panel-host shape enforced by isPanelHostname (lowercase FQDN, >=2 labels, each
+ * label 1-63 chars, no leading/trailing dash, no metachars, not a reserved/test
+ * name) AND the shared validateDomainValue rules. The input is normalized
+ * (trim/lowercase/strip scheme+path+port) BEFORE both checks so a pasted
+ * "https://Panel.Site.com/" still validates. This is the pre-spawn TS guard;
+ * bin/vibe-panel-run re-validates the SAME shape at the root boundary.
+ */
+export const panelDomainSchema = z
+	.string()
+	.transform((v) => normalizePanelDomain(v))
+	.refine((v) => isPanelHostname(v) && validateDomainValue(v) === null, {
+		message:
+			"Enter a real panel domain like panel.yourdomain.com (lowercase letters, numbers, dots and dashes only).",
 	});
 
 const adminEmailSchema = z

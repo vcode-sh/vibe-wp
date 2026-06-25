@@ -1,7 +1,12 @@
 import { env } from "@control-panel/env/server";
 import { ORPCError } from "@orpc/server";
+import { z } from "zod";
 
-import type { SecurityStatus, ServerInfo } from "../contract";
+import type {
+	PanelDomainApplyResult,
+	SecurityStatus,
+	ServerInfo,
+} from "../contract";
 import {
 	hostExec,
 	runSupportBundle,
@@ -10,7 +15,12 @@ import {
 } from "../core-bridge/exec";
 import { launchPanelUpdateJob, startJob } from "../core-bridge/jobs";
 import { writeAudit } from "../core-bridge/jobs-db";
+import {
+	applyPanelDomain,
+	panelMagicUrl,
+} from "../core-bridge/panel-domain-apply";
 import { parseSecurityStatus, parseSmoke } from "../core-bridge/parse";
+import { panelDomainSchema } from "../core-bridge/provision-input";
 import { detectSites } from "../core-bridge/sites";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
@@ -145,4 +155,35 @@ export const serverRouter = {
 		});
 		return result;
 	}),
+
+	/**
+	 * Admin-only: apply a custom CONTROL-PANEL domain (panel.theirsite.com) from
+	 * Settings. SAFE + ADDITIVE — the host op only ADDS the custom domain to the
+	 * panel's Caddy site ALONGSIDE the always-working magic-DNS host (never
+	 * replacing it), validates Caddy before reloading (restore-on-failure), and
+	 * adds the custom origin to the panel's trusted origins WITHOUT moving the
+	 * primary baseURL/CORS origin — so the owner can never be locked out. The
+	 * domain is strictly validated by panelDomainSchema (pre-spawn) and again at
+	 * the root boundary (bin/vibe-panel-run). Returns ok/pending so the GUI can
+	 * tell the owner whether DNS is ready or still propagating.
+	 */
+	panelDomainApply: adminProcedure
+		.input(z.object({ domain: panelDomainSchema }))
+		.handler(async ({ context, input }): Promise<PanelDomainApplyResult> => {
+			let result: PanelDomainApplyResult;
+			try {
+				result = await applyPanelDomain(input.domain, panelMagicUrl());
+			} catch {
+				throw new ORPCError("INTERNAL_SERVER_ERROR", {
+					message: "Couldn't apply the custom domain. Your panel is unchanged.",
+				});
+			}
+			await writeAudit(
+				context.session.user.id,
+				"panel-domain-apply",
+				"server",
+				null
+			);
+			return result;
+		}),
 };
