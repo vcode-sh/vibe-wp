@@ -1,18 +1,20 @@
 /**
  * SecurityRadarCard — per-site vulnerability + abandoned-plugin radar. Lists the
- * ACTIVE plugins the radar flagged (outdated | abandoned | cve) with reason
- * badges, last-updated age, and per-row remediation:
- *   - "Update" runs the EXISTING safe-update mutation (snapshot + TTFB probe +
- *     rollback) — preferred when an update exists.
- *   - "Deactivate" (quarantine) runs the EXISTING pluginDeactivate mutation,
- *     behind a confirm dialog because it can take a feature offline.
- * Both reuse the operations tray exactly like inventory-actions.tsx. `null` from
- * the query = insights not collected yet → the refresh-inventory empty state.
- * The CVE column stays dark until an operator configures a feed (PANEL_VULN_FEED_URL).
+ * ACTIVE plugins the radar flagged (out of date | unmaintained | known CVE) with a
+ * severity dot, plain-language "what's wrong + why it matters" copy, and per-row
+ * remediation:
+ *   - "Update safely" runs the EXISTING safe-update mutation (snapshot + TTFB probe
+ *     + automatic rollback) — offered whenever an update exists.
+ *   - "Deactivate" (quarantine) runs the EXISTING pluginDeactivate mutation behind
+ *     a confirm dialog because it can take a feature offline.
+ * Works out of the box with NO paid key: outdated + unmaintained come from the
+ * free wp.org data the inventory already collects. The CVE feed is optional and
+ * only lights up the "known CVE" reason once an operator configures a source.
+ * `null` from the query = insights not collected yet → a friendly empty state.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Radar } from "lucide-react";
+import { Radar, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
@@ -31,58 +33,48 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { relativeTime } from "@/data/derive";
 import { inventoryQuery, securityRadarQuery } from "@/data/queries";
+import {
+	actionButtonLabel,
+	actionGuidance,
+	type RadarReason,
+	REASON_LABEL,
+	reasonExplanation,
+	SEVERITY_META,
+	summaryLabel,
+} from "@/data/radar-copy";
 import type { FlaggedPlugin, SecurityRadar } from "@/data/types";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
-type RadarReason = FlaggedPlugin["reasons"][number];
-
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
-
-const REASON_BADGE: Record<
-	RadarReason,
-	{ label: string; variant: BadgeVariant; className: string }
-> = {
-	outdated: {
-		label: "Outdated",
-		variant: "secondary",
-		className: "bg-warning text-warning-foreground",
-	},
-	abandoned: {
-		label: "Abandoned",
-		variant: "secondary",
-		className: "bg-warning text-warning-foreground",
-	},
-	cve: { label: "Known CVE", variant: "destructive", className: "" },
-};
+function SeverityDot({ severity }: { severity: FlaggedPlugin["severity"] }) {
+	const meta = SEVERITY_META[severity];
+	return (
+		<span className="flex items-center gap-1.5">
+			<span
+				aria-hidden
+				className={`size-2 shrink-0 rounded-full ${meta.dotClass}`}
+			/>
+			<span className={`font-medium text-xs ${meta.textClass}`}>
+				{meta.label}
+			</span>
+		</span>
+	);
+}
 
 function ReasonBadges({ reasons }: { reasons: RadarReason[] }) {
 	return (
 		<div className="flex flex-wrap gap-1">
-			{reasons.map((r) => {
-				const { label, variant, className } = REASON_BADGE[r];
-				return (
-					<Badge className={className} key={r} variant={variant}>
-						{label}
-					</Badge>
-				);
-			})}
+			{reasons.map((r) => (
+				<Badge
+					className={r === "cve" ? "" : "bg-warning text-warning-foreground"}
+					key={r}
+					variant={r === "cve" ? "destructive" : "secondary"}
+				>
+					{REASON_LABEL[r]}
+				</Badge>
+			))}
 		</div>
 	);
-}
-
-function summaryLabel(summary: SecurityRadar["summary"]): string {
-	const parts: string[] = [];
-	if (summary.cve > 0) {
-		parts.push(`${summary.cve} with known CVEs`);
-	}
-	if (summary.outdated > 0) {
-		parts.push(`${summary.outdated} outdated`);
-	}
-	if (summary.abandoned > 0) {
-		parts.push(`${summary.abandoned} abandoned`);
-	}
-	return parts.length > 0 ? parts.join(" · ") : "Nothing flagged";
 }
 
 function RadarRow({
@@ -100,6 +92,7 @@ function RadarRow({
 	const slug = flagged.slug;
 	const canUpdate =
 		flagged.suggestedAction === "safeUpdate" || flagged.newVersion !== null;
+	const updateIsPrimary = flagged.suggestedAction === "safeUpdate";
 
 	async function runUpdate() {
 		try {
@@ -109,12 +102,12 @@ function RadarRow({
 			});
 			start({
 				jobId: r.jobId,
-				title: `Safe-updating ${slug}`,
+				title: `Safe-updating ${flagged.name}`,
 				kind: "safeUpdate",
 				siteId,
 			});
 		} catch {
-			toast.error("Failed to start safe-update.");
+			toast.error("Couldn't start the safe update. Please try again.");
 		}
 	}
 
@@ -123,72 +116,85 @@ function RadarRow({
 			const r = await deactivate.mutateAsync({ siteId, slug });
 			start({
 				jobId: r.jobId,
-				title: `Quarantining (deactivating) ${slug}`,
+				title: `Deactivating ${flagged.name}`,
 				kind: "wp:plugin",
 				siteId,
 			});
 		} catch {
-			toast.error("Failed to quarantine the plugin.");
+			toast.error("Couldn't deactivate the plugin. Please try again.");
 		}
 	}
 
 	return (
-		<div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
-			<div className="grid gap-1">
-				<div className="flex flex-wrap items-center gap-2">
-					<span className="font-medium text-sm">{flagged.name}</span>
-					<span className="text-muted-foreground text-xs">
-						{flagged.version}
-						{flagged.newVersion ? (
-							<span className="ml-1 text-warning">→ {flagged.newVersion}</span>
-						) : null}
-					</span>
+		<div className="flex flex-col gap-3 py-4">
+			<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div className="grid gap-1.5">
+					<div className="flex flex-wrap items-center gap-2">
+						<SeverityDot severity={flagged.severity} />
+						<span className="font-medium text-sm">{flagged.name}</span>
+						<span className="text-muted-foreground text-xs">
+							v{flagged.version}
+							{flagged.newVersion ? (
+								<span className="ml-1 text-warning">
+									→ v{flagged.newVersion}
+								</span>
+							) : null}
+						</span>
+					</div>
+					<ReasonBadges reasons={flagged.reasons} />
 				</div>
-				<ReasonBadges reasons={flagged.reasons} />
-				{flagged.cves.length > 0 ? (
-					<p className="text-destructive text-xs">
-						{flagged.cves.map((c) => c.id).join(", ")}
-					</p>
-				) : null}
-				{flagged.lastUpdated ? (
-					<p className="text-muted-foreground text-xs">
-						Last updated {relativeTime(flagged.lastUpdated, new Date())}
-					</p>
-				) : null}
-			</div>
-			<div className="flex shrink-0 gap-2 self-start sm:self-center">
-				{canUpdate ? (
+				<div className="flex shrink-0 gap-2 self-start">
+					{canUpdate ? (
+						<Button
+							disabled={safeUpdate.isPending}
+							onClick={runUpdate}
+							size="sm"
+							variant={updateIsPrimary ? "default" : "outline"}
+						>
+							{safeUpdate.isPending
+								? "Starting…"
+								: actionButtonLabel("safeUpdate")}
+						</Button>
+					) : null}
 					<Button
-						disabled={safeUpdate.isPending}
-						onClick={runUpdate}
+						disabled={deactivate.isPending}
+						onClick={() => setConfirmQuarantine(true)}
 						size="sm"
-						variant="outline"
+						variant={updateIsPrimary ? "outline" : "default"}
 					>
-						Update
+						Deactivate
 					</Button>
-				) : null}
-				<Button
-					disabled={deactivate.isPending}
-					onClick={() => setConfirmQuarantine(true)}
-					size="sm"
-					variant="outline"
-				>
-					Deactivate
-				</Button>
+				</div>
 			</div>
+
+			{/* Plain-language WHY: one line per reason so a non-technical operator
+			    understands the risk without docs. */}
+			<ul className="grid gap-1 text-muted-foreground text-xs">
+				{flagged.reasons.map((r) => (
+					<li key={r}>• {reasonExplanation(r, flagged)}</li>
+				))}
+				{flagged.lastUpdated ? (
+					<li>
+						• Last released {relativeTime(flagged.lastUpdated, new Date())}.
+					</li>
+				) : null}
+			</ul>
+
+			{/* What we'll do + why it's safe. */}
+			<p className="text-foreground/80 text-xs">{actionGuidance(flagged)}</p>
 
 			<AlertDialog onOpenChange={setConfirmQuarantine} open={confirmQuarantine}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Quarantine {flagged.name}?</AlertDialogTitle>
+						<AlertDialogTitle>Deactivate {flagged.name}?</AlertDialogTitle>
 						<AlertDialogDescription>
-							This deactivates the plugin to remove its attack surface. Any
-							feature it provides goes offline until it is re-activated or
-							safely updated.
+							This turns the plugin off to remove its risk. Any feature it
+							provides goes offline until you re-activate it or a safe update
+							becomes available. Your content and settings are not deleted.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>Keep it on</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={() => {
 								setConfirmQuarantine(false);
@@ -211,12 +217,13 @@ function RecheckButton({ siteId }: { siteId: string }) {
 	async function handleRecheck() {
 		try {
 			await refresh.mutateAsync({ siteId });
+			toast.success("Re-checking — results refresh in a moment.");
 			setTimeout(() => {
 				qc.invalidateQueries(inventoryQuery(siteId));
 				qc.invalidateQueries(securityRadarQuery(siteId));
 			}, 2000);
 		} catch {
-			toast.error("Failed to re-check the radar.");
+			toast.error("Couldn't re-check right now. Please try again.");
 		}
 	}
 
@@ -227,8 +234,44 @@ function RecheckButton({ siteId }: { siteId: string }) {
 			size="sm"
 			variant="outline"
 		>
-			{refresh.isPending ? "Re-checking…" : "Re-check"}
+			{refresh.isPending ? "Re-checking…" : "Re-check now"}
 		</Button>
+	);
+}
+
+function CardShell({
+	children,
+	siteId,
+	withRecheck = true,
+}: {
+	children: React.ReactNode;
+	siteId: string;
+	withRecheck?: boolean;
+}) {
+	return (
+		<Card>
+			<CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+				<CardTitle className="flex items-center gap-2 text-sm">
+					<Radar className="size-4" />
+					Security radar
+				</CardTitle>
+				{withRecheck ? <RecheckButton siteId={siteId} /> : null}
+			</CardHeader>
+			{children}
+		</Card>
+	);
+}
+
+function CleanState() {
+	return (
+		<CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+			<ShieldCheck className="size-8 text-success" />
+			<p className="font-medium text-sm">All clear</p>
+			<p className="max-w-md text-muted-foreground text-sm">
+				Every active plugin is up to date and actively maintained. The radar
+				re-checks automatically each time the inventory refreshes.
+			</p>
+		</CardContent>
 	);
 }
 
@@ -239,53 +282,51 @@ function RadarBody({
 	radar: SecurityRadar;
 	siteId: string;
 }) {
+	const hasFlags = radar.flagged.length > 0;
 	return (
-		<Card>
-			<CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-				<CardTitle className="flex items-center gap-2 text-sm">
-					<Radar className="size-4" />
-					Vulnerability radar
-				</CardTitle>
-				<RecheckButton siteId={siteId} />
-			</CardHeader>
-			<CardContent className="grid gap-2">
+		<CardShell siteId={siteId}>
+			<CardContent className="grid gap-3">
 				<p className="text-muted-foreground text-sm">
+					Watches every active plugin for three risks — out-of-date versions,
+					plugins that look unmaintained, and versions with a publicly known
+					security flaw. No setup required.
+				</p>
+				<p
+					className={
+						hasFlags
+							? "font-medium text-foreground text-sm"
+							: "text-muted-foreground text-sm"
+					}
+				>
 					{summaryLabel(radar.summary)}
 				</p>
-				{radar.flagged.length > 0 ? (
+				{hasFlags ? (
 					<div className="divide-y divide-border rounded-lg border border-border px-4">
 						{radar.flagged.map((flagged) => (
 							<RadarRow flagged={flagged} key={flagged.slug} siteId={siteId} />
 						))}
 					</div>
 				) : (
-					<p className="text-muted-foreground text-sm">
-						No flagged plugins — every active plugin is current and maintained.
-					</p>
+					<CleanState />
 				)}
 			</CardContent>
-		</Card>
+		</CardShell>
 	);
 }
 
 /** Insights haven't been collected yet (query returned `null`). */
 function NotCollected({ siteId }: { siteId: string }) {
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-sm">
-					<Radar className="size-4" />
-					Vulnerability radar
-				</CardTitle>
-			</CardHeader>
+		<CardShell siteId={siteId} withRecheck={false}>
 			<CardContent className="flex flex-col items-center gap-4 py-8 text-center">
-				<p className="text-muted-foreground text-sm">
-					Insights aren't collected yet — refresh the inventory to scan for
-					risky plugins.
+				<p className="max-w-md text-muted-foreground text-sm">
+					We haven't scanned this site yet. Run a quick inventory refresh and
+					the radar will check every active plugin for out-of-date,
+					unmaintained, and known-vulnerable versions.
 				</p>
 				<RecheckButton siteId={siteId} />
 			</CardContent>
-		</Card>
+		</CardShell>
 	);
 }
 
@@ -307,7 +348,7 @@ export function SecurityRadarCard({ siteId }: { siteId: string }) {
 
 	return (
 		<QueryBoundary
-			errorMessage="Couldn't load the vulnerability radar."
+			errorMessage="Couldn't load the security radar. Re-check or refresh the page."
 			hasData={query.data !== undefined}
 			isError={query.isError}
 			isLoading={query.isLoading}
