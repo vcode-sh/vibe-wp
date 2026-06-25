@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { sitesQuery, stagingQuery } from "@/data/queries";
 import { useOperations } from "@/lib/operations/operations-provider";
+import { useInvalidateOnJobDone } from "@/lib/operations/use-invalidate-on-job-done";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/staging")({
@@ -156,6 +157,23 @@ function StagingPage() {
 	const [publishing, setPublishing] = useState(false);
 	const [adding, setAdding] = useState(false);
 	const { start, isRunning } = useOperations();
+	// Refresh the staging card when a copy-to-staging or publish-to-live job
+	// finishes, and give the operator an explicit in-page result (the card alone
+	// updated silently before).
+	useInvalidateOnJobDone(
+		siteId,
+		["refresh", "stagingPushToLive"],
+		[stagingQuery(siteId).queryKey],
+		(status, kind) => {
+			const verb =
+				kind === "stagingPushToLive" ? "Publish to live" : "Copy to staging";
+			if (status === "succeeded") {
+				toast.success(`${verb} finished.`);
+			} else if (status === "failed") {
+				toast.error(`${verb} failed — check the operation log.`);
+			}
+		}
+	);
 
 	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
 	// The UI drives the SAFE push-to-live path (backup -> promote -> health check

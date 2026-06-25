@@ -10,6 +10,7 @@ import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { securityStatusQuery, serverInfoQuery } from "@/data/queries";
+import { authClient } from "@/lib/auth-client";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
 
@@ -29,6 +30,10 @@ function ServerPage() {
 	const server = useQuery(serverInfoQuery());
 	const security = useQuery(securityStatusQuery());
 	const { start, isRunning } = useOperations();
+	// serverHarden is admin-only — don't show the button to viewers/operators (a
+	// click would just fail with FORBIDDEN and no useful next step).
+	const { data: session } = authClient.useSession();
+	const isAdmin = session?.user.role === "admin";
 
 	const harden = useMutation(orpc.serverHarden.mutationOptions());
 
@@ -52,12 +57,14 @@ function ServerPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button
-							disabled={harden.isPending || isRunning("server", "harden")}
-							onClick={handleHarden}
-						>
-							Secure the server
-						</Button>
+						isAdmin ? (
+							<Button
+								disabled={harden.isPending || isRunning("server", "harden")}
+								onClick={handleHarden}
+							>
+								Secure the server
+							</Button>
+						) : undefined
 					}
 					subtitle="The VPS shared by all your sites."
 					title="Server & security"

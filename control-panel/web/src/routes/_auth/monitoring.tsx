@@ -9,6 +9,7 @@ import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { monitoringOverviewQuery } from "@/data/queries";
+import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/monitoring")({
@@ -40,6 +41,11 @@ function MonitoringOverviewPage() {
 	const checkAll = useMutation(orpc.monitoringSummary.mutationOptions());
 	const now = new Date();
 	const entries = overview.data ?? [];
+	// monitoringSummary is operator+ — viewers can read the board but can't run a
+	// fresh check, so don't show them a button that only fails.
+	const { data: session } = authClient.useSession();
+	const canCheck =
+		session?.user.role === "operator" || session?.user.role === "admin";
 
 	async function handleCheckAll() {
 		try {
@@ -57,9 +63,11 @@ function MonitoringOverviewPage() {
 			<div className="mx-auto grid w-full max-w-6xl gap-4 p-6">
 				<PageHeader
 					actions={
-						<Button disabled={checkAll.isPending} onClick={handleCheckAll}>
-							{checkAll.isPending ? "Checking…" : "Check every site"}
-						</Button>
+						canCheck ? (
+							<Button disabled={checkAll.isPending} onClick={handleCheckAll}>
+								{checkAll.isPending ? "Checking…" : "Check every site"}
+							</Button>
+						) : undefined
 					}
 					subtitle={overview.data ? headline(entries) : "Loading site status…"}
 					title="Monitoring"

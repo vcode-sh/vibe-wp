@@ -14,7 +14,9 @@ function requireRole(min: "operator" | "admin") {
 		const role =
 			(context.session.user as { role?: string } | undefined)?.role ?? "viewer";
 		if ((RANK[role] ?? -1) < minRank) {
-			throw new ORPCError("FORBIDDEN");
+			throw new ORPCError("FORBIDDEN", {
+				message: `This action requires the ${min} role.`,
+			});
 		}
 		return next({ context });
 	});

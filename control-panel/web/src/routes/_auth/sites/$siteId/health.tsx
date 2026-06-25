@@ -8,7 +8,8 @@ import { VerdictTile } from "@/components/patterns/verdict-tile";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { healthPerfQuery, healthQuery } from "@/data/queries";
+import { healthPerfQuery, healthQuery, perfAdviceQuery } from "@/data/queries";
+import { useInvalidateOnJobDone } from "@/lib/operations/use-invalidate-on-job-done";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/health")({
 	component: HealthPage,
@@ -22,6 +23,17 @@ function HealthPage() {
 		...healthPerfQuery(siteId),
 		enabled: perfEnabled,
 	});
+	// Applying a performance tweak restarts the stack and changes settings — once
+	// the job finishes, re-read the advice + health so the page isn't stale.
+	useInvalidateOnJobDone(
+		siteId,
+		["perfApply"],
+		[
+			perfAdviceQuery(siteId).queryKey,
+			healthQuery(siteId).queryKey,
+			healthPerfQuery(siteId).queryKey,
+		]
+	);
 
 	// The backend emits a binary signal: uptimePercent is 100 only when a single
 	// instantaneous HTTP probe passed, otherwise 0. Present it honestly as

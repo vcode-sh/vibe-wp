@@ -70,7 +70,11 @@ export function SiteSwitcher({ activeSiteId }: { activeSiteId?: string }) {
 					<DropdownMenuItem onClick={() => navigate({ to: "/sites" })}>
 						All sites
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => navigate({ to: "/sites" })}>
+					<DropdownMenuItem
+						onClick={() =>
+							navigate({ to: "/sites/new", search: { mode: "standard" } })
+						}
+					>
 						<Plus className="size-4" /> New site
 					</DropdownMenuItem>
 				</DropdownMenuGroup>

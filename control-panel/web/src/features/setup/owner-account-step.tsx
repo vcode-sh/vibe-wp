@@ -11,6 +11,7 @@
 import { Label } from "@control-panel/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -23,9 +24,13 @@ import { passwordSchema } from "@/lib/password";
 
 const GENERIC_ERROR =
 	"We couldn't create your account. Check your details and try again.";
+// The server reports this when the panel was already set up — the owner belongs
+// on the login screen, not the create-account step.
+const ALREADY_SETUP_RE = /already complete/i;
 
 export function OwnerAccountStep({ onComplete }: { onComplete: () => void }) {
 	const [confirm, setConfirm] = useState("");
+	const navigate = useNavigate();
 	const completeSetup = useMutation(orpc.completeSetup.mutationOptions());
 
 	const form = useForm({
@@ -48,8 +53,17 @@ export function OwnerAccountStep({ onComplete }: { onComplete: () => void }) {
 					password: value.password,
 					name: value.name,
 				});
-			} catch {
-				toast.error(GENERIC_ERROR);
+			} catch (err) {
+				// Surface the server's specific reason ("email already registered",
+				// "Setup is already complete.") instead of a generic message that
+				// loops the owner forever. If the panel is already set up, send them
+				// to the login screen — there's nothing to create here.
+				const message =
+					err instanceof Error && err.message ? err.message : GENERIC_ERROR;
+				toast.error(message);
+				if (ALREADY_SETUP_RE.test(message)) {
+					navigate({ to: "/login" });
+				}
 				return;
 			}
 			// Owner created — establish the session cookie via the canonical auth path.

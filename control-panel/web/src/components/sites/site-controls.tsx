@@ -11,7 +11,9 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { siteOverviewQuery, siteStatusQuery } from "@/data/queries";
 import { useOperations } from "@/lib/operations/operations-provider";
+import { useInvalidateOnJobDone } from "@/lib/operations/use-invalidate-on-job-done";
 import { orpc } from "@/lib/orpc/client";
 
 // Role gating: `role` is stored as an additionalFields on the better-auth user
@@ -29,6 +31,14 @@ interface SiteControlsProps {
 export function SiteControls({ siteId }: SiteControlsProps) {
 	const { start, isRunning } = useOperations();
 	const [confirmDown, setConfirmDown] = useState(false);
+	// Start/Stop/Restart/Flush change the running state — refresh the status dot
+	// and overview hero when the job finishes so they don't show a stale verdict
+	// (e.g. a green dot after a Stop).
+	useInvalidateOnJobDone(
+		siteId,
+		["up", "down", "restart", "cacheFlush"],
+		[siteStatusQuery(siteId).queryKey, siteOverviewQuery(siteId).queryKey]
+	);
 
 	const lifecycleUp = useMutation(orpc.lifecycleUp.mutationOptions());
 	const lifecycleRestart = useMutation(orpc.lifecycleRestart.mutationOptions());
