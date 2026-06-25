@@ -95,6 +95,9 @@ x-wordpress-environment: &wordpress-environment
   VIBE_WP_DISABLE_OUTBOUND_MAIL: ${VIBE_WP_DISABLE_OUTBOUND_MAIL:-0}
   VIBE_WP_DISABLE_XMLRPC: ${VIBE_WP_DISABLE_XMLRPC:-0}
   VIBE_WP_INTERNAL_URL: ${VIBE_WP_INTERNAL_URL:-http://nginx:8080}
+  # Exposed to the WordPress container (not only nginx) so the Insights mu-plugin
+  # can report the page-cache state. nginx reads the same value to actually cache.
+  NGINX_FASTCGI_CACHE: ${NGINX_FASTCGI_CACHE:-on}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
