@@ -5,6 +5,8 @@
  * No I/O here, so this is unit-tested in isolation.
  */
 
+import type { BackupRecord } from "../contract";
+
 export interface BackupFileEntry {
 	bytes: number;
 	path: string;
@@ -125,4 +127,26 @@ export function isValidFileName(name: string): boolean {
 /** Validate an item name by kind (mirrors the wrapper's per-kind rules). */
 export function isValidItemName(kind: "file" | "table", name: string): boolean {
 	return kind === "table" ? isValidTableName(name) : isValidFileName(name);
+}
+
+const TRAILING_SLASHES = /\/+$/;
+
+/**
+ * Resolve the storage location recorded for `backupId` in a parsed `backups`
+ * listing. Returns the listed location ("local" | "offsite" | "both"), or null
+ * when the id is not present (e.g. the copy was pruned between the verify
+ * request and its completion). Path comparison tolerates a trailing slash on
+ * either side so the panel's canonical `backups/<env>/<ts>` matches a `…/` row.
+ * Pure — used by the backup-verify finish hook to record the REAL location of
+ * the copy that was verified (so the offsite badge is never fabricated).
+ */
+export function resolveBackupLocation(
+	backups: BackupRecord[],
+	backupId: string
+): BackupRecord["location"] | null {
+	const target = backupId.replace(TRAILING_SLASHES, "");
+	const hit = backups.find(
+		(b) => b.id.replace(TRAILING_SLASHES, "") === target
+	);
+	return hit ? hit.location : null;
 }

@@ -97,6 +97,52 @@ describe("startJob / drain — natural exits", () => {
 	});
 });
 
+describe("startJob — onFinish terminal hook", () => {
+	it("fires onFinish exactly once with 'succeeded' on a clean exit", async () => {
+		const proc = makeProc();
+		const calls: string[] = [];
+		const { jobId } = await startJob(
+			{ ...BASE_INPUT, onFinish: (s) => calls.push(s) },
+			fakeDeps(proc)
+		);
+		proc.resolveExit(0);
+		await proc.exited;
+		await new Promise((r) => setTimeout(r, 0));
+		expect(getJob(jobId)?.status).toBe("succeeded");
+		expect(calls).toEqual(["succeeded"]);
+	});
+
+	it("fires onFinish with 'failed' on a non-zero exit", async () => {
+		const proc = makeProc();
+		const calls: string[] = [];
+		await startJob(
+			{ ...BASE_INPUT, onFinish: (s) => calls.push(s) },
+			fakeDeps(proc)
+		);
+		proc.resolveExit(2);
+		await proc.exited;
+		await new Promise((r) => setTimeout(r, 0));
+		expect(calls).toEqual(["failed"]);
+	});
+
+	it("swallows an onFinish that throws (job status unaffected)", async () => {
+		const proc = makeProc();
+		const { jobId } = await startJob(
+			{
+				...BASE_INPUT,
+				onFinish: () => {
+					throw new Error("hook boom");
+				},
+			},
+			fakeDeps(proc)
+		);
+		proc.resolveExit(0);
+		await proc.exited;
+		await new Promise((r) => setTimeout(r, 0));
+		expect(getJob(jobId)?.status).toBe("succeeded");
+	});
+});
+
 describe("cancelJob — in-flight cancel", () => {
 	it("status stays 'canceled' even after the fake proc exits", async () => {
 		const proc = makeProc();
@@ -143,7 +189,13 @@ describe("startJob — SERVER_SITE_ID sentinel security guard", () => {
 			writeAudit: () => noop(),
 		};
 		const { jobId } = await startJob(
-			{ ...BASE_INPUT, op: "harden" as const, siteId: "server", kind: "harden", action: "harden" },
+			{
+				...BASE_INPUT,
+				op: "harden" as const,
+				siteId: "server",
+				kind: "harden",
+				action: "harden",
+			},
 			deps
 		);
 		proc.resolveExit(0);
@@ -163,7 +215,13 @@ describe("startJob — SERVER_SITE_ID sentinel security guard", () => {
 		};
 		await expect(
 			startJob(
-				{ ...BASE_INPUT, op: "backup" as const, siteId: "server", kind: "backup", action: "backup" },
+				{
+					...BASE_INPUT,
+					op: "backup" as const,
+					siteId: "server",
+					kind: "backup",
+					action: "backup",
+				},
 				deps
 			)
 		).rejects.toThrow("Unknown site");

@@ -8,16 +8,16 @@ import type { OffsiteVerified } from "../contract";
 const OFFSITE_LOCATIONS = ["offsite", "both"] as const;
 
 /**
- * Upsert a backup-verification outcome. Called when a backup-verify job
- * finishes for a known backupId + location.
+ * Upsert a backup-verification outcome. Called from the backup-verify job's
+ * terminal hook (see backupsVerify in routers/backups.ts) once the verify job
+ * settles, with the backup's REAL listed location resolved at verify-start.
  *
- * TODO(offsite-verified upsert wiring): this is NOT yet called from the verify
- * job-finish path. The existing job machinery (jobs.ts drainJob /
- * persistJobFinish) only receives jobId + status + exitCode, not the backupId or
- * location the job verified. Wiring this honestly requires threading
- * {backupId, location} through the job meta into the finish hook — deferred to a
- * separately-reviewed change so the badge never shows a fabricated timestamp.
- * Until then the badge reads "not yet verified" because no rows are written.
+ * The badge therefore only ever reflects an actual successful verify of a copy
+ * whose listing location is offsite/both — never a fabricated timestamp. A
+ * failed verify writes ok=0, which the badge query ignores (it reads ok=1 only),
+ * so a later failure does not erase the "last good" badge unless it overwrites
+ * the SAME (site, backup) row — which is correct: that copy is no longer known
+ * good.
  */
 export async function persistBackupVerification(params: {
 	siteId: string;

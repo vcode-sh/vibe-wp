@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import type { BackupRecord } from "../contract";
 import {
 	isValidBackupId,
 	isValidFileName,
 	isValidItemName,
 	isValidTableName,
 	parseBackupContents,
+	resolveBackupLocation,
 } from "./backup-contents-pure";
 
 describe("parseBackupContents — NDJSON-TAB parser", () => {
@@ -153,5 +155,47 @@ describe("isValidItemName — dispatches by kind", () => {
 	it("uses file rules for file kind", () => {
 		expect(isValidItemName("file", "uploads/a.txt")).toBe(true);
 		expect(isValidItemName("file", "../escape")).toBe(false);
+	});
+});
+
+describe("resolveBackupLocation", () => {
+	const rec = (
+		id: string,
+		location: BackupRecord["location"]
+	): BackupRecord => ({ id, location, sizeMB: 1, verified: true, whenISO: "" });
+
+	const listing: BackupRecord[] = [
+		rec("backups/prod/20260621T010203Z", "both"),
+		rec("backups/prod/20260620T010203Z", "local"),
+		rec("backups/prod/20260619T010203Z", "offsite"),
+	];
+
+	it("returns the listed location for a matching id", () => {
+		expect(
+			resolveBackupLocation(listing, "backups/prod/20260621T010203Z")
+		).toBe("both");
+		expect(
+			resolveBackupLocation(listing, "backups/prod/20260620T010203Z")
+		).toBe("local");
+		expect(
+			resolveBackupLocation(listing, "backups/prod/20260619T010203Z")
+		).toBe("offsite");
+	});
+
+	it("tolerates a trailing slash on either side", () => {
+		expect(
+			resolveBackupLocation(listing, "backups/prod/20260621T010203Z/")
+		).toBe("both");
+		const trailing = [rec("backups/prod/20260618T010203Z/", "offsite")];
+		expect(
+			resolveBackupLocation(trailing, "backups/prod/20260618T010203Z")
+		).toBe("offsite");
+	});
+
+	it("returns null when the id is absent (e.g. pruned) or the list is empty", () => {
+		expect(resolveBackupLocation(listing, "backups/prod/nope")).toBe(null);
+		expect(resolveBackupLocation([], "backups/prod/20260621T010203Z")).toBe(
+			null
+		);
 	});
 });
