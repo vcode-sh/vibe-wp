@@ -2,11 +2,13 @@ import { db } from "@control-panel/db";
 import { monitorSamples } from "@control-panel/db/schema/monitoring";
 import { and, desc, eq, gte, lt } from "drizzle-orm";
 
+import { runVibe } from "./exec";
 import {
 	extractSampleFields,
 	type MonitorParsed,
 	sinceCutoffMs,
 } from "./monitor-history-pure";
+import { parseMonitorJson } from "./parse";
 
 export type { MonitorParsed } from "./monitor-history-pure";
 
@@ -86,6 +88,25 @@ export async function latestSample(
 		.orderBy(desc(monitorSamples.ts))
 		.limit(1);
 	return rows[0] ?? null;
+}
+
+/**
+ * Run the already-allowlisted `monitor` op ONCE for a site (live HTTP probe +
+ * TLS handshake; `--json --no-notify` are baked into the VIBE_OPS entry so this
+ * never fires alerts) and persist a derived sample. This is the SINGLE recording
+ * path shared by the oRPC handlers and the periodic recorder, so every persisted
+ * sample is produced identically. `monitor` exits non-zero when a check fails;
+ * we still parse stdout for the snapshot. The panel manages production sites, so
+ * the env is fixed to "prod" — matching health.ts and the rest of the routers.
+ */
+export async function recordSiteSample(
+	siteDir: string,
+	siteId: string
+): Promise<MonitorSampleRow> {
+	const { stdout } = await runVibe(siteDir, "prod", "monitor", {
+		timeoutMs: 90_000,
+	});
+	return recordMonitorSample(siteId, parseMonitorJson(stdout));
 }
 
 /**

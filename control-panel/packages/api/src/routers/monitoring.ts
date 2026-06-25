@@ -2,16 +2,14 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import type { MonitoringSummaryEntry, MonitorSample } from "../contract";
-import { runVibe } from "../core-bridge/exec";
 import {
 	latestSample,
 	type MonitorSampleRow,
 	monitoringHistory,
-	recordMonitorSample,
+	recordSiteSample,
 	samplesInWindow,
 } from "../core-bridge/monitor-history";
 import { uptimePercentOver } from "../core-bridge/monitor-history-pure";
-import { parseMonitorJson } from "../core-bridge/parse";
 import { detectSites, findSite } from "../core-bridge/sites";
 import { operatorProcedure, protectedProcedure } from "../procedures";
 
@@ -32,15 +30,6 @@ function toWireSample(row: MonitorSampleRow): MonitorSample {
 		failures: row.failures,
 		warnings: row.warnings,
 	};
-}
-
-/** Run the already-allowlisted `monitor` op once for a site and persist it. */
-async function recordOnce(siteDir: string, siteId: string): Promise<void> {
-	// monitor exits 1 when a check fails; still parse stdout for the snapshot.
-	const { stdout } = await runVibe(siteDir, "prod", "monitor", {
-		timeoutMs: 90_000,
-	});
-	await recordMonitorSample(siteId, parseMonitorJson(stdout));
 }
 
 /** Compose a per-site summary tile from the latest sample + window samples. */
@@ -70,6 +59,20 @@ function summaryEntry(
 	};
 }
 
+/** Read the latest persisted tile per detected site (NO host spawn). */
+async function buildEntries(): Promise<MonitoringSummaryEntry[]> {
+	const sites = await detectSites();
+	return Promise.all(
+		sites.map(async (s) => {
+			const [latest, window] = await Promise.all([
+				latestSample(s.id),
+				samplesInWindow(s.id, SUMMARY_WINDOW_DAYS),
+			]);
+			return summaryEntry(s.id, s.domain, latest, window);
+		})
+	);
+}
+
 export const monitoringRouter = {
 	/**
 	 * Persisted samples for one site over a `sinceDays` window. READ-ONLY (no host
@@ -91,32 +94,33 @@ export const monitoringRouter = {
 		}),
 
 	/**
+	 * READ-ONLY all-sites overview: the latest persisted tile per detected site,
+	 * straight from the DB — NO host spawn. This is what the at-a-glance overview
+	 * page polls, so opening it is cheap and any viewer can see status. Fresh
+	 * samples come from the background recorder (or the explicit refresh below).
+	 */
+	monitoringOverview: protectedProcedure.handler(
+		(): Promise<MonitoringSummaryEntry[]> => buildEntries()
+	),
+
+	/**
 	 * Latest derived tile per detected site. This handler also RECORDS a fresh
 	 * sample per site by running the already-allowlisted `monitor` op (the live
-	 * TLS handshake + HTTP probe), so history accrues whenever the status view is
-	 * opened. Spawning the host op → operatorProcedure. Recording is best-effort:
-	 * a site whose monitor run fails still reports its last persisted tile.
+	 * TLS handshake + HTTP probe), so it doubles as an explicit "check every site
+	 * now". Spawning the host op → operatorProcedure. Recording is best-effort: a
+	 * site whose monitor run fails still reports its last persisted tile.
 	 */
 	monitoringSummary: operatorProcedure.handler(
 		async (): Promise<MonitoringSummaryEntry[]> => {
 			const sites = await detectSites();
 			await Promise.all(
 				sites.map((s) =>
-					recordOnce(s.installDir, s.id).catch(() => {
+					recordSiteSample(s.installDir, s.id).catch(() => {
 						// Best-effort: keep the last persisted tile for this site.
 					})
 				)
 			);
-			const entries = await Promise.all(
-				sites.map(async (s) => {
-					const [latest, window] = await Promise.all([
-						latestSample(s.id),
-						samplesInWindow(s.id, SUMMARY_WINDOW_DAYS),
-					]);
-					return summaryEntry(s.id, s.domain, latest, window);
-				})
-			);
-			return entries;
+			return buildEntries();
 		}
 	),
 
@@ -131,13 +135,7 @@ export const monitoringRouter = {
 			if (!site) {
 				throw new ORPCError("NOT_FOUND");
 			}
-			const { stdout } = await runVibe(site.installDir, "prod", "monitor", {
-				timeoutMs: 90_000,
-			});
-			const row = await recordMonitorSample(
-				input.siteId,
-				parseMonitorJson(stdout)
-			);
+			const row = await recordSiteSample(site.installDir, input.siteId);
 			return toWireSample(row);
 		}),
 };

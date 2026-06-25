@@ -78,3 +78,6 @@ export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) =>
 
 export const monitoringSummaryQuery = () =>
 	orpc.monitoringSummary.queryOptions();
+
+export const monitoringOverviewQuery = () =>
+	orpc.monitoringOverview.queryOptions();

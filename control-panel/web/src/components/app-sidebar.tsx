@@ -51,6 +51,7 @@ const SITE_LINKS: SiteLink[] = [
 ];
 
 const SERVER_LINKS: SiteLink[] = [
+	{ label: "Monitoring", to: "/monitoring", icon: Gauge },
 	{ label: "Operations", to: "/operations", icon: History },
 	{ label: "Server & security", to: "/server", icon: ShieldCheck },
 	{ label: "Settings", to: "/settings", icon: Settings },
