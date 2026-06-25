@@ -24,7 +24,7 @@ Last updated: 2026-06-24. This is the canonical "what's shipped / what's next" r
 Single-binary distribution (blocked: libsql native driver) · Tauri desktop (scaffold only) · multi-server/fleet · invite emails (covered by `admin.createUser` + reset-password) · `disableSignUp` (intentionally not set — the hook closes registration; owner bootstrap needs sign-up open).
 
 ### Genuinely not-yet-built
-A few GUI-parity conveniences from the bootstrap spec §11: AI-connector-key entry in the create-site wizard, support-bundle download from the panel, GUI-triggered stack update, create-site DNS-preflight gating.
+~~A few GUI-parity conveniences from the bootstrap spec §11~~ ✅ SHIPPED 2026-06-25 (main `73b6d5b`): AI-connector-key entry in the create-site wizard (masked, optional, via STDIN), support-bundle download from the panel (VPS-validated: 0 secret leaks), GUI-triggered stack update (`panel update` detached via systemd-run, wrapper rejects all args), create-site DNS-preflight gating (resolved-IP vs VPS-IP, with override). All adversarially reviewed (PASS) + host-op-validated.
 
 ---
 
