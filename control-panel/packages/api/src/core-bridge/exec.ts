@@ -54,6 +54,17 @@ export const VIBE_OPS = {
 	doctorRuntime: { argv: ["doctor-runtime"], stream: false },
 	monitor: { argv: ["monitor", "--json", "--no-notify"], stream: false },
 	perfReport: { argv: ["perf-report", "--json"], stream: false },
+	/** Sample FPM/OPcache/Redis/InnoDB + host RAM over a short window (advisor input). */
+	perfMeasure: { argv: ["perf-measure", "--json"], stream: false },
+	/**
+	 * EXPERIMENTAL (feature #5) — write advisor-suggested tunables into the env
+	 * file. NOT YET VALIDATED on a real VPS; admin-gated. Tunable VALUES travel
+	 * via opts.env (VIBE_PERF_* + VIBE_PERF_KEYS), NEVER on argv, identical to
+	 * site-config-apply. takesArg is false: there are no positional args.
+	 */
+	perfApply: { argv: ["perf-apply"], stream: true },
+	/** Roll back the last perf-apply from the env/<env>.perf.bak snapshot. */
+	perfApplyRollback: { argv: ["perf-apply", "--rollback"], stream: true },
 	securityStatus: { argv: ["security-status"], stream: false },
 	/** List compose service status as JSON (non-streaming, read-only). */
 	psJson: { argv: ["compose", "ps", "--format", "json"], stream: false },

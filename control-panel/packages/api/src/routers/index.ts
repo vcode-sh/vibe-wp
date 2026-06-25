@@ -8,6 +8,7 @@ import { inventoryRouter } from "./inventory";
 import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { operationsRouter } from "./operations";
+import { performanceRouter } from "./performance";
 import { pluginsRouter } from "./plugins";
 import { provisioningRouter } from "./provisioning";
 import { securityScoreRouter } from "./security-score";
@@ -40,6 +41,7 @@ export const appRouter = {
 	...devinfoRouter,
 	...sharedDbRouter,
 	...securityScoreRouter,
+	...performanceRouter,
 };
 
 export type AppRouter = typeof appRouter;

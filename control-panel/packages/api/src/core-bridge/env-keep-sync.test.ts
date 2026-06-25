@@ -106,6 +106,8 @@ vi.mock("./sites", () => ({
 
 // Imported AFTER the mocks above so the mocked db/sites are used.
 import { backupConfigEnv, backupTestEnv } from "./backup-config";
+import { PERF_TUNABLE_KEYS } from "./perf-advisor";
+import { perfRecsToEnv } from "./perf-apply";
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -194,6 +196,27 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 	// explicitly here to ensure it is always covered by the drift guard.
 	keys.add("SMTP_TEST_TO");
 
+	// perfApply (feature #5, EXPERIMENTAL): perfRecsToEnv emits VIBE_PERF_<KEY>
+	// for every recommendation plus the VIBE_PERF_KEYS declaration. Drive it with
+	// one recommendation per FIXED tunable key so every VIBE_PERF_* var the panel
+	// can inject is covered by the drift guard.
+	for (const k of Object.keys(
+		perfRecsToEnv(
+			PERF_TUNABLE_KEYS.map((key) => ({
+				key,
+				label: key,
+				current: "1",
+				suggested: "2",
+				unit: "",
+				reason: "",
+				risk: "low" as const,
+				category: "fpm" as const,
+			}))
+		)
+	)) {
+		keys.add(k);
+	}
+
 	return keys;
 }
 
@@ -262,12 +285,13 @@ describe("bin/panel env_keep stays in sync with injected env keys", () => {
 		).toEqual([]);
 	});
 
-	it("the two sets are EXACTLY equal (30 keys today)", async () => {
+	it("the two sets are EXACTLY equal (39 keys today)", async () => {
 		const injected = await collectInjectedEnvKeys();
 		const keep = parsePanelEnvKeep();
 		expect(sorted(keep)).toEqual(sorted(injected));
 		// Belt-and-braces: pin the count so a same-size swap can't slip through.
-		expect(injected.size).toBe(30);
-		expect(keep.size).toBe(30);
+		// 30 pre-#5 keys + 9 perf keys (8 VIBE_PERF_<tunable> + VIBE_PERF_KEYS).
+		expect(injected.size).toBe(39);
+		expect(keep.size).toBe(39);
 	});
 });
