@@ -36,6 +36,16 @@ export function StepReview({
 				<Row label="Production domain" value={form.domain.trim() || "—"} />
 				<Row label="Site title" value={form.siteTitle.trim() || "Default"} />
 				<Row label="Admin email" value={form.adminEmail.trim() || "—"} />
+				{mode === "external" ? null : (
+					<Row
+						label="Database"
+						value={
+							form.dbMode === "shared"
+								? "Shared database"
+								: "Dedicated container"
+						}
+					/>
+				)}
 				<Row
 					label="Staging"
 					value={

@@ -62,7 +62,11 @@ export function useProvisionWizard(mode: ProvisionMode) {
 
 	const createSite = useMutation(orpc.createSite.mutationOptions());
 	const createExternal = useMutation(orpc.createExternal.mutationOptions());
-	const submitting = createSite.isPending || createExternal.isPending;
+	const createSharedDb = useMutation(orpc.createSharedDb.mutationOptions());
+	const submitting =
+		createSite.isPending ||
+		createExternal.isPending ||
+		createSharedDb.isPending;
 
 	const step: StepKey = steps[index] ?? "basics";
 	const isLast = index === steps.length - 1;
@@ -100,10 +104,17 @@ export function useProvisionWizard(mode: ProvisionMode) {
 		}
 		const domain = form.domain.trim().toLowerCase();
 		try {
-			const result =
-				mode === "external"
-					? await createExternal.mutateAsync(toCreateExternalInput(form))
-					: await createSite.mutateAsync(toCreateSiteInput(form));
+			// createSharedDb takes the SAME input shape as createSite (no external
+			// creds) — it just lands the site on the one shared MariaDB instead of a
+			// per-site container. Both return { jobId } for the operations tray.
+			let result: { jobId: string };
+			if (mode === "external") {
+				result = await createExternal.mutateAsync(toCreateExternalInput(form));
+			} else if (form.dbMode === "shared") {
+				result = await createSharedDb.mutateAsync(toCreateSiteInput(form));
+			} else {
+				result = await createSite.mutateAsync(toCreateSiteInput(form));
+			}
 			handledRef.current = false;
 			setTracked(domain);
 			start({
@@ -117,7 +128,7 @@ export function useProvisionWizard(mode: ProvisionMode) {
 				err instanceof Error ? err.message : "Failed to start provisioning.";
 			toast.error(message);
 		}
-	}, [createExternal, createSite, form, mode, start]);
+	}, [createExternal, createSharedDb, createSite, form, mode, start]);
 
 	// Watch the tracked provision job's TERMINAL status. We read the current
 	// status (not a transition) so there is no race if the job finishes before

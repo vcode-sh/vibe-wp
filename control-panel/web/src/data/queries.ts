@@ -67,3 +67,5 @@ export const operationsListQuery = (opts?: {
 
 export const inventoryQuery = (siteId: string) =>
 	orpc.siteInventory.queryOptions({ input: { siteId } });
+
+export const sharedDbStatusQuery = () => orpc.sharedDbStatus.queryOptions();
