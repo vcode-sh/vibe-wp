@@ -4,6 +4,7 @@ import {
 	CollapsibleTrigger,
 } from "@control-panel/ui/components/collapsible";
 import { Progress } from "@control-panel/ui/components/progress";
+import { useNavigate } from "@tanstack/react-router";
 import { Ban, CheckCircle2, CircleHelp, Loader2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -93,6 +94,7 @@ export function LiveOperation({
 	startedAt?: number;
 	onDone?: (status: JobStatus) => void;
 }) {
+	const navigate = useNavigate();
 	const [now, setNow] = useState(() => Date.now());
 	const [canceling, setCanceling] = useState(false);
 	const live = useLiveStream(
@@ -188,7 +190,29 @@ export function LiveOperation({
 				) : null}
 
 				{live.done ? (
-					<TerminalStatus status={live.status} />
+					<div className="flex items-center justify-between gap-3">
+						<TerminalStatus status={live.status} />
+						<div className="flex gap-2">
+							{live.status === "succeeded" && kind === "provision" ? (
+								<Button
+									onClick={() => {
+										navigate({ to: "/sites" });
+										onOpenChange(false);
+									}}
+									size="sm"
+								>
+									View your sites
+								</Button>
+							) : null}
+							<Button
+								onClick={() => onOpenChange(false)}
+								size="sm"
+								variant="outline"
+							>
+								Close
+							</Button>
+						</div>
+					</div>
 				) : (
 					<div className="flex justify-end">
 						<Button

@@ -2,10 +2,9 @@ import { env } from "@control-panel/env/server";
 
 import { hostFromUrl, parseEnvFile } from "./parse";
 import { redact } from "./redact";
+import { slugFromComposeProject } from "./site-slug";
 
 const STRIP_BIN_VIBE = /\/bin\/vibe$/;
-const COMPOSE_PROJECT_PREFIX = /^vibe-wp-/;
-const COMPOSE_PROJECT_PROD_SUFFIX = /-prod$/;
 const TRAILING_CR = /\r$/;
 
 export interface DetectedSite {
@@ -38,20 +37,6 @@ async function readFileSafe(path: string): Promise<string> {
 	} catch {
 		return "";
 	}
-}
-
-/** Recover the authoritative slug from `vibe-wp-<slug>-prod`. */
-function slugFromComposeProject(
-	project: string | undefined,
-	fallback: string
-): string {
-	if (!project) {
-		return fallback;
-	}
-	const slug = project
-		.replace(COMPOSE_PROJECT_PREFIX, "")
-		.replace(COMPOSE_PROJECT_PROD_SUFFIX, "");
-	return slug.length > 0 ? slug : fallback;
 }
 
 /** Parse the numeric port from an HTTP_PORT value like "127.0.0.1:18000". */
@@ -168,7 +153,12 @@ async function detectSitesDirect(): Promise<DetectedSite[]> {
 	for (const dir of dirs) {
 		const prod = parseEnvFile(await readFileSafe(`${dir}/env/prod.env`));
 		const stage = parseEnvFile(await readFileSafe(`${dir}/env/stage.env`));
-		const home = prod.WP_HOME ?? stage.WP_HOME;
+		// Shared-database sites have NO prod.env — their production-equivalent
+		// non-secret fields live in env/shared-db.env. Use whichever carries the
+		// production WP_HOME as the primary source so these sites are listed too.
+		const shared = parseEnvFile(await readFileSafe(`${dir}/env/shared-db.env`));
+		const primary = prod.WP_HOME ? prod : shared;
+		const home = primary.WP_HOME ?? stage.WP_HOME;
 		if (!home) {
 			continue;
 		}
@@ -176,12 +166,12 @@ async function detectSitesDirect(): Promise<DetectedSite[]> {
 		sites.push({
 			id: slug,
 			slug,
-			caddySlug: slugFromComposeProject(prod.COMPOSE_PROJECT_NAME, slug),
+			caddySlug: slugFromComposeProject(primary.COMPOSE_PROJECT_NAME, slug),
 			installDir: dir,
 			domain: hostFromUrl(home),
 			hasStaging: Boolean(stage.WP_HOME),
 			stagingDomain: stage.WP_HOME ? hostFromUrl(stage.WP_HOME) : null,
-			prodPort: httpPortOf(prod.HTTP_PORT),
+			prodPort: httpPortOf(primary.HTTP_PORT),
 			stagePort: httpPortOf(stage.HTTP_PORT),
 		});
 	}

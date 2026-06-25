@@ -513,13 +513,17 @@ port_of() {
 }
 
 slug_of() {
-  # vibe-wp-<slug>-prod / vibe-wp-<slug>-stage -> <slug>; fall back to dir tail.
+  # vibe-wp-<slug>-{prod,stage,shared-db,external} -> <slug>; fall back to dir
+  # tail. shared-db/external must be stripped too, else a shared-database site's
+  # slug came out as <slug>-shared-db and never matched its vibe-wp-<slug>.caddy.
   project="$1"
   fallback="$2"
   [ -n "$project" ] || { echo "$fallback"; return 0; }
   s="${project#vibe-wp-}"
   s="${s%-prod}"
   s="${s%-stage}"
+  s="${s%-shared-db}"
+  s="${s%-external}"
   [ -n "$s" ] && echo "$s" || echo "$fallback"
 }
 
@@ -534,13 +538,18 @@ siteinfo() {
     dir="${vibebin%/bin/vibe}"
     prod="$dir/env/prod.env"
     stage="$dir/env/stage.env"
-    home="$(env_value "$prod" WP_HOME)"
+    # A per-DB site uses prod.env; a shared-database site uses shared-db.env (no
+    # prod.env). Treat whichever holds the production WP_HOME as the primary
+    # source so shared-db sites are listed. Only non-secret fields are emitted.
+    primary="$prod"
+    [ -n "$(env_value "$prod" WP_HOME)" ] || primary="$dir/env/shared-db.env"
+    home="$(env_value "$primary" WP_HOME)"
     [ -n "$home" ] || home="$(env_value "$stage" WP_HOME)"
     [ -n "$home" ] || continue
     fallback="${dir##*/}"
-    slug="$(slug_of "$(env_value "$prod" COMPOSE_PROJECT_NAME)" "$fallback")"
+    slug="$(slug_of "$(env_value "$primary" COMPOSE_PROJECT_NAME)" "$fallback")"
     domain="$(host_of "$home")"
-    prod_port="$(port_of "$(env_value "$prod" HTTP_PORT)")"
+    prod_port="$(port_of "$(env_value "$primary" HTTP_PORT)")"
     stage_port="$(port_of "$(env_value "$stage" HTTP_PORT)")"
     stage_home="$(env_value "$stage" WP_HOME)"
     if [ -n "$stage_home" ]; then
