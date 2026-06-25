@@ -1,14 +1,19 @@
 import { beforeAll, expect, it } from "vitest";
 
 // ---------------------------------------------------------------------------
-// DB-backed test for the public needsSetup procedure.
+// DB-backed test for the public needsSetup procedure and the completeSetup
+// security guard.
 //
 // Sets env vars and SKIP_ENV_VALIDATION BEFORE any dynamic import so the
 // @control-panel/db singleton uses the in-memory libsql DB (same pattern as
 // jobs-db.test.ts). Creates the minimal `user` table DDL, then asserts:
-//   - true  when zero admin rows exist
-//   - still true when only a non-admin (viewer) row exists
-//   - false once an admin row is inserted
+//   - needsSetup true  when zero admin rows exist
+//   - needsSetup still true when only a non-admin (viewer) row exists
+//   - needsSetup false once an admin row is inserted
+//   - completeSetup REFUSES (FORBIDDEN) once an admin exists — the load-bearing
+//     server-side guard. It re-runs the SAME admin-count query needsSetup uses,
+//     so the guard branch is exercised directly without needing the full auth
+//     stack (the happy path is covered by the auth first-user hook + VPS run).
 // ---------------------------------------------------------------------------
 
 interface LibsqlClient {
@@ -75,4 +80,26 @@ it("needsSetup is false once an admin row exists", async () => {
 		input: undefined,
 	});
 	expect(r.needsSetup).toBe(false);
+});
+
+it("completeSetup REFUSES once an admin already exists (the security guard)", async () => {
+	// An admin row exists from the previous test, so needsSetup is false. The
+	// guard must throw BEFORE ever calling better-auth — an attacker must never
+	// be able to mint a second admin on an already-set-up panel.
+	await expect(
+		setupRouter.completeSetup["~orpc"].handler({
+			context: ctx,
+			input: {
+				email: "attacker@x.test",
+				password: "Sup3rStr0ngPass!",
+				name: "Attacker",
+			},
+		})
+	).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+	// And no extra user was created by the refused call.
+	const [row] = await db.select().from(user);
+	expect(row).toBeDefined();
+	const all = await db.select().from(user);
+	expect(all.some((u) => u.email === "attacker@x.test")).toBe(false);
 });

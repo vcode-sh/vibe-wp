@@ -15,7 +15,10 @@ if [ "$(id -u)" = 0 ]; then SUDO=""; else SUDO="sudo"; fi
 usage() {
   echo "Usage: bin/panel <install|update|status|logs|reset-password|uninstall> [options]"
   echo ""
-  echo "  install    --admin-email e [--access domain|magic-dns|ip-port|localhost] [--domain d] [--port N] [--admin-password P]"
+  echo "  install    [--access domain|magic-dns|ip-port|localhost] [--domain d] [--port N] [--admin-email e] [--admin-password P]"
+  echo "             --admin-email / --admin-password are OPTIONAL: omit both and the"
+  echo "             browser onboarding wizard creates the owner on first visit. Supply"
+  echo "             both (or --admin-email + VIBE_PANEL_ADMIN_PASSWORD) for headless/CI."
   echo "             Env: VIBE_PANEL_ADMIN_PASSWORD — supply the owner password without exposing it in argv/ps"
   echo "  update     Rebuild + redeploy the panel from the current repo checkout"
   echo "  status     Show systemd service status"
@@ -329,7 +332,17 @@ install_panel() {
       "$ACCESS_MODE" "$ACCESS_HOST" "$ACCESS_ORIGIN" "$CADDY_SITE_ADDRESS" "$CADDY_TLS_LINE"
     return 0
   fi
-  [ -n "$ADMIN_EMAIL" ] || { printf 'Owner email: '; read -r ADMIN_EMAIL; }
+  # Owner creation is OPTIONAL. Resolve the password from the env up-front (it is
+  # never read from argv/ps) so we can decide whether to bootstrap an owner at all.
+  # When NO owner creds are supplied AND we have an interactive TTY, offer to
+  # capture them now; otherwise stay silent and let the browser onboarding wizard
+  # create the owner on first visit (needsSetup stays true). Non-interactive runs
+  # with no creds simply skip owner creation — they do not block on a prompt.
+  [ -n "$ADMIN_PASSWORD" ] || ADMIN_PASSWORD="${VIBE_PANEL_ADMIN_PASSWORD:-}"
+  if [ -z "$ADMIN_EMAIL" ] && [ -z "$ADMIN_PASSWORD" ] && [ -t 0 ]; then
+    printf 'Owner email (leave blank to finish setup in the browser): '
+    read -r ADMIN_EMAIL
+  fi
 
   # Bun preflight
   if ! command -v bun >/dev/null 2>&1; then
@@ -383,29 +396,50 @@ $CADDY_TLS_LINE
 	}
 }" | $SUDO tee /etc/caddy/sites-enabled/vibe-wp-panel.caddy >/dev/null
 
-  # Smoke + owner bootstrap (first user becomes admin via the DB hook; password never echoed)
+  # Smoke check the local service before exposing it.
   sleep 2
   curl -fsS "http://localhost:$PORT/" >/dev/null && echo "panel: service up"
-  # Accept the owner password from the environment (avoids argv/ps exposure)
-  # when the installer drives this non-interactively.
-  [ -n "$ADMIN_PASSWORD" ] || ADMIN_PASSWORD="${VIBE_PANEL_ADMIN_PASSWORD:-}"
-  if [ -z "$ADMIN_PASSWORD" ]; then
+
+  # Expose the panel via Caddy unconditionally. With owner creation now OPTIONAL,
+  # a fresh panel may legitimately come up with zero users so the browser
+  # onboarding wizard can create the owner. That is SAFE because the only
+  # reachable mutation before an owner exists is the completeSetup procedure,
+  # which re-checks server-side that no admin exists and refuses otherwise; and
+  # public better-auth sign-up is already closed by the first-user auth hook
+  # (only the very first create is allowed). Do NOT add any other unauthenticated
+  # mutating procedure to the pre-owner surface.
+  $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
+
+  # Optional owner bootstrap (first user becomes admin via the DB hook; password
+  # never echoed). When an interactive operator entered an email but no password,
+  # capture it now. We only create the owner when BOTH email and password are
+  # present; otherwise we skip and let the browser wizard handle it.
+  if [ -n "$ADMIN_EMAIL" ] && [ -z "$ADMIN_PASSWORD" ] && [ -t 0 ]; then
     printf 'Owner password (min 8): '
     stty -echo
     read -r ADMIN_PASSWORD
     stty echo
     echo
   fi
-  printf '{"email":"%s","password":"%s","name":"Owner"}' "$ADMIN_EMAIL" "$ADMIN_PASSWORD" \
-    | curl -fsS -X POST "http://localhost:$PORT/api/auth/sign-up/email" \
-      -H 'Content-Type: application/json' \
-      --data @- >/dev/null \
-    && echo "panel: owner account created"
 
-  # Expose the public domain only AFTER the owner exists, so the panel never
-  # serves publicly with zero users (closes a first-install sign-up race window).
-  $SUDO caddy validate --config /etc/caddy/Caddyfile && $SUDO systemctl reload caddy
-  echo "Done. Open $ACCESS_ORIGIN and sign in."
+  owner_created=0
+  if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
+    if printf '{"email":"%s","password":"%s","name":"Owner"}' "$ADMIN_EMAIL" "$ADMIN_PASSWORD" \
+      | curl -fsS -X POST "http://localhost:$PORT/api/auth/sign-up/email" \
+        -H 'Content-Type: application/json' \
+        --data @- >/dev/null; then
+      owner_created=1
+      echo "panel: owner account created"
+    fi
+  else
+    echo "panel: no owner supplied — finish setup in the browser"
+  fi
+
+  # Always print the URL clearly so the operator knows where to go next.
+  echo "Done. Open $ACCESS_ORIGIN to finish setup and sign in."
+  if [ "$owner_created" = 1 ]; then
+    echo "panel: owner account created — sign in at $ACCESS_ORIGIN"
+  fi
 }
 
 # Fast-forward the source checkout to the latest committed code before rebuilding.
