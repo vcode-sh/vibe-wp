@@ -42,6 +42,12 @@ export MARIADB_INNODB_BUFFER_POOL_DUMP_AT_SHUTDOWN="$(normalize_on_off "${MARIAD
 export MARIADB_INNODB_BUFFER_POOL_LOAD_AT_STARTUP="$(normalize_on_off "${MARIADB_INNODB_BUFFER_POOL_LOAD_AT_STARTUP:-ON}")"
 export MARIADB_INNODB_BUFFER_POOL_DUMP_PCT="${MARIADB_INNODB_BUFFER_POOL_DUMP_PCT:-25}"
 
+# Security: LOAD DATA LOCAL INFILE. Default ON preserves stock MariaDB behavior
+# for per-site servers; the shared multi-tenant server sets MARIADB_LOCAL_INFILE=0
+# (SF-2) — WordPress never needs it, and disabling it removes a client-side
+# file-read vector on a server shared by many tenants.
+export MARIADB_LOCAL_INFILE="$(normalize_on_off "${MARIADB_LOCAL_INFILE:-ON}")"
+
 export MARIADB_PERFORMANCE_SCHEMA="$(normalize_on_off "${MARIADB_PERFORMANCE_SCHEMA:-OFF}")"
 export MARIADB_SLOW_QUERY_LOG="$(normalize_on_off "${MARIADB_SLOW_QUERY_LOG:-OFF}")"
 export MARIADB_SLOW_QUERY_LOG_FILE="${MARIADB_SLOW_QUERY_LOG_FILE:-/var/lib/mysql/mariadb-slow.log}"
@@ -82,6 +88,7 @@ envsubst '
   ${MARIADB_INNODB_BUFFER_POOL_DUMP_AT_SHUTDOWN}
   ${MARIADB_INNODB_BUFFER_POOL_LOAD_AT_STARTUP}
   ${MARIADB_INNODB_BUFFER_POOL_DUMP_PCT}
+  ${MARIADB_LOCAL_INFILE}
   ${MARIADB_PERFORMANCE_SCHEMA}
   ${MARIADB_SLOW_QUERY_LOG}
   ${MARIADB_SLOW_QUERY_LOG_FILE}

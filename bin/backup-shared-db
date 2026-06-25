@@ -1,0 +1,135 @@
+#!/bin/sh
+# backup-shared-db — full all-databases dump of the vibe-wp-shared-db server.
+#
+# Writes a dated gzipped archive to /opt/vibe-wp-shared-db/backups/ using the
+# same off-ps root-cred path as sdb_mariadb_root (marker-split stdin →
+# in-container randomized umask-077 temp → mariadb-dump --defaults-extra-file).
+# The root password is NEVER on argv, NEVER in env MYSQL_PWD, NEVER printed.
+#
+# Optional R2 upload: set SHARED_DB_BACKUP_R2_PREFIX (and RCLONE_CONFIG_R2_*)
+# in /opt/vibe-wp-shared-db/env/shared-db.env (or host env). If rclone is not
+# installed or the prefix is absent the local backup still succeeds silently.
+#
+# Local retention: SHARED_DB_BACKUP_RETENTION (days, default 14). Prunes
+# archives older than that many days from /opt/vibe-wp-shared-db/backups/.
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+die() { echo "backup-shared-db: $1" >&2; exit 1; }
+
+# Must run as root.
+[ "$(id -u)" = "0" ] || die "must be run as root"
+
+# Verify the shared-db project is present before attempting a dump.
+[ -f "${SHARED_DB_DIR}/compose.yaml" ] || die "shared-db compose.yaml not found (run shared-db-init first)"
+[ -f "${SHARED_DB_ENV}" ] || die "shared-db env file not found: ${SHARED_DB_ENV}"
+
+# --- Backup directory -----------------------------------------------------------
+BACKUP_DIR="${SHARED_DB_DIR}/backups"
+mkdir -p "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}"
+
+# --- Dated archive path ---------------------------------------------------------
+timestamp="$(date -u +%Y%m%d-%H%M%S)"
+archive="${BACKUP_DIR}/shared-db-${timestamp}.sql.gz"
+
+echo "backup-shared-db: dumping all databases to ${archive} ..."
+sdb_mariadb_dump_all "${archive}"
+chmod 600 "${archive}"
+
+archive_size="$(du -sh "${archive}" 2>/dev/null | cut -f1 || echo "?")"
+echo "backup-shared-db: archive written: ${archive} (${archive_size})"
+
+# --- Local retention prune ------------------------------------------------------
+# Read SHARED_DB_BACKUP_RETENTION from the env file; fall back to 14 days.
+retention_days=""
+if [ -f "${SHARED_DB_ENV}" ]; then
+  _line="$(grep -m1 '^SHARED_DB_BACKUP_RETENTION=' "${SHARED_DB_ENV}" 2>/dev/null || true)"
+  retention_days="${_line#SHARED_DB_BACKUP_RETENTION=}"
+  case "$retention_days" in
+    \"*\") retention_days="${retention_days#\"}"; retention_days="${retention_days%\"}";;
+    \'*\') retention_days="${retention_days#\'}"; retention_days="${retention_days%\'}";;
+  esac
+fi
+# Also honour SHARED_DB_BACKUP_RETENTION from the environment (explicit override).
+: "${SHARED_DB_BACKUP_RETENTION:=${retention_days:-14}}"
+retention_days="${SHARED_DB_BACKUP_RETENTION}"
+
+case "$retention_days" in
+  ''|*[!0-9]*) die "SHARED_DB_BACKUP_RETENTION is not numeric: ${retention_days}" ;;
+esac
+
+echo "backup-shared-db: pruning archives older than ${retention_days} days ..."
+find "${BACKUP_DIR}" -maxdepth 1 -name 'shared-db-*.sql.gz' \
+  -mtime "+${retention_days}" -type f \
+  | while IFS= read -r old; do
+      echo "backup-shared-db: removing old archive: ${old}"
+      rm -f "${old}"
+    done
+
+# --- Optional R2 upload ---------------------------------------------------------
+# Honour SHARED_DB_BACKUP_R2_PREFIX from the env file first, then from host env.
+r2_prefix=""
+if [ -f "${SHARED_DB_ENV}" ]; then
+  _line="$(grep -m1 '^SHARED_DB_BACKUP_R2_PREFIX=' "${SHARED_DB_ENV}" 2>/dev/null || true)"
+  r2_prefix="${_line#SHARED_DB_BACKUP_R2_PREFIX=}"
+  case "$r2_prefix" in
+    \"*\") r2_prefix="${r2_prefix#\"}"; r2_prefix="${r2_prefix%\"}";;
+    \'*\') r2_prefix="${r2_prefix#\'}"; r2_prefix="${r2_prefix%\'}";;
+  esac
+fi
+: "${SHARED_DB_BACKUP_R2_PREFIX:=${r2_prefix:-}}"
+
+if [ -z "${SHARED_DB_BACKUP_R2_PREFIX}" ]; then
+  echo "backup-shared-db: SHARED_DB_BACKUP_R2_PREFIX not set — skipping R2 upload."
+  exit 0
+fi
+
+if ! command -v rclone >/dev/null 2>&1; then
+  echo "backup-shared-db: rclone not installed — skipping R2 upload (local backup succeeded)." >&2
+  exit 0
+fi
+
+# Export RCLONE_CONFIG_R2_* from the shared-db env file so the child rclone
+# process can see them (mirrors how bin/lib/backup.sh::backup_export_rclone
+# works, but sourced from SHARED_DB_ENV, not the per-site env file).
+if [ -f "${SHARED_DB_ENV}" ]; then
+  for suffix in TYPE PROVIDER ACCESS_KEY_ID SECRET_ACCESS_KEY ENDPOINT ACL NO_CHECK_BUCKET REGION; do
+    _line="$(grep -m1 "^RCLONE_CONFIG_R2_${suffix}=" "${SHARED_DB_ENV}" 2>/dev/null || true)"
+    _val="${_line#"RCLONE_CONFIG_R2_${suffix}="}"
+    case "$_val" in
+      \"*\") _val="${_val#\"}"; _val="${_val%\"}";;
+      \'*\') _val="${_val#\'}"; _val="${_val%\'}";;
+    esac
+    if [ -n "$_val" ]; then
+      export "RCLONE_CONFIG_R2_${suffix}=${_val}"
+    fi
+  done
+fi
+
+# r2_prefix is already the full path component the operator provided (e.g.
+# "backup-vibewp-shared-db"). We NEVER touch the bucket root or other prefixes.
+archive_name="$(basename "${archive}")"
+r2_dest="R2:${SHARED_DB_BACKUP_R2_PREFIX}/${archive_name}"
+
+echo "backup-shared-db: uploading to ${r2_dest} ..."
+rclone copyto --s3-no-check-bucket "${archive}" "${r2_dest}" \
+  || { echo "backup-shared-db: R2 upload failed (local backup still intact)." >&2; exit 1; }
+echo "backup-shared-db: R2 upload complete."
+
+# Prune old R2 objects under the same prefix (keep retention_days worth by count
+# using the same sort-and-trim pattern as backup.sh::backup_prune_remote, but
+# based on filenames, which are time-ordered by construction).
+rclone lsf "R2:${SHARED_DB_BACKUP_R2_PREFIX}/" 2>/dev/null \
+  | grep '^shared-db-.*\.sql\.gz$' | sort \
+  | head -n "-${retention_days}" 2>/dev/null \
+  | while IFS= read -r old_name; do
+      [ -n "$old_name" ] || continue
+      echo "backup-shared-db: pruning remote archive: ${SHARED_DB_BACKUP_R2_PREFIX}/${old_name}"
+      rclone deletefile "R2:${SHARED_DB_BACKUP_R2_PREFIX}/${old_name}" 2>/dev/null || true
+    done
+
+echo "backup-shared-db: done."

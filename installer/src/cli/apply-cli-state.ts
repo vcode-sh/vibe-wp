@@ -20,33 +20,41 @@ const EXISTING_SITE_MODES = new Set([
 // Apply non-interactive CLI flags onto the freshly built installer state so a
 // headless install can run without the TUI. Mirrors domain-screen's
 // updateProductionDomain so derived values stay consistent.
-export function applyCliState(state: InstallerState, options: InstallerOptions): InstallerState {
-  if (options.mode) {
-    state.mode = options.mode;
-    // A fresh-install mode must not inherit a site auto-selected from host
-    // detection, or its install dir would target the existing site and clobber it.
-    if (options.mode === "new-site" || options.mode === "external-services") {
-      state.selectedSiteDir = "";
-    }
-    // External mode has no bundled staging path.
-    if (options.mode === "external-services") {
-      state.stagingEnabled = false;
-    }
-    // Existing-site modes act on --install-dir, so treat it as the selected
-    // site and adopt its identity (slug/domains) from host detection — the
-    // headless mirror of picking a site in the TUI. Needed so e.g. remove finds
-    // the right Caddy snippet (named after the site slug).
-    if (EXISTING_SITE_MODES.has(options.mode) && options.installDir) {
-      state.selectedSiteDir = options.installDir;
-      adoptDetectedSite(state, options.installDir);
-    }
-    // staging-only attaches a fresh staging env: enable it and give it the
-    // site's designated staging port (deterministic from the slug).
-    if (options.mode === "staging-only") {
-      state.stagingEnabled = true;
-      state.stagingHttpPort = portPairFromSlug(state.siteSlug).staging;
-    }
+// Fresh-install modes that provision a brand-new site (no bundled staging path).
+const STANDALONE_INSTALL_MODES = new Set(["external-services", "shared-db"]);
+
+function applyMode(state: InstallerState, options: InstallerOptions): void {
+  const mode = options.mode;
+  if (!mode) {
+    return;
   }
+  state.mode = mode;
+  // A fresh-install mode must not inherit a site auto-selected from host
+  // detection, or its install dir would target the existing site and clobber it.
+  if (mode === "new-site" || STANDALONE_INSTALL_MODES.has(mode)) {
+    state.selectedSiteDir = "";
+  }
+  if (STANDALONE_INSTALL_MODES.has(mode)) {
+    state.stagingEnabled = false;
+  }
+  // Existing-site modes act on --install-dir, so treat it as the selected site
+  // and adopt its identity (slug/domains) from host detection — the headless
+  // mirror of picking a site in the TUI. Needed so e.g. remove finds the right
+  // Caddy snippet (named after the site slug).
+  if (EXISTING_SITE_MODES.has(mode) && options.installDir) {
+    state.selectedSiteDir = options.installDir;
+    adoptDetectedSite(state, options.installDir);
+  }
+  // staging-only attaches a fresh staging env: enable it and give it the site's
+  // designated staging port (deterministic from the slug).
+  if (mode === "staging-only") {
+    state.stagingEnabled = true;
+    state.stagingHttpPort = portPairFromSlug(state.siteSlug).staging;
+  }
+}
+
+export function applyCliState(state: InstallerState, options: InstallerOptions): InstallerState {
+  applyMode(state, options);
 
   if (options.domain) {
     applyDomain(state, options.domain, !options.stagingDomain);

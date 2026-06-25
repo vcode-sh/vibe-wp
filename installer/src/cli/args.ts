@@ -10,7 +10,8 @@ const INSTALL_MODES: InstallMode[] = [
   "remove-existing",
   "update-existing",
   "staging-only",
-  "external-services"
+  "external-services",
+  "shared-db"
 ];
 
 type BooleanOption =

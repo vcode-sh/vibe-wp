@@ -43,6 +43,7 @@ export function primaryFor(mode: InstallMode): string {
     "staging-only": "Add staging",
     "new-site": "Start setup",
     "external-services": "Start setup",
+    "shared-db": "Start setup",
     "panel-bootstrap": "Set up panel"
   };
   return verbs[mode];

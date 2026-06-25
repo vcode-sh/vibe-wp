@@ -1,7 +1,7 @@
 import { redact } from "./redact";
 import { mergeLineStreams } from "./stream-merge";
 
-export type VibeEnv = "local" | "stage" | "prod" | "external";
+export type VibeEnv = "local" | "stage" | "prod" | "external" | "shared-db";
 
 /**
  * Privilege boundary. In production the panel server runs as the unprivileged
@@ -335,5 +335,83 @@ export function streamVibe(
 		cwd: siteDir,
 		timeoutMs: opts.timeoutMs,
 		env: opts.env,
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Shared-DB ops (the ONE global MariaDB project). These are NOT per-site, so
+// they do NOT use wrapVibeArgv (which is `sudo -n runner vibe <siteDir> …`). A
+// dedicated top-level `shared-db <op> [slug]` wrapper subcommand handles them;
+// the wrapper validates the op + slug and runs the matching bin/ script as root.
+// ---------------------------------------------------------------------------
+
+/** sub → the repo bin/ script the wrapper runs (dev direct-spawn path only). */
+const SHARED_DB_SCRIPTS = {
+	init: "shared-db-init",
+	status: "shared-db-status",
+	provision: "db-provision",
+	deprovision: "db-deprovision",
+	backup: "backup-shared-db",
+	"rotate-root": "shared-db-rotate-root",
+} as const;
+
+export type SharedDbOp = keyof typeof SHARED_DB_SCRIPTS;
+
+/**
+ * Build the argv for a shared-db op. With a privileged runner configured (prod):
+ * `["sudo","-n",runner,"shared-db",sub,...args]` — the root wrapper owns the
+ * op+slug re-validation and script-path resolution. Without a runner (dev): spawn
+ * the repo script directly from PANEL_HOST_DIR/bin (no shared container exists in
+ * dev, so this is best-effort). Secrets are NEVER in argv (only the op + slug).
+ */
+export function wrapSharedDbArgv(
+	sub: SharedDbOp,
+	args: string[] = []
+): string[] {
+	const runner = privilegedRunner();
+	if (runner) {
+		return ["sudo", "-n", runner, "shared-db", sub, ...args];
+	}
+	const binDir = process.env.PANEL_HOST_DIR
+		? `${process.env.PANEL_HOST_DIR}/bin`
+		: "bin";
+	return [`${binDir}/${SHARED_DB_SCRIPTS[sub]}`, ...args];
+}
+
+/**
+ * Run a NON-SECRET shared-db op (init/status/deprovision/backup) and return its
+ * redacted output. DO NOT use this for `provision`: its stdout is the per-site
+ * password, and redact() would destroy it — use provisionSiteDb (shared-db.ts),
+ * which captures the raw stdout in-process and never logs it.
+ */
+export async function runSharedDb(
+	sub: Exclude<SharedDbOp, "provision">,
+	args: string[] = [],
+	opts: { timeoutMs?: number } = {}
+): Promise<{ stdout: string; stderr: string; code: number }> {
+	const argv = wrapSharedDbArgv(sub, args);
+	const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+	const timer = setTimeout(() => proc.kill(), opts.timeoutMs ?? 60_000);
+	const [stdout, stderr] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]);
+	const code = await proc.exited;
+	clearTimeout(timer);
+	return { stdout: redact(stdout), stderr: redact(stderr), code };
+}
+
+/**
+ * Stream a long-running shared-db op (the only streamed one is `init`, which
+ * runs `docker compose up -d --build` + a health wait). Same setsid kill-tree +
+ * timeout + redact guarantees as streamVibe.
+ */
+export function streamSharedDb(
+	sub: Extract<SharedDbOp, "init" | "backup">,
+	args: string[] = [],
+	opts: { timeoutMs?: number } = {}
+) {
+	return spawnStream(wrapSharedDbArgv(sub, args), {
+		timeoutMs: opts.timeoutMs,
 	});
 }

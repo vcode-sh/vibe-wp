@@ -4,6 +4,7 @@ import type { ProvisionJobRef } from "../contract";
 import {
 	attachStagingSchema,
 	createExternalSchema,
+	createSharedDbSchema,
 	createSiteSchema,
 	removeSiteSchema,
 } from "../core-bridge/provision-input";
@@ -11,6 +12,7 @@ import { startProvisionJob } from "../core-bridge/provision-job";
 import {
 	buildAttachStagingState,
 	buildCreateExternalState,
+	buildCreateSharedDbState,
 	buildCreateSiteState,
 	buildRemoveSiteState,
 	type ExistingSiteTarget,
@@ -64,6 +66,22 @@ export const provisioningRouter = {
 			const state = await buildCreateExternalState(input);
 			return startProvisionJob({
 				action: "createExternal",
+				apply: true,
+				kind: "provision",
+				siteId: String(state.siteSlug ?? input.domain),
+				state,
+				userId: context.session.user.id,
+			});
+		}),
+
+	createSharedDb: adminProcedure
+		.input(createSharedDbSchema)
+		.handler(async ({ input, context }): Promise<ProvisionJobRef> => {
+			// buildCreateSharedDbState provisions the per-site DB and folds the
+			// captured password into the state (STDIN → site env) — never returned.
+			const state = await buildCreateSharedDbState(input);
+			return startProvisionJob({
+				action: "createSharedDb",
 				apply: true,
 				kind: "provision",
 				siteId: String(state.siteSlug ?? input.domain),

@@ -2,13 +2,19 @@ import type { BackupScheduleInput, PerformancePresetInput } from "@/data/types";
 
 export type ProvisionMode = "standard" | "external";
 
-/** Wizard step keys; the external-services step only appears in external mode. */
-export type StepKey = "basics" | "options" | "external" | "review";
+/** Where the new site's database lives. "dedicated" runs a per-site MariaDB
+ * container (the default); "shared" provisions onto the one global MariaDB. */
+export type DbMode = "dedicated" | "shared";
+
+/** Wizard step keys. The database step only appears in standard mode (external
+ * mode brings its own DB), and the external-services step only in external. */
+export type StepKey = "basics" | "database" | "options" | "external" | "review";
 
 /** Mutable form state for the new-site wizard (strings everywhere for inputs). */
 export interface WizardForm {
 	adminEmail: string;
 	backupSchedule: BackupScheduleInput;
+	dbMode: DbMode;
 	domain: string;
 	extDbHost: string;
 	extDbName: string;
@@ -27,6 +33,7 @@ export interface WizardForm {
 export const emptyForm: WizardForm = {
 	adminEmail: "",
 	backupSchedule: "daily",
+	dbMode: "dedicated",
 	domain: "",
 	extDbHost: "",
 	extDbName: "",
@@ -60,9 +67,11 @@ export const backupOptions: ReadonlyArray<{
 	{ label: "Weekly", value: "weekly" },
 ];
 
-/** Build the ordered step list for the given mode. */
+/** Build the ordered step list for the given mode. The database-choice step is
+ * standard-mode only; external mode already pins the DB to the operator's own
+ * MariaDB via the external-services step. */
 export function stepsFor(mode: ProvisionMode): StepKey[] {
 	return mode === "external"
 		? ["basics", "options", "external", "review"]
-		: ["basics", "options", "review"];
+		: ["basics", "database", "options", "review"];
 }

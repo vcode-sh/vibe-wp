@@ -33,6 +33,11 @@ vibe_default_compose_args() {
     external)
       printf '%s' '-f compose.external.yaml'
       ;;
+    shared-db)
+      # WordPress + Nginx + per-site Redis; the database comes from the shared
+      # vibe-wp-shared-db container via the external shared_db network.
+      printf '%s' '-f compose.shared-db.yaml'
+      ;;
     *)
       printf '%s' '-f compose.yaml'
       ;;

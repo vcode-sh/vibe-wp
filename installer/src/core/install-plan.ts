@@ -2,12 +2,12 @@ import { buildBackupDirTask, buildBackupTimerTask } from "./backup";
 import { renderCaddyfile, renderStagingCaddyfile } from "./caddyfile";
 import { INSTALLER_VERSION } from "./defaults";
 import { buildDnsPreflightTask } from "./dns-preflight";
+import { buildEnvFiles } from "./env-files";
 import { buildExternalTasks } from "./external-plan";
 import { buildHardenTask } from "./harden";
 import { buildHostInstallTasks } from "./host-install";
 import { buildMonitorTimerTask } from "./monitor";
 import {
-  buildEnvFiles,
   buildManageTasks,
   buildRemoveTasks,
   buildStagingOnlyTasks,
@@ -16,8 +16,9 @@ import {
 } from "./operations-plan";
 import { buildPanelBootstrapPlan } from "./panel-bootstrap-plan";
 import { buildPlanWarnings } from "./plan-warnings";
+import { buildSharedDbTasks } from "./shared-db-plan";
 import { shellQuote } from "./shell";
-import type { InstallerState, InstallPlan, InstallTask } from "./types";
+import type { InstallerState, InstallMode, InstallPlan, InstallTask } from "./types";
 
 export function buildInstallPlan(state: InstallerState): InstallPlan {
   const warnings = buildPlanWarnings(state);
@@ -66,24 +67,22 @@ function planCaddyfile(state: InstallerState): string {
   return skipCaddyForMode(state.mode) ? "" : renderCaddyfile(state);
 }
 
+// Modes that delegate to a dedicated task builder. Unlisted modes (new-site)
+// fall through to the bundled prod (+ staging) build below.
+const MODE_TASK_BUILDERS: Partial<Record<InstallMode, (state: InstallerState) => InstallTask[]>> = {
+  "panel-bootstrap": (state) => buildPanelBootstrapPlan(state).tasks,
+  "manage-existing": buildManageTasks,
+  "remove-existing": buildRemoveTasks,
+  "staging-only": buildStagingOnlyTasks,
+  "update-existing": buildUpdateTasks,
+  "external-services": buildExternalTasks,
+  "shared-db": buildSharedDbTasks
+};
+
 function buildTasks(state: InstallerState): InstallTask[] {
-  if (state.mode === "panel-bootstrap") {
-    return buildPanelBootstrapPlan(state).tasks;
-  }
-  if (state.mode === "manage-existing") {
-    return buildManageTasks(state);
-  }
-  if (state.mode === "remove-existing") {
-    return buildRemoveTasks(state);
-  }
-  if (state.mode === "staging-only") {
-    return buildStagingOnlyTasks(state);
-  }
-  if (state.mode === "update-existing") {
-    return buildUpdateTasks(state);
-  }
-  if (state.mode === "external-services") {
-    return buildExternalTasks(state);
+  const builder = MODE_TASK_BUILDERS[state.mode];
+  if (builder) {
+    return builder(state);
   }
 
   const tasks: InstallTask[] = [];

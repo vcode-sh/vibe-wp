@@ -24,6 +24,7 @@ export const MODES = [
 	"staging-only",
 	"remove-existing",
 	"update-existing",
+	"shared-db",
 ] as const;
 
 export type ProvisionMode = (typeof MODES)[number];

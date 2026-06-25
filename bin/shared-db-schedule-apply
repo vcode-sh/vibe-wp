@@ -1,0 +1,73 @@
+#!/bin/sh
+# shared-db-schedule-apply — install or remove the systemd timer that runs
+# bin/backup-shared-db weekly for the vibe-wp-shared-db server.
+#
+# Usage:
+#   bin/shared-db-schedule-apply          # install/refresh the weekly timer
+#   bin/shared-db-schedule-apply off      # disable + remove the timer
+#
+# Mirrors bin/backup-schedule-apply's unit-writing + daemon-reload +
+# enable --now style. The timer is named vibe-wp-shared-db-backup.timer.
+# OnCalendar=weekly with Persistent=true so a missed run catches up on boot.
+#
+# Requires root (the panel service runs as root, matching installer-created timers).
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+die() { echo "shared-db-schedule-apply: $1" >&2; exit 1; }
+
+# Must run as root.
+[ "$(id -u)" = "0" ] || die "must be run as root"
+
+cadence="${1:-weekly}"
+case "${cadence}" in
+  off|weekly) ;;
+  *)
+    echo "Usage: bin/shared-db-schedule-apply [off|weekly]" >&2
+    exit 2
+    ;;
+esac
+
+if ! command -v systemctl >/dev/null 2>&1; then
+  die "systemctl not available; cannot manage backup timer."
+fi
+
+unit="vibe-wp-shared-db-backup"
+service_path="/etc/systemd/system/${unit}.service"
+timer_path="/etc/systemd/system/${unit}.timer"
+
+# Absolute path to backup-shared-db, resolved relative to this script's dir.
+backup_script="${VIBE_BIN_DIR}/backup-shared-db"
+[ -f "${backup_script}" ] || die "backup-shared-db not found at ${backup_script}"
+
+if [ "${cadence}" = "off" ]; then
+  systemctl disable --now "${unit}.timer" >/dev/null 2>&1 || true
+  rm -f "${timer_path}" "${service_path}"
+  systemctl daemon-reload
+  echo "shared-db-schedule-apply: backup timer disabled and removed."
+  exit 0
+fi
+
+# --- Render the oneshot service + weekly timer ----------------------------------
+service="[Unit]
+Description=Vibe WP shared-db backup
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=${backup_script}"
+
+timer="[Unit]
+Description=Scheduled Vibe WP shared-db backup (weekly)
+[Timer]
+OnCalendar=weekly
+Persistent=true
+[Install]
+WantedBy=timers.target"
+
+printf '%s\n' "${service}" | tee "${service_path}" >/dev/null
+printf '%s\n' "${timer}"   | tee "${timer_path}"   >/dev/null
+systemctl daemon-reload
+systemctl enable --now "${unit}.timer" >/dev/null
+echo "shared-db-schedule-apply: backup timer installed and enabled (weekly)."

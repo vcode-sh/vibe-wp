@@ -132,11 +132,16 @@ export function validateExternal(form: WizardForm): Errors {
 }
 
 export function validateStep(
-	step: "basics" | "options" | "external",
+	step: "basics" | "database" | "options" | "external",
 	form: WizardForm
 ): Errors {
 	if (step === "basics") {
 		return validateBasics(form);
+	}
+	// The database step is a pure choice (dedicated vs shared) with no fields to
+	// validate; the shared option is already gated on health in the UI.
+	if (step === "database") {
+		return {};
 	}
 	if (step === "options") {
 		return validateOptions(form);

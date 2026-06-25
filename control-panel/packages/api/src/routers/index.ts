@@ -13,6 +13,7 @@ import { provisioningRouter } from "./provisioning";
 import { serverRouter } from "./server";
 import { settingsRouter } from "./settings";
 import { setupRouter } from "./setup";
+import { sharedDbRouter } from "./shared-db";
 import { sitesRouter } from "./sites";
 import { stagingRouter } from "./staging";
 import { themesRouter } from "./themes";
@@ -36,6 +37,7 @@ export const appRouter = {
 	...themesRouter,
 	...settingsRouter,
 	...devinfoRouter,
+	...sharedDbRouter,
 };
 
 export type AppRouter = typeof appRouter;

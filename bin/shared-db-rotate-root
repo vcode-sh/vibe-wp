@@ -1,0 +1,143 @@
+#!/bin/sh
+# shared-db-rotate-root — rotate MARIADB_ROOT_PASSWORD for the shared MariaDB.
+#
+# Admin op: run as root only.
+#
+# What it does:
+#   1. Generates a new root password (openssl rand -hex 32).
+#   2. Enumerates ALL root@<host> rows from mysql.user.
+#   3. Validates each host value (safe charset only) and issues ALTER USER + FLUSH
+#      for every row (SF-4: rotate ALL root@*, not just localhost).
+#   4. Writes the new password atomically into env/shared-db.env (0600 root:root),
+#      stripping the old MARIADB_ROOT_PASSWORD line and appending the new one.
+#   5. Verifies the NEW password works (SELECT 1;).
+#   6. Verifies the OLD password is now REJECTED (SF-4: must fail; sdb_die if it
+#      still works — no old pw left in any temp/backup file).
+#
+# Per-site users (vibe_*) and their passwords are NEVER touched by this script.
+# This op is live: ALTER USER takes effect immediately; no container restart needed.
+#
+# MF-1: passwords NEVER printed, never on argv, never in MYSQL_PWD env.
+# MF-2/MF-4: root cred reaches mariadb only via the off-ps stdin-marker mechanism
+#             inside sdb_mariadb_root (randomised umask-077 in-container temp).
+# The OLD password is held only in a shell variable that is unset before exit and
+# is never written to any temp or backup file.
+
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+die() { echo "shared-db-rotate-root: $1" >&2; exit 1; }
+
+# Step 1: must run as root.
+[ "$(id -u)" = "0" ] || die "must be run as root"
+
+echo "shared-db-rotate-root: starting root password rotation ..."
+
+# Step 2: read the current (old) root password — for connecting only; never echo.
+old_pw="$(sdb_root_password)"
+
+# Step 3: generate a new root password; hold it only in memory.
+new_pw="$(openssl rand -hex 32)"
+
+# Step 4: enumerate all root@<host> rows.
+# sdb_mariadb_root uses the CURRENT password (old_pw is still in env/shared-db.env).
+# We read the Host column with no column headers (--batch --skip-column-names in lib).
+root_hosts="$(sdb_mariadb_root "SELECT Host FROM mysql.user WHERE User='root';")"
+
+[ -n "$root_hosts" ] || die "no root@* rows found in mysql.user — unexpected; aborting"
+
+echo "shared-db-rotate-root: found root host entries; altering each ..."
+
+# Rotate every root@<host>. We validate host values from our own mysql.user rows
+# against a safe charset before interpolating them into SQL. The new_pw is a
+# hex string (no SQL metacharacters). FLUSH PRIVILEGES after all ALTERs.
+alter_sql=""
+for host in $root_hosts; do
+  # Validate host: allow only [0-9A-Za-z._%:-] (covers localhost, 127.0.0.1,
+  # %, ::1, named hostnames). Skip anything outside that set — it cannot come
+  # from a normally-provisioned server, and we will not risk SQL injection.
+  case "$host" in
+    *[!0-9A-Za-z._%:-]*) echo "shared-db-rotate-root: skipping host with unexpected characters: omitted" >&2; continue ;;
+    '') echo "shared-db-rotate-root: skipping empty host row" >&2; continue ;;
+  esac
+  alter_sql="${alter_sql}ALTER USER 'root'@'${host}' IDENTIFIED BY '${new_pw}';
+"
+done
+
+[ -n "$alter_sql" ] || die "no valid root host rows to alter — aborting before any change"
+
+# Append FLUSH PRIVILEGES after all ALTER USER statements.
+alter_sql="${alter_sql}FLUSH PRIVILEGES;"
+
+# Execute all ALTER USER + FLUSH in a single sdb_mariadb_root call.
+# sdb_mariadb_root reads the root password fresh from the env file each time;
+# env/shared-db.env still holds old_pw here, so this connects with the old pw.
+sdb_mariadb_root "$alter_sql"
+
+# Step 5: write the new password into env/shared-db.env ATOMICALLY.
+# mktemp in the env dir (same filesystem) so mv is an atomic rename.
+# Strip the old MARIADB_ROOT_PASSWORD line; keep all other keys intact.
+env_dir="$(dirname "$SHARED_DB_ENV")"
+tmp_env="$(mktemp "${env_dir}/.shared-db.env.XXXXXX")"
+# Set 0600 immediately so the window where it is readable is zero.
+chmod 600 "$tmp_env"
+chown root:root "$tmp_env"
+# Copy everything except the old MARIADB_ROOT_PASSWORD line; add the new one.
+grep -v '^MARIADB_ROOT_PASSWORD=' "$SHARED_DB_ENV" > "$tmp_env" || true
+printf 'MARIADB_ROOT_PASSWORD=%s\n' "$new_pw" >> "$tmp_env"
+# Atomic replace; chmod/chown belt-and-suspenders after mv.
+mv "$tmp_env" "$SHARED_DB_ENV"
+chmod 600 "$SHARED_DB_ENV"
+chown root:root "$SHARED_DB_ENV"
+echo "shared-db-rotate-root: env file updated (0600 root:root)."
+
+# Step 6: verify the NEW password works.
+# sdb_mariadb_root now reads new_pw from the updated env file.
+sdb_mariadb_root "SELECT 1;" >/dev/null || die "NEW password verification failed — grant tables may be inconsistent; check container logs"
+echo "shared-db-rotate-root: new password verified (connect with new pw succeeded)."
+
+# Step 7 (SF-4): verify the OLD password is now REJECTED.
+# We build a one-off connection check using the same off-ps stdin-marker technique
+# as sdb_mariadb_root, but inject old_pw directly into the [client] block instead
+# of reading it from the env file (which now holds new_pw).
+# If the connection SUCCEEDS the old pw is still valid — that is a failure.
+old_pw_accepted=0
+_reject_check="$(
+  {
+    printf '[client]\npassword=%s\n__VIBE_SQL_BEGIN__\n' "$old_pw"
+    printf 'SELECT 1;\n'
+  } \
+  | docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
+      exec -T db sh -c '
+        umask 077; cf="$(mktemp)"
+        while IFS= read -r l; do [ "$l" = "__VIBE_SQL_BEGIN__" ] && break; printf "%s\n" "$l" >> "$cf"; done
+        mariadb --defaults-extra-file="$cf" -u root --batch --skip-column-names
+        rc=$?; rm -f "$cf"; exit $rc
+      ' 2>/dev/null
+)" && old_pw_accepted=1 || true
+
+# Aggressively unset the old password now — it must not remain in any variable.
+unset old_pw
+
+if [ "$old_pw_accepted" = "1" ]; then
+  unset new_pw _reject_check
+  die "SECURITY: old root password is still accepted after rotation — rotation failed; check container logs and grant tables"
+fi
+unset _reject_check
+
+echo "shared-db-rotate-root: old password correctly rejected (SF-4 verified)."
+
+# new_pw has been written to the env file; unset it from memory.
+unset new_pw
+
+# Per-site vibe_* users and their passwords are UNAFFECTED by this script.
+# Only the MariaDB root account is rotated above.
+
+echo ""
+echo "shared-db-rotate-root: root password rotation complete."
+echo "  Env file : ${SHARED_DB_ENV} (0600 root:root)"
+echo "  All root@* hosts rotated; per-site vibe_* users unchanged."
+echo ""

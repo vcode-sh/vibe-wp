@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StepBasics } from "./step-basics";
+import { StepDatabase } from "./step-database";
 import { StepExternal } from "./step-external";
 import { StepOptions } from "./step-options";
 import { StepReview } from "./step-review";
@@ -10,6 +11,7 @@ import type { ProvisionMode, StepKey } from "./wizard-types";
 
 const STEP_LABELS: Record<StepKey, string> = {
 	basics: "Basics",
+	database: "Database",
 	options: "Options",
 	external: "External services",
 	review: "Review",
@@ -62,6 +64,9 @@ export function ProvisionWizard({ mode }: { mode: ProvisionMode }) {
 
 				{w.step === "basics" ? (
 					<StepBasics errors={w.errors} form={w.form} set={w.set} />
+				) : null}
+				{w.step === "database" ? (
+					<StepDatabase form={w.form} set={w.set} />
 				) : null}
 				{w.step === "options" ? (
 					<StepOptions errors={w.errors} form={w.form} set={w.set} />
