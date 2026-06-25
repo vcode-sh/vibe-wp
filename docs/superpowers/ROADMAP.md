@@ -28,6 +28,20 @@ A few GUI-parity conveniences from the bootstrap spec §11: AI-connector-key ent
 
 ---
 
+## Part A.5 — Feature wave 2 SHIPPED (2026-06-25, merged to main b42959a)
+
+All remaining roadmap features built (multi-agent workflow), fully implemented + GUI-complete + idiot-proof-polished (adversarial review: all PASS), and merged:
+- **C. Security score + one-click Secure** — score/findings + working XML-RPC + file-edit one-click fixes. VPS-validated: file-edit lock + xmlrpc disable confirmed at runtime (caught+fixed a real bug: VIBE_WP_DISABLE_XMLRPC wasn't threaded into the compose env anchor).
+- **B. Uptime/cert/DNS monitoring with history** — Drizzle sample store + status view + timeline (recharts).
+- **D. Backup browser + granular restore** — browse files/tables, single-item restore. VPS-validated: list + table restore + pre-restore safety copy confirmed.
+- **E. Vuln + abandoned-plugin radar** — wp.org abandoned/outdated detection (works without a key) + pluggable CVE feed + quarantine actions.
+- **#5. Smart performance tuning** — measure → advisor → preview → apply with snapshot + post-apply smoke + auto-rollback. VPS-validated: measure + apply + rollback mechanism confirmed.
+- **A. Staging clone + safe push-to-live** — promote wrapped in backup→smoke→auto-rollback.
+
+VPS bootstrap rebuilt clean (Docker+Caddy+Bun+off-root panel, magic-DNS cert) on test.vcode.sh; panel live. Host-op/runtime layer validated by the controller; authenticated GUI verification is owner-side (login required).
+
+---
+
 ## Part B — Next feature wave ("Plesk WP Toolkit, host-native + idiot-proof")
 
 Grounded in a 2026-06-23 research pass (full dossier in this session's history). **Cross-cutting rule:** every new panel→host capability = a new `bin/vibe` op + a `VIBE_OPS` entry (`core-bridge/exec.ts`) + an allowlist token in `bin/vibe-panel-run` with argument re-validation at the root boundary (distrust the panel), env-file-only secrets, and `redact()` on all output. The two highest-care widenings are the **wp slug/verb allowlist** (#4) and the **db-provision root path** (#6) — both need a wrapper-specific security review.
