@@ -2,6 +2,7 @@ import { Link, useMatchRoute, useParams } from "@tanstack/react-router";
 import {
 	Activity,
 	CopyCheck,
+	Gauge,
 	HeartPulse,
 	History,
 	LayoutDashboard,
@@ -37,6 +38,7 @@ interface SiteLink {
 const SITE_LINKS: SiteLink[] = [
 	{ label: "Overview", to: "/sites/$siteId/overview", icon: LayoutDashboard },
 	{ label: "Health", to: "/sites/$siteId/health", icon: HeartPulse },
+	{ label: "Monitoring", to: "/sites/$siteId/monitoring", icon: Gauge },
 	{ label: "Backups", to: "/sites/$siteId/backups", icon: CopyCheck },
 	{ label: "Logs", to: "/sites/$siteId/logs", icon: ScrollText },
 	{ label: "Inventory", to: "/sites/$siteId/inventory", icon: PackageOpen },
@@ -49,6 +51,7 @@ const SITE_LINKS: SiteLink[] = [
 ];
 
 const SERVER_LINKS: SiteLink[] = [
+	{ label: "Monitoring", to: "/monitoring", icon: Gauge },
 	{ label: "Operations", to: "/operations", icon: History },
 	{ label: "Server & security", to: "/server", icon: ShieldCheck },
 	{ label: "Settings", to: "/settings", icon: Settings },

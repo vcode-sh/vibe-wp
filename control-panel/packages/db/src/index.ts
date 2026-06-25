@@ -14,6 +14,7 @@ import {
 } from "./schema/auth";
 import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
+import { monitorSamples } from "./schema/monitoring";
 import { notifyConfig } from "./schema/notify";
 import { smtpConfig } from "./schema/smtp";
 
@@ -31,6 +32,7 @@ const schema = {
 	backupConfig,
 	notifyConfig,
 	smtpConfig,
+	monitorSamples,
 };
 
 export function createDb() {

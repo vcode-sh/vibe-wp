@@ -21,6 +21,13 @@ export const env = createEnv({
 		// unprivileged panel reaches the host only via `sudo -n <runner> …`.
 		// Optional: unset in dev/local, where the panel spawns directly.
 		PANEL_PRIVILEGED_RUNNER: z.string().optional(),
+		// How often (minutes) the panel records a fresh monitor sample for every
+		// site, so uptime/cert/DNS history accrues without anyone opening the
+		// status view. Reuses the already-allowlisted `monitor` op (no new host
+		// capability). Clamped to [5, 1440]; "0"/"off"/unset disables the timer
+		// (operators then rely on the on-demand "Record sample" button). Default
+		// 15 minutes — frequent enough for a readable sparkline, light on the host.
+		PANEL_MONITOR_RECORD_MINUTES: z.string().default("15"),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,

@@ -7,6 +7,7 @@ import { healthRouter } from "./health";
 import { inventoryRouter } from "./inventory";
 import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
+import { monitoringRouter } from "./monitoring";
 import { operationsRouter } from "./operations";
 import { pluginsRouter } from "./plugins";
 import { provisioningRouter } from "./provisioning";
@@ -40,6 +41,7 @@ export const appRouter = {
 	...devinfoRouter,
 	...sharedDbRouter,
 	...securityScoreRouter,
+	...monitoringRouter,
 };
 
 export type AppRouter = typeof appRouter;

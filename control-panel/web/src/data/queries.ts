@@ -72,3 +72,12 @@ export const securityScoreQuery = (siteId: string) =>
 	orpc.siteSecurityScore.queryOptions({ input: { siteId } });
 
 export const sharedDbStatusQuery = () => orpc.sharedDbStatus.queryOptions();
+
+export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) =>
+	orpc.monitoringHistory.queryOptions({ input: { siteId, sinceDays } });
+
+export const monitoringSummaryQuery = () =>
+	orpc.monitoringSummary.queryOptions();
+
+export const monitoringOverviewQuery = () =>
+	orpc.monitoringOverview.queryOptions();
