@@ -22,7 +22,10 @@ const PORT_STEP = 2;
 const MAX_PORT = 65_535;
 const MIN_PORT = 1024;
 const projectPrefixPattern = /^vibe-wp-/;
-const projectEnvSuffixPattern = /-(?:prod|stage)$/;
+// Topology suffixes the env-writer appends. shared-db/external must be stripped
+// too, else a shared-database site's slug (vibe-wp-<slug>-shared-db) is not
+// recognized as taken and a new site could reuse its slug — or, worse, its dir.
+const projectEnvSuffixPattern = /-(?:prod|stage|shared-db|external)$/;
 
 export interface BaseStateInput {
   domain?: string;

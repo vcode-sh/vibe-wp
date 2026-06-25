@@ -108,6 +108,19 @@ describe("buildBaseState identity seeding", () => {
     expect(state.siteSlug).not.toBe("shop");
   });
 
+  test("slug + install dir avoid collision with an existing SHARED-DB site", () => {
+    // A shared-database site's project is vibe-wp-<slug>-shared-db (no prod.env).
+    // Before the fix the -shared-db suffix was not stripped, so its slug looked
+    // free: a new same-domain site could reuse the slug — or, since the first
+    // site lives at /opt/vibe-wp, land on the SAME dir and overwrite it.
+    const host = hostWith([
+      siteAt("/opt/vibe-wp", { productionProject: "vibe-wp-shop-shared-db" })
+    ]);
+    const state = buildBaseState(host, { domain: "shop.io", mode: "new-site" });
+    expect(state.siteSlug).not.toBe("shop");
+    expect(state.installDir).not.toBe("/opt/vibe-wp");
+  });
+
   test("slug avoids collision with an existing site's staging project name", () => {
     const host = hostWith([
       siteAt("/opt/vibe-wp", {

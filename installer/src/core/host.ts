@@ -110,20 +110,26 @@ async function detectExistingSites(): Promise<ExistingSite[]> {
   for (const installDir of dirs.filter(Boolean).sort()) {
     const production = await readEnv(`${installDir}/env/prod.env`);
     const staging = await readEnv(`${installDir}/env/stage.env`);
-    if (!(production.WP_HOME || staging.WP_HOME)) {
+    // Shared-database sites have NO prod.env — their production-equivalent env is
+    // env/shared-db.env. Count them here too: otherwise this site is invisible to
+    // collision-avoidance and a NEW install can reuse its slug/ports or, worst of
+    // all, its install dir — silently overwriting a live shared-db site.
+    const shared = await readEnv(`${installDir}/env/shared-db.env`);
+    const primary = production.WP_HOME ? production : shared;
+    if (!(primary.WP_HOME || staging.WP_HOME)) {
       continue;
     }
-    const project = production.COMPOSE_PROJECT_NAME ?? null;
+    const project = primary.COMPOSE_PROJECT_NAME ?? null;
     sites.push({
       installDir,
-      productionUrl: production.WP_HOME ?? null,
+      productionUrl: primary.WP_HOME ?? null,
       stagingUrl: staging.WP_HOME ?? null,
       productionProject: project,
       stagingProject: staging.COMPOSE_PROJECT_NAME ?? null,
       // Real bound ports recovered from each site's env (HTTP_PORT is
       // "127.0.0.1:<port>"). These are authoritative — a site created after an
       // earlier port collision runs on a walked port the slug no longer predicts.
-      productionPort: httpPortOf(production.HTTP_PORT),
+      productionPort: httpPortOf(primary.HTTP_PORT),
       stagingPort: httpPortOf(staging.HTTP_PORT),
       hasStaging: Boolean(staging.WP_HOME),
       running: Boolean(project && running.has(project))
