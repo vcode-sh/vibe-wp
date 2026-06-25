@@ -1,0 +1,284 @@
+#!/usr/bin/env sh
+# backup-restore-item <backupDir> <file|table> <name>
+#
+# Restore EXACTLY ONE item from a local backup:
+#   kind=file  -> restore one wp-content file (extract the single tar member and
+#                 copy it into the live container at the same relative path).
+#   kind=table -> restore one DB table (slice that table's self-contained
+#                 DROP/CREATE/INSERT block from the gzipped dump and import it).
+#
+# This is destructive (it replaces that one file / that one table outright) and
+# is admin-gated + confirmed at the panel layer. It verifies archive integrity
+# BEFORE any write so a corrupt backup never partially clobbers the live site.
+# Secrets (DB creds) stay inside the in-container `sh -c` env, never on argv or
+# in logs — mirroring bin/restore.
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/vibe.sh"
+
+die() {
+  echo "backup-restore-item: $1" >&2
+  exit 1
+}
+
+# Where pre-restore safety copies land, inside the backup dir we are restoring
+# FROM. Each restore writes the CURRENT (about-to-be-overwritten) version of the
+# item here under a UTC timestamp, so a single-item restore is actually
+# recoverable — the panel/UI promises "we back up the current state first", and
+# this is what makes that promise true.
+restore_safety_dir() {
+  printf '%s/pre-restore-safety/%s' "${backup_dir}" "$(date -u +"%Y%m%dT%H%M%SZ")"
+}
+
+backup_dir="${1:-}"
+kind="${2:-}"
+name="${3:-}"
+
+[ -n "${backup_dir}" ] || die "usage: backup-restore-item <backupDir> <file|table> <name>"
+[ -n "${kind}" ] || die "missing kind (file|table)"
+[ -n "${name}" ] || die "missing item name"
+case "${kind}" in
+  file|table) : ;;
+  *) die "kind must be 'file' or 'table'" ;;
+esac
+[ -d "${backup_dir}" ] || die "backup directory not found: ${backup_dir}"
+
+manifest_file="${backup_dir}/manifest.txt"
+[ -f "${manifest_file}" ] || die "no manifest.txt in ${backup_dir}"
+
+manifest_value() {
+  awk -F= -v key="$1" '
+    $1 == key { sub(/^[^=]*=/, ""); print; exit }
+  ' "${manifest_file}"
+}
+
+database_name="$(manifest_value database)"
+wp_content_name="$(manifest_value wp_content)"
+case "${database_name}" in
+  ""|.|..|/*|*/*|-*) die "manifest database value is not a local file name" ;;
+esac
+case "${wp_content_name}" in
+  ""|.|..|/*|*/*|-*) die "manifest wp_content value is not a local file name" ;;
+esac
+database_file="${backup_dir}/${database_name}"
+wp_content_file="${backup_dir}/${wp_content_name}"
+
+# ---------------------------------------------------------------------------
+# kind=table : SAFE single-table import.
+# ---------------------------------------------------------------------------
+if [ "${kind}" = "table" ]; then
+  # Defense-in-depth name re-validation (do NOT trust the wrapper).
+  case "${name}" in
+    *[!A-Za-z0-9_]*) die "table name has illegal characters: ${name}" ;;
+  esac
+  [ "${#name}" -le 64 ] || die "table name too long: ${name}"
+
+  [ -f "${database_file}" ] || die "database dump missing: ${database_name}"
+  case "${database_name}" in
+    *.sql.gz)
+      gzip -t "${database_file}" 2>/dev/null || die "database dump is corrupt (gzip -t failed)"
+      db_stream="gzip -cd"
+      ;;
+    *.sql) db_stream="cat" ;;
+    *) die "unsupported database dump: ${database_name}" ;;
+  esac
+
+  # Slice ONLY this table's block. mariadb-dump emits, per table:
+  #   -- Table structure for table `<name>`
+  #   DROP TABLE IF EXISTS `<name>`;
+  #   CREATE TABLE `<name>` ( ... );
+  #   ... LOCK/INSERT/UNLOCK ...
+  # We emit lines from this table's "-- Table structure for table `<name>`"
+  # marker up to (but excluding) the NEXT "-- Table structure for table"
+  # marker. The sliced section is self-contained (DROP+CREATE+INSERTs), so
+  # importing it replaces only that one table.
+  tmp_slice="$(mktemp "${TMPDIR:-/tmp}/vibe-restore-item.XXXXXX")" || die "mktemp failed"
+  trap 'rm -f "${tmp_slice}"' EXIT HUP INT TERM
+
+  ${db_stream} "${database_file}" 2>/dev/null | awk -v t="${name}" '
+    BEGIN {
+      marker = "-- Table structure for table `" t "`"
+      capturing = 0
+      seen_create = 0
+    }
+    # A new "-- Table structure for table" line always closes any open capture.
+    /^-- Table structure for table `/ {
+      if (capturing && $0 != marker) { exit }
+      if ($0 == marker) { capturing = 1 }
+    }
+    capturing {
+      if ($0 ~ /^CREATE TABLE `?/ && index($0, "`" t "`") > 0) { seen_create = 1 }
+      print
+    }
+    END {
+      # Signal to the shell whether we captured a complete-looking block.
+      # (awk exit status is 0 on normal END; we encode success via the file.)
+    }
+  ' > "${tmp_slice}"
+
+  # Guard: the slice must be non-empty AND contain a CREATE TABLE for THIS table.
+  # Abort BEFORE touching the DB if the table is absent from the dump, so the UI
+  # can never claim success for a table that was never restored.
+  [ -s "${tmp_slice}" ] || die "table '${name}' not found in the backup dump"
+  if ! grep -q "CREATE TABLE \`${name}\`" "${tmp_slice}" \
+     && ! grep -q "CREATE TABLE ${name} " "${tmp_slice}"; then
+    die "table '${name}' block is incomplete (no CREATE TABLE) — refusing import"
+  fi
+
+  echo "Restoring single table: ${name}"
+  vibe_require_env_file
+  services="wordpress"
+  if vibe_compose_service_exists db; then
+    services="db ${services}"
+  fi
+  if vibe_compose_service_exists redis; then
+    services="redis ${services}"
+  fi
+  # shellcheck disable=SC2086
+  vibe_compose up -d ${services} >/dev/null
+
+  # SAFETY NET: dump the table's CURRENT contents BEFORE we overwrite it, so the
+  # operator can recover. The single-table import below is otherwise irreversible.
+  # DB creds stay inside the in-container `sh -c` env (never on argv/logs); the
+  # validated table name is passed through a positional arg ($1 inside sh -c), so
+  # it is never interpolated into the shell command string.
+  safety_dir="$(restore_safety_dir)"
+  mkdir -p "${safety_dir}" || die "could not create pre-restore safety dir: ${safety_dir}"
+  safety_sql="${safety_dir}/table-${name}.sql"
+  echo "Saving current '${name}' to a pre-restore safety copy..."
+  if vibe_compose_service_exists db; then
+    # --no-tablespaces avoids a PROCESS-privilege requirement on shared MariaDB.
+    vibe_compose exec -T db sh -c \
+      'mariadb-dump --single-transaction --no-tablespaces -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" "$1"' \
+      sh "${name}" > "${safety_sql}" 2>/dev/null \
+      || die "failed to take a pre-restore backup of table '${name}' — aborting before any change"
+  else
+    vibe_wp_stdin db export - --single-transaction --no-tablespaces --tables="${name}" > "${safety_sql}" 2>/dev/null \
+      || die "failed to take a pre-restore backup of table '${name}' — aborting before any change"
+  fi
+  [ -s "${safety_sql}" ] || die "pre-restore backup of table '${name}' is empty — aborting before any change"
+  gzip -f "${safety_sql}"
+  echo "Pre-restore safety copy: ${safety_sql}.gz"
+
+  echo "Importing table block into the database..."
+  if vibe_compose_service_exists db; then
+    vibe_compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < "${tmp_slice}"
+  else
+    # External-DB branch: import via WP-CLI's db import from stdin.
+    vibe_wp_stdin db import - < "${tmp_slice}"
+  fi
+
+  echo "Flushing caches..."
+  vibe_wp cache flush >/dev/null 2>&1 || true
+  vibe_clear_nginx_cache
+
+  echo "Single-table restore complete: ${name}"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# kind=file : restore exactly one wp-content file.
+# ---------------------------------------------------------------------------
+# Defense-in-depth name re-validation (do NOT trust the wrapper). Mirrors the
+# wrapper's validate_item_name for kind=file: no leading '/', no '..', no shell
+# metacharacters, no whitespace, no leading '-'.
+case "${name}" in
+  /*) die "file name must be a relative path: ${name}" ;;
+  *..*) die "file name must not contain '..': ${name}" ;;
+  -*) die "file name must not start with '-': ${name}" ;;
+  *[\;\|\&\$\`\<\>\(\)\{\}\*\?\!]*) die "file name has shell metacharacters: ${name}" ;;
+  *' '*) die "file name must not contain whitespace: ${name}" ;;
+esac
+
+[ -f "${wp_content_file}" ] || die "wp-content archive missing: ${wp_content_name}"
+case "${wp_content_name}" in
+  *.tar.gz|*.tgz) : ;;
+  *) die "unsupported wp-content archive: ${wp_content_name}" ;;
+esac
+tar -tzf "${wp_content_file}" >/dev/null 2>&1 || die "wp-content archive is corrupt"
+
+# The member must EXIST in the archive as a regular file (not a link/dir). Parse
+# the verbose listing portably (GNU + BSD column layouts differ): anchor on the
+# date field, then the path is everything after the date+time tokens. Capture the
+# matching entry's type char (portable first column).
+member_type="$(tar -tzvf "${wp_content_file}" 2>/dev/null | awk -v want="${name}" '
+  BEGIN { months = " Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec " }
+  {
+    type = substr($0, 1, 1)
+    datei = 0; gnu = 0
+    for (i = 2; i <= NF; i++) {
+      if ($i ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) { datei = i; gnu = 1; break }
+      if (index(months, " " $i " ") > 0 && $(i + 1) ~ /^[0-9][0-9]?$/) { datei = i; gnu = 0; break }
+    }
+    if (datei == 0) { next }
+    pathstart = gnu ? (datei + 2) : (datei + 3)
+    path = ""
+    for (i = pathstart; i <= NF; i++) { path = (path == "" ? $i : path " " $i) }
+    sub(/^\.\//, "", path)
+    # A link entry prints "<source> -> <target>"; compare only the source path.
+    sub(/ -> .*$/, "", path)
+    if (path == want) { print type; exit }
+  }
+')"
+[ -n "${member_type}" ] || die "file '${name}' is not present in the backup archive"
+case "${member_type}" in
+  l|h) die "file '${name}' is a link entry — refusing to restore" ;;
+  d) die "file '${name}' is a directory — single-file restore only" ;;
+  -) : ;;
+  *) die "file '${name}' has an unsupported tar entry type: ${member_type}" ;;
+esac
+
+# Extract the single member to a host tmpdir, then copy it into the container.
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/vibe-restore-file.XXXXXX")" || die "mktemp -d failed"
+trap 'rm -rf "${tmp_dir}"' EXIT HUP INT TERM
+
+# GNU tar archives wp-content with a leading "./"; try the "./" form first, then
+# the bare form. -- ends option parsing so a member starting oddly is still safe.
+if ! tar -xzf "${wp_content_file}" -C "${tmp_dir}" -- "./${name}" 2>/dev/null; then
+  tar -xzf "${wp_content_file}" -C "${tmp_dir}" -- "${name}" \
+    || die "failed to extract '${name}' from the archive"
+fi
+[ -f "${tmp_dir}/${name}" ] || die "extracted member is not a regular file"
+
+echo "Restoring single file: ${name}"
+vibe_require_env_file
+vibe_compose up -d wordpress >/dev/null
+
+# SAFETY NET: copy the CURRENT live file out BEFORE we overwrite it, preserving
+# its sub-path so the operator can put it back. If the file does not exist live
+# yet, the restore is trivially reversible (delete the new file), so we record a
+# marker instead of failing. The container path is a fixed prefix + the validated
+# relative name (argv to `cp`, no shell expansion), so it cannot escape wp-content.
+safety_dir="$(restore_safety_dir)"
+safety_parent="$(dirname -- "${name}")"
+mkdir -p "${safety_dir}/${safety_parent}" || die "could not create pre-restore safety dir: ${safety_dir}"
+if vibe_compose exec -T wordpress test -f "/var/www/html/wp-content/${name}" 2>/dev/null; then
+  echo "Saving current '${name}' to a pre-restore safety copy..."
+  vibe_compose cp "wordpress:/var/www/html/wp-content/${name}" "${safety_dir}/${name}" \
+    || die "failed to take a pre-restore backup of '${name}' — aborting before any change"
+  echo "Pre-restore safety copy: ${safety_dir}/${name}"
+else
+  # No live file to preserve: the restore only ADDS this file, so undo = delete.
+  printf 'file did not exist before restore; undo by deleting wp-content/%s\n' "${name}" \
+    > "${safety_dir}/RESTORE_ADDED_${name##*/}.txt"
+  echo "No existing '${name}' to preserve; restore is reversible by deletion."
+fi
+
+# Ensure the parent directory exists inside the container, then copy the file in.
+# The container path is a fixed prefix + the validated relative name (argv to cp,
+# no shell expansion), so it can never escape /var/www/html/wp-content.
+parent="$(dirname -- "${name}")"
+if [ "${parent}" != "." ]; then
+  vibe_compose exec -T wordpress mkdir -p "/var/www/html/wp-content/${parent}"
+fi
+vibe_compose cp "${tmp_dir}/${name}" "wordpress:/var/www/html/wp-content/${name}"
+
+echo "Normalizing wp-content permissions through the WordPress container..."
+vibe_restart_php_and_nginx
+
+echo "Flushing caches..."
+vibe_clear_nginx_cache
+
+echo "Single-file restore complete: ${name}"

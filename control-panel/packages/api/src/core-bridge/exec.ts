@@ -86,6 +86,18 @@ export const VIBE_OPS = {
 		takesArg: true,
 	},
 	backupTest: { argv: ["backup-test"], stream: false },
+	/** List a backup's files + DB tables as NDJSON-TAB (non-secret, read-only). */
+	backupListContents: {
+		argv: ["backup-list-contents"],
+		stream: false,
+		takesArg: true,
+	},
+	/** Restore ONE file or ONE table from a backup (destructive, streamed job). */
+	backupRestoreItem: {
+		argv: ["backup-restore-item"],
+		stream: true,
+		takesArg: true,
+	},
 	notifyConfigApply: { argv: ["notify-config-apply"], stream: false },
 	notifyTest: { argv: ["notify-test"], stream: false },
 	smtpConfigApply: { argv: ["smtp-config-apply"], stream: false },

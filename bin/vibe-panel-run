@@ -158,11 +158,12 @@ assert_safe_entrypoint() {
 # (spec.argv[0]); keep it in sync with control-panel exec.ts VIBE_OPS.
 #   smoke doctor-runtime monitor perf-report security-status compose env
 #   backups backup backup-config-apply backup-test backup-verify
+#   backup-list-contents backup-restore-item
 #   backup-schedule-apply auto-update-schedule-apply monitor-schedule-apply schedule-status site-config-apply
 #   caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test
 #   logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod
 #   promote-files-to-prod harden wp insights
-OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-schedule-apply auto-update-schedule-apply monitor-schedule-apply schedule-status site-config-apply caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod promote-files-to-prod harden wp insights"
+OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-list-contents backup-restore-item backup-schedule-apply auto-update-schedule-apply monitor-schedule-apply schedule-status site-config-apply caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod promote-files-to-prod harden wp insights"
 
 # Free-form (caller-supplied) args reach only a few ops: restore/backup-verify
 # take a backup path; the schedule/notify/site/backup-config-apply ops and
@@ -203,6 +204,62 @@ validate_arg() {
     *..*) die "argument contains '..': $arg" ;;
     *[\;\|\&\$\`\<\>\(\)\{\}\*\?\!]*) die "argument contains shell metacharacters: $arg" ;;
     *' '*) die "argument contains whitespace: $arg" ;;
+  esac
+}
+
+# Validate a backup path argument for the backup-list-contents / backup-restore-item
+# ops. STRICTER than validate_arg: the path must, after the generic metachar/'..'
+# guard, resolve to an EXISTING directory CONFINED under the site's backups root
+# ($SITE_DIR_REAL/backups). This closes the gap where a metachar-free path could
+# point anywhere readable. Accepts both relative (`backups/<env>/<ts>`, resolved
+# against the site dir) and absolute (under $SITE_DIR_REAL/backups) forms.
+# NOTE: this is applied ONLY to the two new ops; restore/backup-verify keep their
+# existing generic validate_arg behavior (see the OPEN DECISION in the PR notes).
+validate_backup_path() {
+  bp="$1"
+  validate_arg "$bp"                       # metachar/'..'/whitespace guard first
+  [ -n "${SITE_DIR_REAL:-}" ] || die "backup path validated before site dir"
+  allowed_root="$(canonical_dir "$SITE_DIR_REAL/backups")"
+  [ -n "$allowed_root" ] || die "site has no backups directory"
+  # Resolve the candidate. A relative path is taken against the site dir (the
+  # panel always sends `backups/<env>/<ts>`); an absolute one is used as-is.
+  case "$bp" in
+    /*) cand_dir="$bp" ;;
+    *)  cand_dir="$SITE_DIR_REAL/$bp" ;;
+  esac
+  real_cand="$(canonical_dir "$cand_dir")"
+  [ -n "$real_cand" ] || die "backup path does not exist or is not a directory"
+  case "$real_cand" in
+    "$allowed_root"/*) : ;;
+    *) die "backup path is outside the site backups root: $bp" ;;
+  esac
+}
+
+# Validate a single restore-item NAME per its kind. table -> ^[A-Za-z0-9_]{1,64}$;
+# file -> a safe relative path (validate_arg's metachar/'..'/whitespace guard,
+# plus no leading '/' and no leading '-'). Re-validated HERE at the root boundary
+# even though the script re-checks too (defense-in-depth).
+validate_item_name() {
+  kind="$1"
+  iname="$2"
+  case "$kind" in
+    table)
+      case "$iname" in
+        ''|*[!A-Za-z0-9_]*) die "table name fails ^[A-Za-z0-9_]{1,64}$: $iname" ;;
+      esac
+      [ "${#iname}" -le 64 ] || die "table name too long: $iname"
+      ;;
+    file)
+      case "$iname" in
+        '') die "file name is empty" ;;
+        /*) die "file name must be a relative path: $iname" ;;
+        -*) die "file name must not start with '-': $iname" ;;
+      esac
+      validate_arg "$iname"                # metachar/'..'/whitespace guard
+      ;;
+    *)
+      die "restore-item kind must be file|table: $kind"
+      ;;
   esac
 }
 
@@ -469,6 +526,16 @@ case "$sub" in
       auto-update-schedule-apply)          # exactly one cadence keyword
         [ "$#" -eq 1 ] || die "auto-update-schedule-apply takes one keyword"
         case "$1" in off|weekly|daily) : ;; *) die "schedule must be off|weekly|daily" ;; esac
+        ;;
+      backup-list-contents)                # exactly one backup path, confined
+        [ "$#" -eq 1 ] || die "backup-list-contents takes exactly one backup path"
+        validate_backup_path "$1"
+        ;;
+      backup-restore-item)                 # <backupPath> <file|table> <name>
+        [ "$#" -eq 3 ] || die "backup-restore-item takes exactly 3 args"
+        validate_backup_path "$1"
+        case "$2" in file|table) : ;; *) die "restore-item kind must be file|table: $2" ;; esac
+        validate_item_name "$2" "$3"
         ;;
       *)
         for a in "$@"; do

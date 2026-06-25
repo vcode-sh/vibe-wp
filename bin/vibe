@@ -20,6 +20,8 @@ Commands:
   wp <args...>               Run WP-CLI
   backup [args...]           Create a DB and wp-content backup
   backup-verify <backup> [args...] Verify a backup without restoring it
+  backup-list-contents <backup>    List files + DB tables in a backup (NDJSON-TAB, non-secret)
+  backup-restore-item <backup> <file|table> <name>  Restore ONE file or ONE table
   restore <backup> [args...] Restore a backup
   backups                    List available backups for this env (newest last)
   backups-remote             List off-server (R2) backups as restorable paths
@@ -234,6 +236,12 @@ case "${command}" in
     ;;
   backup-verify)
     "${VIBE_BIN_DIR}/backup-verify" "$@"
+    ;;
+  backup-list-contents)
+    "${VIBE_BIN_DIR}/backup-list-contents" "$@"
+    ;;
+  backup-restore-item)
+    "${VIBE_BIN_DIR}/backup-restore-item" "$@"
     ;;
   restore)
     "${VIBE_BIN_DIR}/restore" "$@"

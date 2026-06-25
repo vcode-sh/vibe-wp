@@ -66,6 +66,32 @@ export interface BackupRecord {
 	whenISO: string;
 }
 
+/** A single browsable file inside a backup's wp-content archive. */
+export interface BackupFileEntry {
+	bytes: number;
+	path: string;
+}
+
+/** The browsable contents of one backup: files + DB table names. */
+export interface BackupContents {
+	files: BackupFileEntry[];
+	tables: string[];
+	/** True when the file listing was capped server-side (huge upload trees). */
+	truncated: boolean;
+}
+
+/**
+ * The "offsite (R2) backup verified N hours ago" badge source. Reads the newest
+ * passing verification row whose location is offsite/both. When nothing has been
+ * verified yet, every field is null (badge shows a muted "—").
+ */
+export interface OffsiteVerified {
+	backupId: string | null;
+	hoursAgo: number | null;
+	lastVerifiedISO: string | null;
+	location: "local" | "offsite" | "both" | null;
+}
+
 export interface HealthReport {
 	alertChannels: string[];
 	tiles: MetricTile[];

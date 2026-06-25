@@ -6,12 +6,14 @@ import {
 	TableHeader,
 	TableRow,
 } from "@control-panel/ui/components/table";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { BackupBrowser } from "@/components/backups/backup-browser";
 import { BackupMenu } from "@/components/backups/backup-menu";
+import { OffsiteVerifiedBanner } from "@/components/backups/offsite-verified-banner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { SafetyConfirm } from "@/components/patterns/safety-confirm";
@@ -19,7 +21,7 @@ import { TopBar } from "@/components/top-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/data/derive";
-import { backupsQuery } from "@/data/queries";
+import { backupsQuery, offsiteVerifiedQuery } from "@/data/queries";
 import type { BackupRecord } from "@/data/types";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
@@ -38,19 +40,57 @@ function locationLabel(loc: BackupRecord["location"]): string {
 	return "local";
 }
 
+/** True when this backup has an off-site (R2) copy that Verify can prove good. */
+function hasOffsiteCopy(loc: BackupRecord["location"]): boolean {
+	return loc === "offsite" || loc === "both";
+}
+
 function BackupsPage() {
 	const { siteId } = Route.useParams();
-	const { start, isRunning } = useOperations();
+	const queryClient = useQueryClient();
+	const { start, isRunning, getStatus } = useOperations();
 	const backupRunning = isRunning(siteId, "backup");
+	const verifyRunning = isRunning(siteId, "backupVerify");
 	const backups = useQuery({
 		...backupsQuery(siteId),
 		refetchInterval: backupRunning ? 4000 : false,
 	});
 	const now = new Date();
 	const [restoring, setRestoring] = useState<BackupRecord | null>(null);
+	const [browsing, setBrowsing] = useState<BackupRecord | null>(null);
+	const [verifying, setVerifying] = useState(false);
 
 	const runBackup = useMutation(orpc.backupsRun.mutationOptions());
 	const restore = useMutation(orpc.backupsRestore.mutationOptions());
+	const verify = useMutation(orpc.backupsVerify.mutationOptions());
+	const verifyHandled = useRef(false);
+
+	// When a verify job settles, refresh the off-site badge + the backups list so
+	// the operator immediately sees the proven result. Success/failure surfaced.
+	useEffect(() => {
+		if (!verifying || verifyHandled.current) {
+			return;
+		}
+		const status = getStatus(siteId, "backupVerify");
+		if (status === null) {
+			return;
+		}
+		verifyHandled.current = true;
+		setVerifying(false);
+		queryClient.invalidateQueries({
+			queryKey: offsiteVerifiedQuery(siteId).queryKey,
+		});
+		queryClient.invalidateQueries({ queryKey: backupsQuery(siteId).queryKey });
+		if (status === "succeeded") {
+			toast.success("Backup verified — it is structurally restorable.");
+		} else {
+			toast.error(
+				status === "canceled"
+					? "Verification was canceled."
+					: "Verification failed — this copy may not be restorable."
+			);
+		}
+	}, [verifying, getStatus, siteId, queryClient]);
 
 	async function handleBackup(destination: "local" | "both") {
 		try {
@@ -87,6 +127,22 @@ function BackupsPage() {
 		}
 	}
 
+	async function handleVerify(backup: BackupRecord) {
+		try {
+			const result = await verify.mutateAsync({ siteId, backupId: backup.id });
+			verifyHandled.current = false;
+			setVerifying(true);
+			start({
+				jobId: result.jobId,
+				title: `Verifying backup from ${relativeTime(backup.whenISO, now)}`,
+				kind: "backupVerify",
+				siteId,
+			});
+		} catch {
+			toast.error("Failed to start verification.");
+		}
+	}
+
 	return (
 		<>
 			<TopBar crumbs={[siteId, "Backups"]} />
@@ -102,6 +158,7 @@ function BackupsPage() {
 					subtitle="Local and off-site copies, retention and restore."
 					title="Backups"
 				/>
+				<OffsiteVerifiedBanner siteId={siteId} />
 				<QueryBoundary
 					errorMessage="Couldn't load the backups."
 					hasData={Boolean(backups.data)}
@@ -150,6 +207,28 @@ function BackupsPage() {
 											</TableCell>
 											<TableCell className="text-right">
 												<Button
+													onClick={() => setBrowsing(b)}
+													size="sm"
+													variant="ghost"
+												>
+													Browse…
+												</Button>
+												<Button
+													disabled={
+														verifyRunning || !hasOffsiteCopy(b.location)
+													}
+													onClick={() => handleVerify(b)}
+													size="sm"
+													title={
+														hasOffsiteCopy(b.location)
+															? "Prove the off-site copy can be restored"
+															: "No off-site copy to verify for this backup"
+													}
+													variant="ghost"
+												>
+													{verifyRunning ? "Verifying…" : "Verify"}
+												</Button>
+												<Button
 													disabled={isRunning(siteId, "restore")}
 													onClick={() => setRestoring(b)}
 													size="sm"
@@ -176,15 +255,26 @@ function BackupsPage() {
 				confirmLabel="Restore this backup"
 				consequence={
 					restoring
-						? `This replaces the live site with the backup from ${relativeTime(restoring.whenISO, now)}. We back up the current state first.`
+						? `This replaces your entire live site with the backup from ${relativeTime(restoring.whenISO, now)} — every file and database table. A fresh backup of the current state is taken first, so you can undo it.`
 						: ""
 				}
 				onConfirm={handleRestore}
 				onOpenChange={(open) => !open && setRestoring(null)}
 				open={restoring !== null}
 				reversible
-				title="Restore a backup"
+				title="Restore the whole site"
 			/>
+
+			{browsing ? (
+				<BackupBrowser
+					backupId={browsing.id}
+					location={browsing.location}
+					onOpenChange={(open) => !open && setBrowsing(null)}
+					open={browsing !== null}
+					siteId={siteId}
+					whenLabel={relativeTime(browsing.whenISO, now)}
+				/>
+			) : null}
 		</>
 	);
 }

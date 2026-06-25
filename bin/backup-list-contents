@@ -1,0 +1,137 @@
+#!/usr/bin/env sh
+# backup-list-contents <backupDir>
+#
+# Read-only, NON-SECRET listing of what a local backup contains, emitted as
+# NDJSON-TAB lines (one item per line) to match the existing `backups` TAB-line
+# convention the panel parser already understands:
+#
+#   file<TAB><relative-path><TAB><bytes>
+#   table<TAB><table-name><TAB>
+#   meta<TAB>truncated<TAB>1            (only when the file list was capped)
+#
+# Files come from the wp-content archive; tables from the CREATE TABLE lines in
+# the gzipped DB dump. Nothing here prints a secret — only paths + table names.
+#
+# This must NEVER list a path that bin/backup-restore-item would refuse, so we
+# skip unsafe entries (leading '/', '..', empty, link/hardlink entries) up front.
+set -eu
+export LC_ALL=C
+
+# Cap the number of file entries so an enormous uploads/ tree cannot produce an
+# unbounded payload. When the listing is capped we emit a `meta truncated 1` line.
+MAX_FILES=5000
+
+die() {
+  echo "backup-list-contents: $1" >&2
+  exit 1
+}
+
+backup_dir="${1:-}"
+[ -n "${backup_dir}" ] || die "usage: backup-list-contents <backupDir>"
+[ -d "${backup_dir}" ] || die "backup directory not found: ${backup_dir}"
+
+manifest_file="${backup_dir}/manifest.txt"
+[ -f "${manifest_file}" ] || die "no manifest.txt in ${backup_dir}"
+
+# Read a single manifest key (inline awk helper — we do NOT source backup-verify).
+manifest_value() {
+  awk -F= -v key="$1" '
+    $1 == key { sub(/^[^=]*=/, ""); print; exit }
+  ' "${manifest_file}"
+}
+
+database_name="$(manifest_value database)"
+wp_content_name="$(manifest_value wp_content)"
+
+# Refuse manifest-declared names that are not plain local file names.
+case "${database_name}" in
+  ""|.|..|/*|*/*|-*) die "manifest database value is not a local file name" ;;
+esac
+case "${wp_content_name}" in
+  ""|.|..|/*|*/*|-*) die "manifest wp_content value is not a local file name" ;;
+esac
+
+database_file="${backup_dir}/${database_name}"
+wp_content_file="${backup_dir}/${wp_content_name}"
+
+# --- Files: list the wp-content archive entries, skipping unsafe/link members.
+if [ -f "${wp_content_file}" ]; then
+  case "${wp_content_name}" in
+    *.tar.gz|*.tgz) : ;;
+    *) die "unsupported wp-content archive: ${wp_content_name}" ;;
+  esac
+  tar -tzf "${wp_content_file}" >/dev/null 2>&1 \
+    || die "wp-content archive is not a readable tar.gz"
+
+  # Parse the verbose listing portably across GNU and BSD tar, whose column
+  # layouts differ:
+  #   GNU: <mode> <owner/group> <size> <YYYY-MM-DD> <HH:MM> <path>
+  #   BSD: <mode> <links> <owner> <group> <size> <Mon> <DD> <HH:MM|YYYY> <path>
+  # Rather than assume a fixed field index, we ANCHOR on the date: find the first
+  # field that looks like a month abbreviation OR a YYYY-MM-DD token. The byte
+  # SIZE is the field right before it; the PATH is everything after the date+time
+  # tokens. The type char (first column) is portable in both formats.
+  tar -tzvf "${wp_content_file}" 2>/dev/null | awk -v max="${MAX_FILES}" '
+    BEGIN {
+      count = 0; truncated = 0
+      months = " Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec "
+    }
+    {
+      type = substr($0, 1, 1)
+      # Skip link (l) and hardlink (h) entries — restore refuses them anyway.
+      if (type == "l" || type == "h") { next }
+      # Skip directory entries (type d) — not single-file restorable.
+      if (type == "d") { next }
+
+      # Locate the date field. GNU emits a single YYYY-MM-DD token then HH:MM;
+      # BSD emits <Mon> <DD> <HH:MM|YYYY>. We detect the first matching token.
+      datei = 0
+      gnu = 0
+      for (i = 2; i <= NF; i++) {
+        # YYYY-MM-DD (GNU) without interval expressions for old-awk portability.
+        if ($i ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) {
+          datei = i; gnu = 1; break
+        }
+        # <Mon> <DD> (BSD): a month abbrev followed by a 1-2 digit day.
+        if (index(months, " " $i " ") > 0 && $(i + 1) ~ /^[0-9][0-9]?$/) {
+          datei = i; gnu = 0; break
+        }
+      }
+      if (datei == 0) { next }
+
+      # Size is the field immediately before the date; path starts after the
+      # date+time tokens (2 for GNU: date + HH:MM; 3 for BSD: Mon DD time).
+      size = $(datei - 1)
+      pathstart = gnu ? (datei + 2) : (datei + 3)
+      path = ""
+      for (i = pathstart; i <= NF; i++) {
+        path = (path == "" ? $i : path " " $i)
+      }
+      # Normalize a leading "./" that tar emits for archive root members.
+      sub(/^\.\//, "", path)
+      if (path == "") { next }
+      # Safety: never list absolute or traversal paths.
+      if (path ~ /^\//) { next }
+      if (path ~ /(^|\/)\.\.(\/|$)/) { next }
+      # Size must be a non-negative integer; default 0 when unparsed.
+      if (size !~ /^[0-9]+$/) { size = 0 }
+      if (count >= max) { truncated = 1; next }
+      count++
+      printf "file\t%s\t%s\n", path, size
+    }
+    END { if (truncated) printf "meta\ttruncated\t1\n" }
+  '
+fi
+
+# --- Tables: pull table names from CREATE TABLE lines ONLY (never data rows).
+if [ -f "${database_file}" ]; then
+  case "${database_name}" in
+    *.sql.gz) db_stream="gzip -cd" ;;
+    *.sql) db_stream="cat" ;;
+    *) die "unsupported database dump: ${database_name}" ;;
+  esac
+  # mariadb-dump emits:  CREATE TABLE `wp_posts` ( ...
+  # Pull the backticked (or bare) identifier from CREATE TABLE lines only.
+  ${db_stream} "${database_file}" 2>/dev/null | sed -n \
+    's/^CREATE TABLE `\{0,1\}\([A-Za-z0-9_]\{1,64\}\)`\{0,1\}.*/table\t\1\t/p'
+fi

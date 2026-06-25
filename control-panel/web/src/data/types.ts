@@ -1,5 +1,7 @@
 export type {
 	ActivityEntry,
+	BackupContents,
+	BackupFileEntry,
 	BackupRecord,
 	BackupScheduleInput,
 	CreateExternalInput,
@@ -13,6 +15,7 @@ export type {
 	LogLine,
 	MetricTile,
 	NeedItem,
+	OffsiteVerified,
 	PerformancePresetInput,
 	PerfReport,
 	ServerInfo,

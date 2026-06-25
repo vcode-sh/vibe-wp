@@ -84,6 +84,8 @@ export interface StartJobInput {
 	/** Extra environment variables injected into the spawned process. */
 	extraEnv?: Record<string, string>;
 	kind: string;
+	/** Optional terminal hook fired once the job settles — see JobFinishHook. */
+	onFinish?: JobFinishHook;
 	op: VibeOp;
 	siteId: string;
 	userId: string;
@@ -119,13 +121,40 @@ export function cancelJob(jobId: string): boolean {
 	return true;
 }
 
+/**
+ * Optional terminal hook a job can register. Fired EXACTLY ONCE when the job
+ * reaches a terminal state (succeeded/failed/canceled), AFTER persistJobFinish.
+ * Used to durably record side outcomes that the generic job row cannot carry —
+ * e.g. a successful backup-verify persisting a backup_verification row so the
+ * "off-site verified N h ago" badge reflects a REAL verification, never a guess.
+ * It must never throw into the caller; failures are swallowed (the job row and
+ * stream are already authoritative).
+ */
+export type JobFinishHook = (status: Job["status"]) => Promise<void> | void;
+
+async function runFinishHook(
+	hook: JobFinishHook | undefined,
+	status: Job["status"]
+): Promise<void> {
+	if (!hook) {
+		return;
+	}
+	try {
+		await hook(status);
+	} catch {
+		// Side-outcome recording is best-effort: the job row + stream stay
+		// authoritative even if this fails. Never let it surface as a rejection.
+	}
+}
+
 async function drainJob(
 	job: Job,
 	stream: LineStream,
 	proc: ReturnType<typeof streamVibe>["proc"],
 	lines: ReturnType<typeof streamVibe>["lines"],
 	jobId: string,
-	deps: JobDeps
+	deps: JobDeps,
+	onFinish?: JobFinishHook
 ): Promise<void> {
 	for await (const line of lines) {
 		stream.push(line);
@@ -141,6 +170,7 @@ async function drainJob(
 		finalized.add(jobId);
 		scheduleEviction(jobId);
 		await deps.persistJobFinish(jobId, job.status, code);
+		await runFinishHook(onFinish, job.status);
 	}
 }
 
@@ -148,6 +178,8 @@ async function drainJob(
 export interface JobMeta {
 	action: string;
 	kind: string;
+	/** Optional terminal hook — see JobFinishHook. */
+	onFinish?: JobFinishHook;
 	siteId: string;
 	userId: string;
 }
@@ -180,23 +212,26 @@ export async function launchJob(
 	const { proc, lines } = produce();
 	registry.set(jobId, { job, proc, stream });
 
-	drainJob(job, stream, proc, lines, jobId, d).catch(async () => {
-		// Preserve a cancel even if the drain throws (canceled must stay canceled).
-		if (job.status !== "canceled") {
-			job.status = "failed";
-		}
-		job.finishedAt = new Date().toISOString();
-		stream.end(job.status);
-		if (!finalized.has(jobId)) {
-			finalized.add(jobId);
-			scheduleEviction(jobId);
-			try {
-				await d.persistJobFinish(jobId, job.status, null);
-			} catch {
-				// Stream is already ended; swallow DB errors to avoid unhandled rejection.
+	drainJob(job, stream, proc, lines, jobId, d, meta.onFinish).catch(
+		async () => {
+			// Preserve a cancel even if the drain throws (canceled must stay canceled).
+			if (job.status !== "canceled") {
+				job.status = "failed";
+			}
+			job.finishedAt = new Date().toISOString();
+			stream.end(job.status);
+			if (!finalized.has(jobId)) {
+				finalized.add(jobId);
+				scheduleEviction(jobId);
+				try {
+					await d.persistJobFinish(jobId, job.status, null);
+				} catch {
+					// Stream is already ended; swallow DB errors to avoid unhandled rejection.
+				}
+				await runFinishHook(meta.onFinish, job.status);
 			}
 		}
-	});
+	);
 
 	return { jobId };
 }
@@ -238,6 +273,7 @@ export async function startJob(
 		{
 			action: input.action,
 			kind: input.kind,
+			onFinish: input.onFinish,
 			siteId: input.siteId,
 			userId: input.userId,
 		},
