@@ -4,7 +4,7 @@ set -eu
 usage() {
   cat <<'USAGE'
 Usage:
-  ./bin/stage-promote-files [--yes] [--stage stage] [--prod prod]
+  ./bin/stage-promote-files [--yes] [--no-backup] [--stage stage] [--prod prod]
 
 Promotes managed WordPress code files from staging to production:
   - plugins
@@ -17,7 +17,13 @@ Before replacing production files it:
   - verifies staging and production are distinct environments
   - prints plugin and theme inventories for both environments
   - asks for typed confirmation unless --yes is provided
-  - creates and verifies a production safety backup
+  - creates and verifies a production safety backup, unless --no-backup is set
+
+--no-backup is for the control panel's "Push to live" job, which takes and
+captures its OWN authoritative pre-promote production snapshot first and rolls
+back to it on failure. In that flow this script must NOT take a second backup,
+so the panel snapshot stays the single rollback point. The cross-environment
+identity guards and the final production smoke test still run.
 USAGE
 }
 
@@ -177,11 +183,16 @@ create_production_backup() {
 stage_env="stage"
 prod_env="prod"
 confirm=0
+skip_backup=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --yes)
       confirm=1
+      shift
+      ;;
+    --no-backup)
+      skip_backup=1
       shift
       ;;
     --stage)
@@ -256,7 +267,19 @@ echo
 
 confirm_promotion
 
-create_production_backup
+# The panel's "Push to live" job passes --no-backup because it has ALREADY taken
+# and captured the authoritative pre-promote production snapshot it will restore
+# from on failure. Taking a second backup here would split the rollback point and
+# (without a TTY) also stall on the typed-confirmation prompt above. Outside that
+# flow we always create + verify the safety backup.
+backup_dir=""
+if [ "${skip_backup}" = "1" ]; then
+  echo
+  echo "== Production safety backup skipped (--no-backup) =="
+  echo "The caller is responsible for its own pre-promote production snapshot."
+else
+  create_production_backup
+fi
 
 echo
 echo "== Promote managed wp-content files =="
@@ -305,4 +328,8 @@ VIBE_ENV="${prod_env}" "${VIBE_BIN_DIR}/smoke"
 echo
 echo "== Promotion complete =="
 echo "Managed WordPress files promoted from ${stage_env} to ${prod_env}."
-echo "Production safety backup: ${backup_dir}"
+if [ -n "${backup_dir}" ]; then
+  echo "Production safety backup: ${backup_dir}"
+else
+  echo "Production safety backup: skipped (--no-backup; caller owns the snapshot)."
+fi

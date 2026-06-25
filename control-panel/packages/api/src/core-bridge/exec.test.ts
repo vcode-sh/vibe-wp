@@ -392,6 +392,7 @@ describe("buildVibeArgv", () => {
 			"notifyTest",
 			"perfReport",
 			"promote",
+			"promoteFilesNoBackup",
 			"psJson",
 			"refresh",
 			"restart",
@@ -448,6 +449,19 @@ describe("buildVibeArgv operations", () => {
 			"refresh-from-prod",
 			"--yes",
 		]);
+	});
+	it("carries the trusted --no-backup flag for promoteFilesNoBackup (own argv, then --yes)", () => {
+		// The --no-backup flag lives in the op's own argv (allowlisted, like
+		// backupLocal's --local-only), so it must not trip the leading-dash guard.
+		expect(buildVibeArgv("/opt/acme", "stage", "promoteFilesNoBackup")).toEqual(
+			[
+				"/opt/acme/bin/vibe",
+				"stage",
+				"promote-files-to-prod",
+				"--no-backup",
+				"--yes",
+			]
+		);
 	});
 	it("rejects args for an op that does not take them", () => {
 		expect(() => buildVibeArgv("/opt/acme", "prod", "up", ["x"])).toThrow();

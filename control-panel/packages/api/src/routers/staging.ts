@@ -4,6 +4,7 @@ import type { StagingInfo } from "../contract";
 import { startJob } from "../core-bridge/jobs";
 import { hostFromUrl, parseEnvFile } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
+import { startStagingPushToLive } from "../core-bridge/staging-push";
 import {
 	adminProcedure,
 	operatorProcedure,
@@ -40,6 +41,8 @@ export const stagingRouter = {
 			})
 		),
 
+	// Legacy raw promotion (no auto-rollback). Kept for back-compat; the staging
+	// UI now drives the safe stagingPushToLive path below instead.
 	stagingPromote: adminProcedure
 		.input(z.object({ siteId: z.string() }))
 		.handler(({ input, context }) =>
@@ -50,6 +53,20 @@ export const stagingRouter = {
 				kind: "promote",
 				userId: context.session.user.id,
 				action: "promote",
+			})
+		),
+
+	// Safe "Push staging to live": backs prod up first, promotes (with the
+	// script's own backup suppressed), runs prod smoke + a homepage TTFB check,
+	// and AUTO-ROLLS-BACK to the captured snapshot on any failure. Streamed like
+	// safeUpdate; returns a jobId for the operations tray. Admin-gated because it
+	// replaces the whole live site (matching the stagingPromote tier).
+	stagingPushToLive: adminProcedure
+		.input(z.object({ siteId: z.string() }))
+		.handler(({ input, context }) =>
+			startStagingPushToLive({
+				siteId: input.siteId,
+				userId: context.session.user.id,
 			})
 		),
 };

@@ -25,6 +25,7 @@ function StagingCard({
 	onPublish,
 	onAdd,
 	refreshPending,
+	publishPending,
 }: {
 	url: string | null;
 	noindex: boolean;
@@ -32,6 +33,7 @@ function StagingCard({
 	onPublish: () => void;
 	onAdd: () => void;
 	refreshPending: boolean;
+	publishPending: boolean;
 }) {
 	if (!url) {
 		return (
@@ -57,7 +59,7 @@ function StagingCard({
 				<Button disabled={refreshPending} onClick={onRefresh}>
 					Copy live to staging
 				</Button>
-				<Button onClick={onPublish} variant="outline">
+				<Button disabled={publishPending} onClick={onPublish} variant="outline">
 					Publish staging to live
 				</Button>
 			</CardContent>
@@ -75,7 +77,10 @@ function StagingPage() {
 	const { start, isRunning } = useOperations();
 
 	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
-	const promote = useMutation(orpc.stagingPromote.mutationOptions());
+	// The UI drives the SAFE push-to-live path (backup -> promote -> health check
+	// -> auto-rollback on failure). The legacy stagingPromote procedure stays in
+	// the router for back-compat but is no longer reachable from this screen.
+	const pushToLive = useMutation(orpc.stagingPushToLive.mutationOptions());
 
 	async function handleRefresh() {
 		try {
@@ -91,18 +96,18 @@ function StagingPage() {
 		}
 	}
 
-	async function handlePromote() {
+	async function handlePushToLive() {
 		try {
-			const result = await promote.mutateAsync({ siteId });
+			const result = await pushToLive.mutateAsync({ siteId });
 			start({
 				jobId: result.jobId,
 				title: "Publishing staging to live…",
-				kind: "promote",
+				kind: "stagingPushToLive",
 				siteId,
 			});
 			setPublishing(false);
 		} catch {
-			toast.error("Failed to start promote.");
+			toast.error("Failed to start push to live.");
 		}
 	}
 
@@ -128,6 +133,9 @@ function StagingPage() {
 							onAdd={() => setAdding(true)}
 							onPublish={() => setPublishing(true)}
 							onRefresh={handleRefresh}
+							publishPending={
+								pushToLive.isPending || isRunning(siteId, "stagingPushToLive")
+							}
 							refreshPending={refresh.isPending || isRunning(siteId, "refresh")}
 							url={staging.data.present ? staging.data.url : null}
 						/>
@@ -144,8 +152,8 @@ function StagingPage() {
 
 			<SafetyConfirm
 				confirmLabel="Publish to live"
-				consequence="This copies your staging files over the live site. Your live site will be replaced. We back up live first."
-				onConfirm={handlePromote}
+				consequence="This copies your staging files over the live site, replacing it. We back up live first and automatically roll back to that backup if the site fails its health check."
+				onConfirm={handlePushToLive}
 				onOpenChange={setPublishing}
 				open={publishing}
 				reversible={false}

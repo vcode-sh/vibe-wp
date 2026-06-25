@@ -83,3 +83,54 @@ describe("OP_STEPS provision rails", () => {
 		);
 	});
 });
+
+describe("OP_STEPS stagingPushToLive rail", () => {
+	it("registers the safe push-to-live rail", () => {
+		expect(OP_STEPS.stagingPushToLive).toBeDefined();
+	});
+
+	it("maps a successful push to backup -> publish -> smoke -> ttfb (no rollback)", () => {
+		const lines = [
+			"[backup] Taking pre-promote production snapshot…",
+			"[backup] Backup written to backups/prod/SNAP",
+			"[promote] Publishing staging files to live…",
+			"[promote] Importing managed wp-content files into prod...",
+			"[smoke] ok (exit 0)",
+			"[ttfb] Homepage 142ms ✓",
+			"[done] Push to live succeeded. Snapshot retained: backups/prod/SNAP",
+		];
+		const steps = deriveSteps(
+			lines,
+			OP_STEPS.stagingPushToLive ?? GENERIC_STEPS
+		);
+		const byLabel = Object.fromEntries(steps.map((s) => [s.label, s.state]));
+		expect(byLabel["Backing up live"]).toBe("done");
+		expect(byLabel["Publishing to live"]).toBe("done");
+		expect(byLabel["Running smoke test"]).toBe("done");
+		// ttfb is the last matched step on a clean push => active.
+		expect(byLabel["Checking response time"]).toBe("active");
+		// No rollback happened, so the trailing "Rolling back" row stays pending.
+		expect(byLabel["Rolling back"]).toBe("pending");
+	});
+
+	it("lights the rollback row when verification fails and auto-restores", () => {
+		const lines = [
+			"[backup] Backup written to backups/prod/SNAP",
+			"[promote] Importing managed wp-content files into prod...",
+			"[smoke] failed (exit 1)",
+			"[restore] Verification failed — auto-restoring from backups/prod/SNAP…",
+			"[restore] Restoring database",
+			"[done] Rolled back. Check error logs.",
+		];
+		const steps = deriveSteps(
+			lines,
+			OP_STEPS.stagingPushToLive ?? GENERIC_STEPS
+		);
+		const byLabel = Object.fromEntries(steps.map((s) => [s.label, s.state]));
+		expect(byLabel["Backing up live"]).toBe("done");
+		expect(byLabel["Publishing to live"]).toBe("done");
+		expect(byLabel["Running smoke test"]).toBe("done");
+		// "Rolling back" is the latest match (auto-restoring + Rolled back) => active.
+		expect(byLabel["Rolling back"]).toBe("active");
+	});
+});
