@@ -2,6 +2,8 @@ import { orpc } from "@/lib/orpc/client";
 
 export const needsSetupQuery = () => orpc.needsSetup.queryOptions();
 
+export const panelAccessQuery = () => orpc.panelAccess.queryOptions();
+
 export const sitesQuery = () => orpc.sitesList.queryOptions();
 
 export const serverInfoQuery = () => orpc.serverInfo.queryOptions();

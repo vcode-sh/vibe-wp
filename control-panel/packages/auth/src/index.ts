@@ -89,3 +89,28 @@ export function createAuth() {
 }
 
 export const auth = createAuth();
+
+/**
+ * Narrow an unknown error thrown by `auth.api.*` to better-auth's APIError shape
+ * without re-exporting the class (which would make this a barrel module). The
+ * better-auth library boundary stays inside this package: consumers in
+ * packages/api classify failures via this helper instead of importing
+ * better-auth themselves. `status` is better-auth's string status code
+ * (e.g. "UNPROCESSABLE_ENTITY"); `statusCode` is the numeric HTTP status.
+ */
+export function asAuthApiError(
+	cause: unknown
+): { status: string; statusCode: number } | null {
+	if (
+		cause instanceof Error &&
+		cause.name === "APIError" &&
+		"status" in cause &&
+		typeof (cause as { status: unknown }).status === "string" &&
+		"statusCode" in cause &&
+		typeof (cause as { statusCode: unknown }).statusCode === "number"
+	) {
+		const e = cause as Error & { status: string; statusCode: number };
+		return { status: e.status, statusCode: e.statusCode };
+	}
+	return null;
+}

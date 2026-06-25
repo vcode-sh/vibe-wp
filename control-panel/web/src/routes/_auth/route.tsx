@@ -6,13 +6,23 @@ import { OperationsTray } from "@/components/patterns/operations-tray";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 import { OperationsProvider } from "@/lib/operations/operations-provider";
+import { client } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth")({
 	component: AuthLayout,
 	beforeLoad: async () => {
 		const session = await authClient.getSession();
 		if (!session.data) {
-			throw redirect({ to: "/login" });
+			// No session. On a brand-new install (no owner yet) send the visitor
+			// straight into onboarding; otherwise to the sign-in page. The
+			// needsSetup probe is best-effort — fall back to /login on any error.
+			let needsSetup = false;
+			try {
+				needsSetup = (await client.needsSetup()).needsSetup;
+			} catch {
+				needsSetup = false;
+			}
+			throw redirect({ to: needsSetup ? "/setup" : "/login" });
 		}
 		return { session };
 	},
