@@ -37,6 +37,7 @@ import {
 	debugPatchToEnv,
 	fastcgiCachePatchToEnv,
 	imagePatchToEnv,
+	securityFixToEnv,
 } from "./site-config-pure";
 import { toEnv as smtpToEnv } from "./smtp-config-pure";
 
@@ -121,6 +122,7 @@ beforeEach(() => {
  * exercise every conditional branch (so no key is missed):
  *
  *   site-config.ts  (siteConfigApply)   → debugPatchToEnv  (all 3 flags set)
+ *                                          + securityFixToEnv (both fix kinds)
  *   backup-config.ts (backupConfigApply) → backupConfigEnv (full creds + retention)
  *   settings.ts     (backupTest)        → backupTestEnv   (subset; already covered)
  *   notify-config.ts (notifyConfigApply) → notify toEnv    (all channels set)
@@ -149,6 +151,15 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 	// (+ sentinel). on/off both emit the same key set; one call suffices.
 	for (const k of Object.keys(fastcgiCachePatchToEnv(false))) {
 		keys.add(k);
+	}
+
+	// siteConfigApply (security hardening): securityFixToEnv → DISALLOW_FILE_EDIT
+	// (disableFileEdit) and VIBE_WP_DISABLE_XMLRPC (disableXmlRpc), each plus the
+	// sentinel. Both fix kinds emit a distinct key, so exercise both.
+	for (const fix of ["disableFileEdit", "disableXmlRpc"] as const) {
+		for (const k of Object.keys(securityFixToEnv(fix))) {
+			keys.add(k);
+		}
 	}
 
 	// backupConfigApply: full R2 credentials + enabled + retention → all
@@ -262,12 +273,12 @@ describe("bin/panel env_keep stays in sync with injected env keys", () => {
 		).toEqual([]);
 	});
 
-	it("the two sets are EXACTLY equal (30 keys today)", async () => {
+	it("the two sets are EXACTLY equal (32 keys today)", async () => {
 		const injected = await collectInjectedEnvKeys();
 		const keep = parsePanelEnvKeep();
 		expect(sorted(keep)).toEqual(sorted(injected));
 		// Belt-and-braces: pin the count so a same-size swap can't slip through.
-		expect(injected.size).toBe(30);
-		expect(keep.size).toBe(30);
+		expect(injected.size).toBe(32);
+		expect(keep.size).toBe(32);
 	});
 });
