@@ -1,30 +1,28 @@
 /**
- * PerformanceAdvisorCard — feature #5. The shippable surface is read-only: a
- * windowed measurements grid, the deterministic advisor recommendations (with a
- * risk badge per row using SEMANTIC tokens — no hardcoded colors), a preview
- * diff, and the reserved-vs-85%-RAM-cap meter.
+ * PerformanceAdvisorCard — feature #5, the Smart Performance Advisor.
  *
- * The Apply button is ADMIN-ONLY and clearly labeled EXPERIMENTAL / not yet
- * validated. The procedure is adminProcedure (so non-admins get FORBIDDEN
- * anyway); the button is also hidden for non-admins. On confirm it fires
- * perfApply and pushes { jobId } into the operations tray (same start() pattern
- * as inventory-actions.tsx).
+ * Design goal: a non-technical operator can read this card and confidently act
+ * without docs. It measures the running stack over a short window, then shows:
+ *   - what we measured, in plain words,
+ *   - a memory-budget meter (the advisor never reserves >85% of host RAM),
+ *   - explainable recommendations — each leads with a plain-language sentence,
+ *   - a clear before → after preview.
+ *
+ * The Apply button is ADMIN-ONLY (the procedure is admin-gated too). On confirm
+ * it opens PerfApplyDialog, which spells out the automatic safety net (snapshot
+ * → apply → restart → health check → auto-rollback on failure), then fires
+ * perfApply and pushes the job into the operations tray. Semantic tokens only —
+ * no hardcoded colors.
  */
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Gauge } from "lucide-react";
-import { useState } from "react";
+import { Gauge, ShieldCheck } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+	type PerfApplyChange,
+	PerfApplyDialog,
+} from "@/components/health/perf-apply-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,20 +35,14 @@ type PerfAdvice = NonNullable<Awaited<ReturnType<typeof client.perfAdvice>>>;
 type Recommendation = PerfAdvice["recommendations"][number];
 type Risk = Recommendation["risk"];
 
-const RISK_CLASS: Record<Risk, string> = {
-	low: "text-success",
-	medium: "text-warning",
-	high: "text-destructive",
-};
-
-const RISK_BADGE: Record<Risk, { label: string; className: string }> = {
+const RISK_BADGE: Record<Risk, { className: string; label: string }> = {
 	low: { label: "Low risk", className: "bg-success text-success-foreground" },
 	medium: {
-		label: "Medium risk",
+		label: "Worth a look",
 		className: "bg-warning text-warning-foreground",
 	},
 	high: {
-		label: "High risk",
+		label: "Care needed",
 		className: "bg-destructive text-destructive-foreground",
 	},
 };
@@ -68,35 +60,35 @@ function MeasurementsGrid({ m }: { m: PerfAdvice["measurements"] }) {
 	return (
 		<div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
 			<MeasurementRow
-				label="Host RAM total / free"
-				value={`${m.host.ramTotalMiB} / ${m.host.ramFreeMiB} MiB`}
+				label="Server memory (free / total)"
+				value={`${m.host.ramFreeMiB} / ${m.host.ramTotalMiB} MiB`}
 			/>
 			<MeasurementRow
-				label="FPM active / max"
+				label="Visitors served at once (now / max)"
 				value={`${m.fpm.active} / ${m.fpm.maxChildren}`}
 			/>
 			<MeasurementRow
-				label="FPM listen queue"
+				label="Visitors waiting in line"
 				value={String(m.fpm.listenQueue)}
 			/>
 			<MeasurementRow
-				label="OPcache hit / OOM restarts"
-				value={`${m.opcache.hitRatePercent}% / ${m.opcache.oomRestarts}`}
+				label="Code cache hit rate"
+				value={`${m.opcache.hitRatePercent}%`}
 			/>
 			<MeasurementRow
-				label="Redis evicted (window)"
+				label="Object cache evictions (this sample)"
 				value={String(m.redis.evictedKeysDelta)}
 			/>
 			<MeasurementRow
-				label="Redis used / max"
+				label="Object cache memory (used / max)"
 				value={`${m.redis.usedMemoryMiB} / ${m.redis.maxMemoryMiB} MiB`}
 			/>
 			<MeasurementRow
-				label="InnoDB read ratio"
+				label="Database served from memory"
 				value={`${m.innodb.bufferPoolReadRatioPercent}%`}
 			/>
 			<MeasurementRow
-				label="FastCGI hit (coarse)"
+				label="Page cache hit (quick check)"
 				value={`${m.fastcgi.hitRatePercent}%`}
 			/>
 		</div>
@@ -108,31 +100,44 @@ function RiskBadge({ risk }: { risk: Risk }) {
 	return <Badge className={className}>{label}</Badge>;
 }
 
-function RecommendationsTable({ recs }: { recs: Recommendation[] }) {
+function RecommendationRow({ rec }: { rec: Recommendation }) {
+	return (
+		<div className="grid gap-1.5 py-3">
+			<div className="flex items-center justify-between gap-2">
+				<span className="font-medium text-sm">{rec.label}</span>
+				<RiskBadge risk={rec.risk} />
+			</div>
+			{rec.plain ? (
+				<p className="text-foreground text-sm">{rec.plain}</p>
+			) : null}
+			<div className="font-mono text-xs">
+				<span className="text-muted-foreground">{rec.current}</span>
+				<span className="px-1 text-muted-foreground">→</span>
+				<span className="font-medium">{rec.suggested}</span>
+				<span className="text-muted-foreground"> {rec.unit}</span>
+			</div>
+			<p className="text-muted-foreground text-xs">Why: {rec.reason}</p>
+		</div>
+	);
+}
+
+function RecommendationsList({ recs }: { recs: Recommendation[] }) {
 	if (recs.length === 0) {
 		return (
-			<p className="text-muted-foreground text-sm">
-				No tuning recommendations — this site is well-balanced for its current
-				load and RAM.
-			</p>
+			<div className="flex items-start gap-2 rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
+				<ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
+				<p className="text-foreground">
+					Nothing to change — this site is already well-balanced for its current
+					traffic and the memory it has. Re-run the analysis after a busy spell
+					or after adding plugins to check again.
+				</p>
+			</div>
 		);
 	}
 	return (
 		<div className="divide-y divide-border rounded-lg border border-border px-4">
 			{recs.map((r) => (
-				<div className="grid gap-1 py-3" key={r.key}>
-					<div className="flex items-center justify-between gap-2">
-						<span className="font-medium text-sm">{r.label}</span>
-						<RiskBadge risk={r.risk} />
-					</div>
-					<div className="font-mono text-xs">
-						<span className="text-muted-foreground">{r.current}</span>
-						<span className={`px-1 ${RISK_CLASS[r.risk]}`}>→</span>
-						<span className="font-medium">{r.suggested}</span>
-						<span className="text-muted-foreground"> {r.unit}</span>
-					</div>
-					<p className="text-muted-foreground text-xs">{r.reason}</p>
-				</div>
+				<RecommendationRow key={r.key} rec={r} />
 			))}
 		</div>
 	);
@@ -144,10 +149,10 @@ function CapMeter({ advice }: { advice: PerfAdvice }) {
 	const over = advice.headroomMiB < 0;
 	const barClass = over ? "bg-destructive" : "bg-success";
 	return (
-		<div className="grid gap-1">
+		<div className="grid gap-1.5">
 			<div className="flex items-center justify-between text-xs">
 				<span className="text-muted-foreground">
-					Reserved memory vs 85% RAM cap
+					Memory reserved vs the 85% safety budget
 				</span>
 				<span
 					className={`font-medium tabular-nums ${over ? "text-destructive" : ""}`}
@@ -158,29 +163,31 @@ function CapMeter({ advice }: { advice: PerfAdvice }) {
 			<div className="h-2 w-full overflow-hidden rounded-full bg-muted">
 				<div className={`h-full ${barClass}`} style={{ width: `${pct}%` }} />
 			</div>
-			{over ? (
-				<p className="text-destructive text-xs">
-					Over budget — the advisor proposes downward changes only.
-				</p>
-			) : null}
+			<p className="text-muted-foreground text-xs">
+				{over
+					? "Over budget — the advisor only proposes safe reductions until this fits."
+					: "The advisor never lets the stack reserve more than 85% of server memory, leaving room for the operating system."}
+			</p>
 		</div>
 	);
 }
 
-function PreviewDiff({ text }: { text: string }) {
-	return (
-		<pre className="overflow-x-auto rounded-lg border border-border bg-muted/50 p-3 font-mono text-xs leading-relaxed">
-			{text}
-		</pre>
-	);
+function recsToChanges(recs: Recommendation[]): PerfApplyChange[] {
+	return recs.map((r) => ({
+		key: r.key,
+		label: r.label,
+		from: r.current,
+		to: r.suggested,
+		unit: r.unit,
+	}));
 }
 
-function ApplyButton({
+function ApplySection({
 	siteId,
-	disabled,
+	changes,
 }: {
+	changes: PerfApplyChange[];
 	siteId: string;
-	disabled: boolean;
 }) {
 	const { start } = useOperations();
 	const apply = useMutation(orpc.perfApply.mutationOptions());
@@ -192,47 +199,78 @@ function ApplyButton({
 			const r = await apply.mutateAsync({ siteId });
 			start({
 				jobId: r.jobId,
-				title: "Applying performance tuning (experimental)",
+				title: "Applying performance tuning",
 				kind: "perfApply",
 				siteId,
 			});
+			toast.success(
+				"Applying performance tuning — watch the operations tray for progress."
+			);
 		} catch {
-			toast.error("Failed to start performance apply.");
+			toast.error("Couldn't start performance tuning. Please try again.");
 		}
 	}
 
 	return (
-		<>
-			<Button
-				disabled={disabled || apply.isPending}
-				onClick={() => setConfirm(true)}
-				size="sm"
-				variant="outline"
-			>
-				Apply (experimental — not yet validated)
-			</Button>
-			<AlertDialog onOpenChange={setConfirm} open={confirm}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Apply performance tuning?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This is EXPERIMENTAL and has not yet been validated on a real VPS.
-							It writes the suggested tunables, then recreates the WordPress and
-							database containers — a brief restart/downtime. A snapshot is
-							taken first and the change auto-rolls back if the site fails its
-							post-apply smoke check. The 85% RAM cap is re-checked on the host
-							before anything is written.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction onClick={run}>
-							Apply &amp; restart stack
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-		</>
+		<div className="grid gap-3">
+			<div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+				<ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
+				<p className="text-muted-foreground">
+					Applying is safe: we snapshot the site first, restart it briefly to
+					pick up the new settings, then health-check it. If the check fails,
+					the previous settings are restored for you automatically.
+				</p>
+			</div>
+			<div>
+				<Button
+					disabled={apply.isPending}
+					onClick={() => setConfirm(true)}
+					size="sm"
+				>
+					{apply.isPending ? "Starting…" : "Apply recommendations"}
+				</Button>
+			</div>
+			<PerfApplyDialog
+				changes={changes}
+				onConfirm={run}
+				onOpenChange={setConfirm}
+				open={confirm}
+			/>
+		</div>
+	);
+}
+
+function AdvisorHeader({ action }: { action?: ReactNode }) {
+	return (
+		<CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+			<CardTitle className="flex items-center gap-2 text-sm">
+				<Gauge className="size-4" />
+				Performance advisor
+			</CardTitle>
+			{action}
+		</CardHeader>
+	);
+}
+
+function ApplyArea({ advice, siteId }: { advice: PerfAdvice; siteId: string }) {
+	const { data: session } = authClient.useSession();
+	const isAdmin = session?.user.role === "admin";
+
+	if (advice.recommendations.length === 0) {
+		return null;
+	}
+	if (!isAdmin) {
+		return (
+			<p className="text-muted-foreground text-sm">
+				An administrator can apply these recommendations from this panel.
+			</p>
+		);
+	}
+	return (
+		<ApplySection
+			changes={recsToChanges(advice.recommendations)}
+			siteId={siteId}
+		/>
 	);
 }
 
@@ -243,40 +281,20 @@ function AdvisorBody({
 	advice: PerfAdvice;
 	siteId: string;
 }) {
-	const { data: session } = authClient.useSession();
-	const isAdmin = session?.user.role === "admin";
-
 	return (
 		<Card>
-			<CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-				<CardTitle className="flex items-center gap-2 text-sm">
-					<Gauge className="size-4" />
-					Performance advisor
-					<Badge className="bg-warning text-warning-foreground">
-						Experimental
-					</Badge>
-				</CardTitle>
-				{isAdmin && advice.recommendations.length > 0 ? (
-					<ApplyButton disabled={false} siteId={siteId} />
-				) : null}
-			</CardHeader>
-			<CardContent className="grid gap-4">
-				<MeasurementsGrid m={advice.measurements} />
+			<AdvisorHeader />
+			<CardContent className="grid gap-5">
+				<div className="grid gap-2">
+					<span className="font-medium text-sm">What we measured</span>
+					<MeasurementsGrid m={advice.measurements} />
+				</div>
 				<CapMeter advice={advice} />
 				<div className="grid gap-2">
 					<span className="font-medium text-sm">Recommendations</span>
-					<RecommendationsTable recs={advice.recommendations} />
+					<RecommendationsList recs={advice.recommendations} />
 				</div>
-				{advice.recommendations.length > 0 ? (
-					<div className="grid gap-2">
-						<span className="font-medium text-sm">Preview diff</span>
-						<PreviewDiff text={advice.previewText} />
-						<p className="text-muted-foreground text-xs">
-							Applying is advisory and experimental. The advisor never proposes
-							a set whose total reserved memory exceeds 85% of host RAM.
-						</p>
-					</div>
-				) : null}
+				<ApplyArea advice={advice} siteId={siteId} />
 			</CardContent>
 		</Card>
 	);
@@ -289,22 +307,21 @@ export function PerformanceAdvisorCard({ siteId }: { siteId: string }) {
 	if (!enabled) {
 		return (
 			<Card>
-				<CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-					<CardTitle className="flex items-center gap-2 text-sm">
-						<Gauge className="size-4" />
-						Performance advisor
-						<Badge className="bg-warning text-warning-foreground">
-							Experimental
-						</Badge>
-					</CardTitle>
-					<Button onClick={() => setEnabled(true)} size="sm" variant="outline">
-						Analyze performance
-					</Button>
-				</CardHeader>
+				<AdvisorHeader
+					action={
+						<Button
+							onClick={() => setEnabled(true)}
+							size="sm"
+							variant="outline"
+						>
+							Analyze performance
+						</Button>
+					}
+				/>
 				<CardContent className="text-muted-foreground text-sm">
-					Samples FPM, OPcache, Redis, InnoDB and host RAM over a short window,
-					then suggests explainable, RAM-budgeted tuning. Read-only — applying
-					is admin-only and experimental.
+					Checks how this site is using its workers, caches, database and memory
+					over a short window, then suggests safe, plain-language tuning. It
+					only reads — nothing changes until an administrator chooses to apply.
 				</CardContent>
 			</Card>
 		);
@@ -313,8 +330,9 @@ export function PerformanceAdvisorCard({ siteId }: { siteId: string }) {
 	if (query.isLoading) {
 		return (
 			<Card>
+				<AdvisorHeader />
 				<CardContent className="py-8 text-center text-muted-foreground text-sm">
-					Measuring performance over a short window…
+					Measuring this site over a few seconds…
 				</CardContent>
 			</Card>
 		);
@@ -322,12 +340,14 @@ export function PerformanceAdvisorCard({ siteId }: { siteId: string }) {
 	if (query.isError || !query.data) {
 		return (
 			<Card>
+				<AdvisorHeader />
 				<CardContent className="flex flex-col items-center gap-3 py-8 text-center">
 					<p className="text-muted-foreground text-sm">
-						Couldn't measure this site's performance.
+						Couldn't measure this site's performance just now. The site itself
+						is unaffected — this only reads metrics.
 					</p>
 					<Button onClick={() => query.refetch()} size="sm" variant="outline">
-						Retry
+						Try again
 					</Button>
 				</CardContent>
 			</Card>

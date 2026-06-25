@@ -145,6 +145,12 @@ export interface PerfRecommendation {
 	current: string;
 	key: string;
 	label: string;
+	/**
+	 * One-sentence, non-technical explanation of what this setting controls — so a
+	 * non-engineer reading the card understands the change without docs. Distinct
+	 * from `reason`, which states the measured evidence that triggered the rec.
+	 */
+	plain: string;
 	reason: string;
 	risk: PerfRisk;
 	suggested: string;

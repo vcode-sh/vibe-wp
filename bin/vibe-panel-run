@@ -470,7 +470,7 @@ case "$sub" in
         [ "$#" -eq 1 ] || die "auto-update-schedule-apply takes one keyword"
         case "$1" in off|weekly|daily) : ;; *) die "schedule must be off|weekly|daily" ;; esac
         ;;
-      perf-apply)                          # EXPERIMENTAL mutating op (feature #5)
+      perf-apply)                          # mutating perf-tuning writer (feature #5)
         # Only `--rollback` or NO args may reach the writer on argv. The tunable
         # VALUES never travel on argv: they arrive as VIBE_PERF_* env vars (kept
         # in panel_env_keep) and the writer re-asserts the FIXED PERF allowlist +

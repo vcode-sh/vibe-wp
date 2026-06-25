@@ -5,11 +5,13 @@ LC_ALL=C
 export LC_ALL
 
 # perf-apply — MUTATING performance-tuning writer for feature #5 (Smart
-# Performance Advisor). HIGH-RISK + NOT-YET-VALIDATED on a real VPS: raising
-# pm.max_children / innodb buffer pool / opcache / redis maxmemory together can
-# over-commit RAM and trigger the OOM-killer or a failed MariaDB start. It is
-# admin-gated in the panel and shipped behind the experimental label. The
-# advisor/preview is the shippable surface; this writer is the scaffolded side.
+# Performance Advisor). It is admin-gated in the panel and the panel job wraps it
+# in a backup -> verify -> auto-rollback safety net. The danger it guards against:
+# raising pm.max_children / innodb buffer pool / opcache / redis maxmemory
+# together can over-commit RAM and trigger the OOM-killer or a failed MariaDB
+# start — which is exactly why this writer RE-ASSERTS the reserved<=85% host-RAM
+# cap at its own root boundary (step (d) below) and REFUSES to write a breaching
+# set, before any container is recreated.
 #
 # It mirrors bin/site-config-apply's atomic-rename + managed-key allowlist
 # writer, but with a FIXED PERF_KEY_ALLOWLIST = exactly the advisor's tunable

@@ -196,10 +196,10 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 	// explicitly here to ensure it is always covered by the drift guard.
 	keys.add("SMTP_TEST_TO");
 
-	// perfApply (feature #5, EXPERIMENTAL): perfRecsToEnv emits VIBE_PERF_<KEY>
-	// for every recommendation plus the VIBE_PERF_KEYS declaration. Drive it with
-	// one recommendation per FIXED tunable key so every VIBE_PERF_* var the panel
-	// can inject is covered by the drift guard.
+	// perfApply (feature #5): perfRecsToEnv emits VIBE_PERF_<KEY> for every
+	// recommendation plus the VIBE_PERF_KEYS declaration. Drive it with one
+	// recommendation per FIXED tunable key so every VIBE_PERF_* var the panel can
+	// inject is covered by the drift guard.
 	for (const k of Object.keys(
 		perfRecsToEnv(
 			PERF_TUNABLE_KEYS.map((key) => ({
@@ -208,6 +208,7 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 				current: "1",
 				suggested: "2",
 				unit: "",
+				plain: "",
 				reason: "",
 				risk: "low" as const,
 				category: "fpm" as const,

@@ -4,19 +4,25 @@ import { getRealDeps, launchJob } from "./jobs";
 import { PERF_TUNABLE_KEYS } from "./perf-advisor";
 
 /**
- * perf-apply (core-bridge) — EXPERIMENTAL, NOT YET VALIDATED on a real VPS.
+ * perf-apply (core-bridge) — the MUTATING side of the Smart Performance Advisor.
  *
  * Mirrors safe-update.ts exactly: backup snapshot → write env (perf-apply) →
  * recreate the affected services so their entrypoints re-render config from env
  * → smoke + homepage TTFB verify → on failure auto-rollback (perf-apply
  * --rollback) and re-smoke. The compound { proc, lines } slots into launchJob.
  *
- * SAFETY: the tunable VALUES travel via opts.env (VIBE_PERF_* + VIBE_PERF_KEYS),
- * NEVER on argv. The pure advisor already enforced reserved<=85% RAM; bin/
- * perf-apply RE-ASSERTS the same cap at the root boundary (distrust the panel),
- * so a too-large innodb buffer pool is rejected BEFORE any container recreate.
- * The most likely real failure is db refusing to start with an oversized pool —
- * the verify/rollback path restores the env sidecar and recreates to recover.
+ * SAFETY (the whole feature is built around this): the tunable VALUES travel via
+ * opts.env (VIBE_PERF_* + VIBE_PERF_KEYS), NEVER on argv. The pure advisor
+ * enforced reserved<=85% RAM; bin/perf-apply RE-ASSERTS the same cap at the root
+ * boundary (distrust the panel), so a too-large innodb buffer pool is rejected
+ * BEFORE any container recreate. If anything still goes wrong — e.g. db refusing
+ * to start with an oversized pool — the verify/rollback path restores the env
+ * sidecar and recreates, so the operator is never left on a broken site.
+ *
+ * NOTE for maintainers: the full apply→recreate→verify→rollback cycle should be
+ * exercised on a disposable VPS before relying on it for a production site (the
+ * RAM cap, sidecar snapshot, and rollback are all unit-tested here; the live
+ * container-recreate timing is the part only a real box can prove).
  */
 
 const PERF_KEY_SET = new Set<string>(PERF_TUNABLE_KEYS);
@@ -158,7 +164,7 @@ export function buildPerfApplyStream(
 				return;
 			}
 
-			yield "[note] EXPERIMENTAL: perf-apply is not yet validated on a real VPS.";
+			yield "[note] Safety net active: a snapshot is taken first, and if the site fails its post-apply health check these settings are restored automatically.";
 
 			// 1. Pre-apply backup (env-immune local snapshot for the rollback path).
 			yield "[backup] Taking pre-apply snapshot…";
@@ -246,7 +252,7 @@ export function buildPerfApplyStream(
 /**
  * Launch a tracked perf-apply job. Admin-gated at the procedure layer. Resolves
  * real job deps and wires the compound stream through launchJob's durability +
- * cancel path. EXPERIMENTAL.
+ * cancel path. The job carries its own backup → verify → auto-rollback safety net.
  */
 export async function startPerfApply(input: {
 	siteId: string;

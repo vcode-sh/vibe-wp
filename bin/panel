@@ -185,8 +185,8 @@ install_runner_and_sudoers() {
   #     VIBE_MONITOR_WEBHOOK_URL VIBE_MONITOR_EMAIL_TO VIBE_MONITOR_ALERT_ON_WARN
   #   smtp-config.ts (smtpConfigApply) + smtp-test (smtpTest) → smtp toEnv + SMTP_TEST_TO:
   #     SMTP_MODE SMTP_HOST SMTP_PORT SMTP_SECURE SMTP_AUTH SMTP_USER SMTP_PASSWORD SMTP_FROM SMTP_FROM_NAME SMTP_TEST_TO
-  #   perf-apply.ts (perfApply, via the advisor's tunable env map — feature #5,
-  #     EXPERIMENTAL): the per-key VIBE_PERF_* size/count values + VIBE_PERF_KEYS.
+  #   perf-apply.ts (perfApply, via the advisor's tunable env map — feature #5):
+  #     the per-key VIBE_PERF_* size/count values + VIBE_PERF_KEYS.
   #     None are secrets; env-transport (not argv) keeps the writer contract
   #     identical to site-config-apply and metachar-free.
   #     VIBE_PERF_KEYS VIBE_PERF_PHP_FPM_PM_MAX_CHILDREN

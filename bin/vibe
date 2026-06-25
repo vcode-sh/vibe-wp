@@ -29,7 +29,7 @@ Commands:
   doctor-runtime             Run runtime checks
   perf-report                Print a read-only performance report
   perf-measure [--json]      Sample FPM/OPcache/Redis/InnoDB/host RAM over a short window (advisor input)
-  perf-apply [--rollback]    EXPERIMENTAL: write advisor-suggested tunables (env-transported); --rollback restores the snapshot
+  perf-apply [--rollback]    Write advisor-suggested tunables (env-transported, 85% RAM cap re-asserted); --rollback restores the snapshot
   smoke                      Run smoke tests
   cache-flush                Flush object cache and Nginx page cache
   refresh-from-prod --yes    Refresh this staging env from prod

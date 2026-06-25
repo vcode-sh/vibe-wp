@@ -39,6 +39,36 @@ export const DEFAULT_OS_RESERVE_MIB = 512;
 /** Per-FPM-child memory budget when measured avg RSS is unavailable. */
 export const DEFAULT_PER_CHILD_MIB = 64;
 
+/**
+ * Plain-language, non-technical one-liners explaining what each tunable does, so
+ * a non-engineer reading the advisor card understands the change without docs.
+ * Keyed by the env key. Kept here (next to the rules) so the advisor stays the
+ * single source of truth for both the technical `reason` and the human `plain`.
+ */
+const PLAIN_BY_KEY: Record<string, string> = {
+	PHP_FPM_PM_MAX_CHILDREN:
+		"How many visitors the site can serve at the same time. Raising it lets more people load pages at once without waiting in line.",
+	PHP_FPM_PM_START_SERVERS:
+		"How many page workers stay warm and ready when the site is idle, so the first visitors after a quiet spell load instantly.",
+	PHP_FPM_PM_MIN_SPARE_SERVERS:
+		"The smallest pool of spare workers kept on standby for sudden traffic, so a quick rush doesn't have to start workers from cold.",
+	PHP_FPM_PM_MAX_SPARE_SERVERS:
+		"The largest pool of spare workers kept on standby — capping it keeps idle memory use sensible.",
+	MARIADB_INNODB_BUFFER_POOL_SIZE:
+		"How much of your data the database keeps in fast memory. A bigger pool means fewer slow trips to disk, so pages build faster.",
+	PHP_OPCACHE_MEMORY_CONSUMPTION:
+		"How much compiled-PHP is cached in memory. More room here means the site skips re-compiling code on every request.",
+	REDIS_MAXMEMORY:
+		"How much memory the object cache may use. More room means it stops throwing away cached data, so repeat page loads stay fast.",
+	WP_MEMORY_LIMIT:
+		"The memory ceiling a single WordPress request may use before it is cut off.",
+};
+
+/** Look up the plain-language line for a key (empty string if none — never throws). */
+function plainFor(key: string): string {
+	return PLAIN_BY_KEY[key] ?? "";
+}
+
 export interface AdviseResult {
 	capMiB: number;
 	headroomMiB: number;
@@ -155,6 +185,7 @@ function adviseFpm(
 		unit: "workers",
 		category: "fpm",
 		risk: "medium",
+		plain: plainFor("PHP_FPM_PM_MAX_CHILDREN"),
 		reason: `FPM is saturated: ${m.fpm.active}/${current} workers active with listenQueue=${m.fpm.listenQueue} (max-children reached ${m.fpm.maxActiveReached}×). Each worker is budgeted at ${pcMiB} MiB.`,
 	});
 	const proposal: Proposal = {
@@ -197,6 +228,7 @@ function adviseInnodb(
 		unit: "MiB",
 		category: "innodb",
 		risk: "high",
+		plain: plainFor("MARIADB_INNODB_BUFFER_POOL_SIZE"),
 		reason: `InnoDB buffer pool read ratio is ${m.innodb.bufferPoolReadRatioPercent}% (target ≥99%) with ${m.innodb.bufferPoolFreePct}% free pages — too small for the working set.`,
 	});
 	const proposal: Proposal = {
@@ -234,6 +266,7 @@ function adviseOpcache(
 		unit: "MiB",
 		category: "opcache",
 		risk: "low",
+		plain: plainFor("PHP_OPCACHE_MEMORY_CONSUMPTION"),
 		reason: oom
 			? `OPcache has restarted ${m.opcache.oomRestarts}× out of memory — it is undersized.`
 			: `OPcache has only ${m.opcache.freeMiB} MiB free — near exhaustion.`,
@@ -267,6 +300,7 @@ function adviseRedis(
 		unit: "MiB",
 		category: "redis",
 		risk: "medium",
+		plain: plainFor("REDIS_MAXMEMORY"),
 		reason: `Redis evicted ${m.redis.evictedKeysDelta} keys in the sample window — the object cache is too small and is dropping live data.`,
 	});
 	const proposal: Proposal = {
@@ -426,6 +460,7 @@ function deriveFpmSpares(parent: PerfRecommendation): PerfRecommendation[] {
 		unit: "workers",
 		category: "fpm",
 		risk: "low",
+		plain: plainFor(key),
 		reason: `Derived from max_children=${max} to keep the pool internally consistent.`,
 	});
 	return [
@@ -489,6 +524,7 @@ function downRec(
 		unit: "MiB",
 		category,
 		risk: "high",
+		plain: `${plainFor(key)} This is a SAFETY reduction: the server has promised more memory than it has, so lowering this protects the site from being killed when it runs out.`,
 		reason: `Reserved memory already exceeds the 85% RAM budget by ${Math.round(overByMiB)} MiB — reduce ${label.toLowerCase()} to free headroom and avoid the OOM-killer.`,
 	};
 }

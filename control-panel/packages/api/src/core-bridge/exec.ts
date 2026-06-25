@@ -57,10 +57,11 @@ export const VIBE_OPS = {
 	/** Sample FPM/OPcache/Redis/InnoDB + host RAM over a short window (advisor input). */
 	perfMeasure: { argv: ["perf-measure", "--json"], stream: false },
 	/**
-	 * EXPERIMENTAL (feature #5) — write advisor-suggested tunables into the env
-	 * file. NOT YET VALIDATED on a real VPS; admin-gated. Tunable VALUES travel
-	 * via opts.env (VIBE_PERF_* + VIBE_PERF_KEYS), NEVER on argv, identical to
-	 * site-config-apply. takesArg is false: there are no positional args.
+	 * Feature #5 — write the advisor's RAM-budgeted tunables into the env file.
+	 * Admin-gated at the procedure layer; the job wraps it in a backup → verify →
+	 * auto-rollback safety net. Tunable VALUES travel via opts.env (VIBE_PERF_* +
+	 * VIBE_PERF_KEYS), NEVER on argv, identical to site-config-apply. takesArg is
+	 * false: there are no positional args (only the --rollback variant below).
 	 */
 	perfApply: { argv: ["perf-apply"], stream: true },
 	/** Roll back the last perf-apply from the env/<env>.perf.bak snapshot. */

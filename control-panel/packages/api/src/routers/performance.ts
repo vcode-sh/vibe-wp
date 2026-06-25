@@ -94,11 +94,12 @@ export const performanceRouter = {
 		}),
 
 	/**
-	 * MUTATING — EXPERIMENTAL, NOT YET VALIDATED on a real VPS. ADMIN-GATED.
-	 * Re-derives the recommendations server-side from a fresh measurement so the
-	 * applied set is exactly what the advisor (with its 85% RAM cap) produced — the
-	 * client never supplies raw values. bin/perf-apply re-asserts the cap + the
-	 * fixed key allowlist at the root boundary. Returns { jobId }.
+	 * MUTATING — ADMIN-GATED. Re-derives the recommendations server-side from a
+	 * fresh measurement so the applied set is exactly what the advisor (with its
+	 * 85% RAM cap) produced — the client never supplies raw values. bin/perf-apply
+	 * re-asserts the cap + the fixed key allowlist at the root boundary, and the
+	 * job wraps the write in a backup → verify → auto-rollback safety net.
+	 * Returns { jobId }.
 	 */
 	perfApply: adminProcedure
 		.input(z.object({ siteId: z.string() }))

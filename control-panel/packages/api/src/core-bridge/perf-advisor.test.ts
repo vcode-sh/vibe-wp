@@ -10,6 +10,10 @@ import {
 } from "./perf-advisor";
 import { emptyMeasurements } from "./perf-measure";
 
+/** Raw env-key / metric jargon that plain-language copy must never expose. */
+const JARGON_RE = /[A-Z_]{4,}=|MiB|listenQueue|InnoDB/;
+const SAFETY_RE = /safety/i;
+
 function measurements(over: Partial<PerfMeasurements> = {}): PerfMeasurements {
 	const base = emptyMeasurements();
 	return { ...base, ...over } as PerfMeasurements;
@@ -92,6 +96,42 @@ describe("advisePerf", () => {
 		expect(redis).toBeDefined();
 		expect(sizeToMiB(redis?.suggested)).toBeGreaterThan(512);
 		expect(redis?.reason).toMatch(/evicted/i);
+	});
+
+	it("every recommendation carries a non-empty, non-technical plain-language line", () => {
+		// Drive several pressure signals at once so FPM (incl. derived spares),
+		// InnoDB, OPcache and Redis all produce recommendations.
+		const m = healthy();
+		m.fpm.active = 24;
+		m.fpm.maxChildren = 24;
+		m.fpm.listenQueue = 5;
+		m.innodb.bufferPoolReadRatioPercent = 90;
+		m.opcache.oomRestarts = 2;
+		m.redis.evictedKeysDelta = 100;
+		const r = advisePerf(m, 16_384, {});
+		expect(r.recommendations.length).toBeGreaterThan(0);
+		for (const rec of r.recommendations) {
+			// Present, real prose, and a different message than the technical reason.
+			expect(rec.plain.length).toBeGreaterThan(10);
+			expect(rec.plain).not.toBe(rec.reason);
+			// Plain copy must not leak raw env-key/metric jargon at users.
+			expect(rec.plain).not.toMatch(JARGON_RE);
+		}
+		// Even the safety-reduction (over-budget) path explains itself plainly.
+		const over = advisePerf(
+			measurements({
+				host: { ramTotalMiB: 1024, ramFreeMiB: 64, ramAvailableMiB: 64 },
+				innodb: {
+					bufferPoolReadRatioPercent: 100,
+					bufferPoolSizeMiB: 4096,
+					bufferPoolFreePct: 1,
+				},
+			}),
+			1024,
+			{}
+		);
+		expect(over.recommendations.length).toBeGreaterThan(0);
+		expect(over.recommendations[0]?.plain).toMatch(SAFETY_RE);
 	});
 
 	it("low InnoDB read ratio → bumps the buffer pool", () => {
