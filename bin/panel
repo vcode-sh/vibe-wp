@@ -498,6 +498,30 @@ secure_site_env_files() {
   done
 }
 
+# Propagate platform scripts (bin/) from the repo to every managed site. A site's
+# bin/ is a COPY taken at provision time and otherwise goes stale, so bin/ fixes
+# (env-resolution, new wp-cli ops, hardening) never reach EXISTING sites without
+# this. Overlay-only (no --delete): we refresh our scripts, never remove a site's
+# files. Skips the repo checkout and the panel dir themselves.
+sync_site_bins() {
+  src_bin="$REPO_DIR/bin"
+  $SUDO test -d "$src_bin" || return 0
+  for root in /opt /srv; do
+    $SUDO test -d "$root" || continue
+    $SUDO find "$root" -maxdepth 4 -type f -path '*/bin/vibe' 2>/dev/null | while IFS= read -r vibebin; do
+      site_dir="${vibebin%/bin/vibe}"
+      case "$site_dir" in
+        "$REPO_DIR"|"$PANEL_DIR") continue ;;
+      esac
+      if command -v rsync >/dev/null 2>&1; then
+        $SUDO rsync -a "$src_bin/" "$site_dir/bin/" 2>/dev/null || true
+      else
+        $SUDO cp -a "$src_bin/." "$site_dir/bin/" 2>/dev/null || true
+      fi
+    done
+  done
+}
+
 update_panel() {
   env_file="$PANEL_DIR/app/server/.env"
   if ! $SUDO test -f "$env_file"; then
@@ -533,6 +557,8 @@ update_panel() {
   deploy_panel
   # Re-lock any per-site env files an older build left world-readable.
   secure_site_env_files
+  # Propagate bin/ fixes (env-resolution, wp-cli ops) to existing managed sites.
+  sync_site_bins
   echo "panel: update complete"
 }
 

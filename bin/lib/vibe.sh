@@ -44,6 +44,24 @@ vibe_default_compose_args() {
   esac
 }
 
+# Topology auto-resolution. A shared-database or external-services site has NO
+# env/prod.env — its production config lives in env/shared-db.env or
+# env/external.env, each with its own compose file. The control panel (and `make`)
+# ask for a site's "prod" env generically, so when prod is requested but its env
+# file is absent, switch VIBE_ENV to whichever topology the site actually has.
+# This re-points BOTH the env file and the compose args (both read VIBE_ENV), so a
+# single "prod" request manages any topology. Only triggers when env/prod.env is
+# missing (a real prod site is unaffected); never overrides an explicit
+# VIBE_ENV_FILE. Paths are relative to the site dir (the entrypoint's CWD).
+if { [ "${VIBE_ENV}" = "prod" ] || [ "${VIBE_ENV}" = "production" ]; } \
+  && [ -z "${VIBE_ENV_FILE:-}" ] && [ ! -f "env/prod.env" ]; then
+  if [ -f "env/shared-db.env" ]; then
+    VIBE_ENV="shared-db"
+  elif [ -f "env/external.env" ]; then
+    VIBE_ENV="external"
+  fi
+fi
+
 VIBE_ENV_FILE="${VIBE_ENV_FILE:-$(vibe_default_env_file)}"
 VIBE_COMPOSE_ARGS="${VIBE_COMPOSE_ARGS:-$(vibe_default_compose_args)}"
 
