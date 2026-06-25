@@ -161,8 +161,8 @@ assert_safe_entrypoint() {
 #   backup-schedule-apply auto-update-schedule-apply monitor-schedule-apply schedule-status site-config-apply
 #   caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test
 #   logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod
-#   promote-files-to-prod harden wp insights
-OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-schedule-apply auto-update-schedule-apply monitor-schedule-apply schedule-status site-config-apply caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod promote-files-to-prod harden wp insights"
+#   promote-files-to-prod harden wp insights vuln-feed-fetch
+OP_ALLOWLIST="smoke doctor-runtime monitor perf-report security-status compose env backups backup backup-config-apply backup-test backup-verify backup-schedule-apply auto-update-schedule-apply monitor-schedule-apply schedule-status site-config-apply caddy-www-apply notify-config-apply notify-test smtp-config-apply smtp-test logs-recent logs up down restart nginx-recreate cache-flush restore refresh-from-prod promote-files-to-prod harden wp insights vuln-feed-fetch"
 
 # Free-form (caller-supplied) args reach only a few ops: restore/backup-verify
 # take a backup path; the schedule/notify/site/backup-config-apply ops and
@@ -469,6 +469,9 @@ case "$sub" in
       auto-update-schedule-apply)          # exactly one cadence keyword
         [ "$#" -eq 1 ] || die "auto-update-schedule-apply takes one keyword"
         case "$1" in off|weekly|daily) : ;; *) die "schedule must be off|weekly|daily" ;; esac
+        ;;
+      vuln-feed-fetch)                     # ZERO argv args — slugs arrive on STDIN
+        [ "$#" -eq 0 ] || die "vuln-feed-fetch takes no arguments (slugs are stdin-only)"
         ;;
       *)
         for a in "$@"; do

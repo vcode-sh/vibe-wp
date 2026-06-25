@@ -71,4 +71,7 @@ export const inventoryQuery = (siteId: string) =>
 export const securityScoreQuery = (siteId: string) =>
 	orpc.siteSecurityScore.queryOptions({ input: { siteId } });
 
+export const securityRadarQuery = (siteId: string) =>
+	orpc.securityRadar.queryOptions({ input: { siteId } });
+
 export const sharedDbStatusQuery = () => orpc.sharedDbStatus.queryOptions();

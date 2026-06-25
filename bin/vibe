@@ -25,6 +25,7 @@ Commands:
   backups-remote             List off-server (R2) backups as restorable paths
   monitor [--quiet] [--json] [--no-notify]  Run health checks (uptime, disk, TLS, backups, containers); alert unless --no-notify
   security-status            Print host security posture as JSON (firewall, fail2ban, auto-updates)
+  vuln-feed-fetch            Fetch CVE rows for plugin slugs (stdin) from the optional, default-OFF feed
   harden [--dry-run] [--ssh-key-only]  Apply host hardening (firewall, fail2ban, auto-updates)
   doctor-runtime             Run runtime checks
   perf-report                Print a read-only performance report
@@ -252,6 +253,12 @@ case "${command}" in
     ;;
   security-status)
     "${VIBE_BIN_DIR}/security-status" "$@"
+    ;;
+  vuln-feed-fetch)
+    # Optional CVE feed (default OFF). Slugs arrive on stdin (forwarded), not
+    # argv; the script reads PANEL_VULN_FEED_URL/KEY from env and prints a JSON
+    # map (or `{}` when OFF). Takes no positional args.
+    "${VIBE_BIN_DIR}/vuln-feed-fetch" "$@"
     ;;
   harden)
     "${VIBE_BIN_DIR}/harden" "$@"

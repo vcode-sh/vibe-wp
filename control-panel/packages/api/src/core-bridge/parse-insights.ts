@@ -15,6 +15,12 @@ const UpdateableItem = {
 const PluginRecord = z.object({
 	...UpdateableItem,
 	status: z.enum(["active", "inactive", "must-use", "dropin"]),
+	// wp.org metadata for the abandoned-plugin radar. ADDITIVE + OPTIONAL +
+	// NULLABLE so an OLD drop-file (written before the collector emitted these)
+	// still parses — never make these required or old payloads 500 the panel.
+	last_updated: z.string().max(40).nullable().optional(),
+	active_installs: z.number().int().nonnegative().nullable().optional(),
+	tested: z.string().max(20).nullable().optional(),
 });
 
 const ThemeRecord = z.object({

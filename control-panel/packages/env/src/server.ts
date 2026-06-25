@@ -21,6 +21,13 @@ export const env = createEnv({
 		// unprivileged panel reaches the host only via `sudo -n <runner> …`.
 		// Optional: unset in dev/local, where the panel spawns directly.
 		PANEL_PRIVILEGED_RUNNER: z.string().optional(),
+		// Feature E: OPTIONAL CVE feed for the Security Radar. BOTH default to
+		// undefined = feed OFF (the vuln-feed-fetch op is a `{}` no-op). When an
+		// operator licenses a source (WPScan/Patchstack/curated JSON — an OPEN
+		// product decision), they point PANEL_VULN_FEED_URL at it; PANEL_VULN_FEED_KEY
+		// is the optional API key. These are env-file-only secrets (never argv/logs).
+		PANEL_VULN_FEED_URL: z.string().optional(),
+		PANEL_VULN_FEED_KEY: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
