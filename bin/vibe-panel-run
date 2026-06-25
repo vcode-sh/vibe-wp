@@ -24,6 +24,17 @@
 #     subcommands (no eval/eval-file/db/etc). Flags + path-like args are bounded.
 #   - `siteinfo` prints ONLY non-secret fields. It NEVER prints DB/Redis
 #     passwords, WP salts, R2/monitor secrets, or any other env value.
+#   - `support-bundle` (zero args) execs the root-owned bin/support-bundle
+#     collector after assert_root_owned. That script emits a REDACTED gzip tar to
+#     stdout (every text member is redacted BEFORE tar; only non-secret env keys
+#     are read, never a `cat` of an env file). It is its OWN subcommand — NOT in
+#     OP_ALLOWLIST (that is the per-site `vibe` surface).
+#   - `panel-update` (zero args) runs `bin/panel update` DETACHED via systemd-run
+#     so the panel's own self-restart at the end of the update cannot kill the
+#     updater mid-flight. It is strictly allowlisted to EXACTLY `panel update`:
+#     no other bin/panel subcommand (install/uninstall/reset-password) is
+#     reachable. assert_root_owned guards a planted bin/panel. Its OWN subcommand
+#     — NOT in OP_ALLOWLIST.
 set -eu
 # Force the C locale so every `case` charset guard (e.g. the slug regex
 # *[!a-z0-9-]*) is strictly ASCII. In a UTF-8 locale a range like [a-z] can span
@@ -579,6 +590,58 @@ case "$sub" in
   siteinfo)
     [ $# -eq 0 ] || die "siteinfo takes no arguments"
     siteinfo
+    ;;
+  support-bundle)
+    # support-bundle  (zero args) — emit a REDACTED gzip tar to stdout.
+    # The collector lives in the deployed source repo (fixed at this boundary).
+    # We assert it (and the bin dir) is a root-owned, non-writable, executable
+    # regular file before exec'ing it as root: a panel that could write into the
+    # repo could otherwise plant a malicious collector and get root. The script
+    # itself only reads NON-SECRET data and redacts every member before tar, but
+    # the exec-target hygiene is the load-bearing root-boundary guard here.
+    [ $# -eq 0 ] || die "support-bundle takes no arguments"
+    sb_bin="$PANEL_HOST_DIR/bin"
+    assert_root_owned "$sb_bin" "support-bundle bin dir"
+    sb_script="$sb_bin/support-bundle"
+    [ -f "$sb_script" ] || die "support-bundle script missing: $sb_script"
+    assert_root_owned "$sb_script" "support-bundle script"
+    [ -x "$sb_script" ] || die "support-bundle script not executable: $sb_script"
+    # Pass the trusted roots/host-dir through so the collector discovers sites and
+    # resolves git/doctor from the same fixed locations this boundary uses. exec
+    # so the collector's stdout (the archive) flows straight to the caller.
+    PANEL_SITES_ROOTS="$PANEL_SITES_ROOTS" \
+    PANEL_HOST_DIR="$PANEL_HOST_DIR" \
+      exec "$sb_script"
+    ;;
+  panel-update)
+    # panel-update  (zero args) — update the panel + stack from the GUI.
+    # STRICTLY allowlisted to EXACTLY `bin/panel update`: no other bin/panel
+    # subcommand (install/uninstall/reset-password) is reachable from here.
+    [ $# -eq 0 ] || die "panel-update takes no arguments"
+    pu_panel="$PANEL_HOST_DIR/bin/panel"
+    assert_root_owned "$PANEL_HOST_DIR/bin" "panel bin dir"
+    [ -f "$pu_panel" ] || die "bin/panel missing: $pu_panel"
+    assert_root_owned "$pu_panel" "bin/panel"
+    [ -x "$pu_panel" ] || die "bin/panel is not executable: $pu_panel"
+    # CRITICAL: `bin/panel update` ends in `systemctl restart vibe-wp-panel`,
+    # which SIGTERMs the panel server (our parent). If we ran the updater in the
+    # panel's process tree the restart would kill it mid-flight and leave a
+    # half-updated checkout. Run it in a TRANSIENT systemd scope/unit so it is
+    # reparented to systemd and survives the panel restart; its output goes to
+    # the journal, which the panel tails back via `journalctl -u <unit> -f`.
+    pu_unit="vibe-wp-panel-update"
+    if command -v systemd-run >/dev/null 2>&1; then
+      # --collect drops the transient unit once it exits so a later run can reuse
+      # the name. A fresh run first resets any lingering failed unit of that name.
+      systemctl reset-failed "$pu_unit" >/dev/null 2>&1 || true
+      exec systemd-run --collect --unit="$pu_unit" \
+        --property=Description="Vibe WP panel + stack update" \
+        --setenv=PANEL_HOST_DIR="$PANEL_HOST_DIR" \
+        "$pu_panel" update
+    fi
+    # Fallback (no systemd-run): detach via setsid + nohup so the SIGTERM the
+    # panel restart sends to its own process group does not reach the updater.
+    exec setsid sh -c 'exec nohup "$0" update >/dev/null 2>&1' "$pu_panel"
     ;;
   shared-db)
     # shared-db <op> [slug]  — host-level ops for the ONE shared MariaDB project.

@@ -1,0 +1,211 @@
+#!/bin/sh
+# bin/support-bundle — collect a REDACTED, shareable diagnostics bundle.
+#
+# WHAT THIS IS
+# ------------
+# A zero-argument host script the control panel runs (via the root-owned
+# bin/vibe-panel-run `support-bundle` subcommand) to produce a single gzipped
+# tar archive of NON-SECRET diagnostics:
+#   - versions.txt          docker / compose / bun / kernel / panel git rev
+#   - doctor.txt            bin/doctor host-prereq output
+#   - security-status.txt   bin/security-status (firewall/fail2ban/auto-updates)
+#   - panel-logs.txt        recent vibe-wp-panel.service journal lines
+#   - sites.txt             discovered sites (install dir, slug, domain, ports)
+#   - env.nonsecret.txt     ONLY a fixed non-secret env-key allowlist
+#   - site-<slug>-logs.txt  recent compose logs per site (prod)
+#   - site-<slug>-doctor.txt  bin/vibe prod doctor-runtime per site
+#
+# OUTPUT CONTRACT
+# ---------------
+# The gzipped tar is written to STDOUT (fd 1) as raw binary. EVERY human/status
+# line goes to STDERR (fd 2) so stdout stays a clean archive the caller can pipe
+# straight to a file. The caller MUST NOT redact stdout (gzip bytes would be
+# corrupted) — redaction happens per text member BEFORE tar, below.
+#
+# SECRETS
+# -------
+# This bundle must NEVER contain DB/Redis/SMTP/R2/AI/admin credentials, WP salts,
+# API tokens, or session secrets. Two defenses:
+#   1. SOURCE SELECTION — we only ever collect non-secret-by-construction data
+#      (doctor/security/version/log output) and read env files ONLY through the
+#      non-sourcing env_value() helper restricted to a fixed non-secret key
+#      allowlist (never `cat` an env file, which would dump every secret).
+#   2. MEMBER REDACTION — every text member is piped through redact_stream()
+#      before being written into the staging dir, masking any KEY=secret /
+#      Bearer / AUTH PLAIN|LOGIN / AWS-R2 key-id that slipped through. This
+#      mirrors control-panel redact.ts and installer redaction.ts.
+set -eu
+# Force the C locale so the redaction character classes are strictly ASCII and
+# behave identically everywhere (mirrors the bin/vibe-panel-run hardening).
+export LC_ALL=C
+
+# Roots under which a site install dir lives — same default the panel passes.
+PANEL_SITES_ROOTS="${PANEL_SITES_ROOTS:-/opt:/srv}"
+# Deployed source repo (where bin/doctor, bin/security-status, .git live).
+PANEL_HOST_DIR="${PANEL_HOST_DIR:-/opt/vibe-wp-src}"
+
+# Status lines go to stderr so stdout stays a clean archive.
+say() { echo "support-bundle: $1" >&2; }
+
+# --- Non-sourcing single-key env reader (mirrors bin/vibe-panel-run env_value).
+# Reads a single KEY's value from an env file WITHOUT sourcing it, so no env-file
+# content can execute and only the requested key is ever surfaced. Empty if
+# absent. Used ONLY against the fixed non-secret allowlist below.
+env_value() {
+  file="$1"
+  key="$2"
+  [ -f "$file" ] || { echo ""; return 0; }
+  line="$(grep -m1 "^${key}=" "$file" 2>/dev/null || true)"
+  val="${line#*=}"
+  case "$val" in
+    \"*\") val="${val#\"}"; val="${val%\"}" ;;
+    \'*\') val="${val#\'}"; val="${val%\'}" ;;
+  esac
+  echo "$val"
+}
+
+# --- Redaction stream (mirrors control-panel/.../redact.ts). Reads stdin, masks
+# secrets, writes stdout. Double-defense: members are non-secret by construction,
+# this catches anything that slips through. ERE via sed -E, ASCII-only.
+#   1. Bearer <token>                        -> Bearer ***
+#   2. AUTH PLAIN|LOGIN|CRAM-MD5|SCRAM <b64> -> AUTH PLAIN ***
+#   3. --*key|secret|token|password|auth <v> / =<v> -> ... ***   (flag secrets)
+#   4. KEY=val / KEY: val where KEY matches PASSWORD|SECRET|TOKEN|SALT|KEY|PASS|
+#      PWD|AUTH                              -> KEY=***
+#   5. access-key-id / key-id: <ID>          -> ... ***   (AWS/R2 key ids)
+redact_stream() {
+  sed -E \
+    -e 's/(Bearer[[:space:]]+)[A-Za-z0-9._~+/-]+=*/\1***/g' \
+    -e 's/(AUTH[[:space:]]+(PLAIN|LOGIN|CRAM-MD5|SCRAM-[A-Za-z0-9-]+)[[:space:]]+)[^[:space:]]+/\1***/g' \
+    -e 's/(--[A-Za-z0-9_-]*(key|secret|token|password|pass|auth)[A-Za-z0-9_-]*)([[:space:]]+|=)[^[:space:]]+/\1\3***/g' \
+    -e 's/([A-Za-z0-9_]*(PASSWORD|SECRET|TOKEN|SALT|KEY|PASS|PWD|AUTH)[A-Za-z0-9_]*[[:space:]]*[=:][[:space:]]*)("[^"]*"|'\''[^'\'']*'\''|[^[:space:]]+)/\1***/g' \
+    -e 's/(([Aa]ccess[_-]?[Kk]ey([_-]?[Ii][Dd])?|[Kk]ey[_-]?[Ii][Dd])[[:space:]]*[=:][[:space:]]*)[A-Za-z0-9]{16,40}/\1***/g'
+}
+
+# Run a command, capture combined stdout+stderr, redact, write to the staging
+# file. A missing tool / non-zero exit is recorded inline (never fatal — a
+# partial bundle is still useful). All status text is on stderr.
+capture() {
+  out_file="$1"; shift
+  if "$@" >"$STAGE/.raw" 2>&1; then
+    :
+  else
+    printf '\n[support-bundle] command exited non-zero: %s\n' "$*" >>"$STAGE/.raw"
+  fi
+  redact_stream <"$STAGE/.raw" >"$BUNDLE/$out_file"
+  rm -f "$STAGE/.raw"
+}
+
+# --- Non-secret env keys: EXACTLY the bin/vibe-panel-run ENV_KEY_ALLOWLIST.
+# These carry no credentials (public domain, project name, image, limits, port).
+ENV_KEY_ALLOWLIST="WP_HOME COMPOSE_PROJECT_NAME WP_ENVIRONMENT_TYPE WORDPRESS_IMAGE WP_MEMORY_LIMIT WP_MAX_MEMORY_LIMIT WP_CACHE WP_DEBUG_LOG HTTP_PORT"
+
+# Slugify a project name like bin/vibe-panel-run slug_of (for per-site filenames).
+slug_of() {
+  project="$1"; fallback="$2"
+  [ -n "$project" ] || { echo "$fallback"; return 0; }
+  s="${project#vibe-wp-}"; s="${s%-prod}"; s="${s%-stage}"
+  [ -n "$s" ] && echo "$s" || echo "$fallback"
+}
+
+# Sanitize a slug for use in a filename (defense-in-depth: only [a-z0-9-]).
+safe_slug() {
+  s="$(printf '%s' "$1" | tr -cd 'a-z0-9-')"
+  [ -n "$s" ] && echo "$s" || echo "site"
+}
+
+# --- Staging dir + cleanup. STAGE holds scratch; BUNDLE holds the final members.
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/vibe-support.XXXXXX")"
+BUNDLE="$STAGE/vibe-wp-support"
+mkdir -p "$BUNDLE"
+cleanup() { rm -rf "$STAGE" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM
+
+say "collecting diagnostics (redacted)…"
+
+# 1) versions.txt
+{
+  echo "generated: $(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true)"
+  echo "host-dir: $PANEL_HOST_DIR"
+  echo ""
+  echo "# docker"; docker --version 2>&1 || echo "docker: not available"
+  echo "# docker compose"; docker compose version 2>&1 || echo "compose: not available"
+  echo "# bun"; bun --version 2>&1 || echo "bun: not available"
+  echo "# kernel"; uname -a 2>&1 || true
+  echo "# panel git rev"
+  git -C "$PANEL_HOST_DIR" rev-parse --short HEAD 2>&1 || echo "git rev: unavailable"
+} >"$STAGE/.raw" 2>&1 || true
+redact_stream <"$STAGE/.raw" >"$BUNDLE/versions.txt"; rm -f "$STAGE/.raw"
+
+# 2) doctor.txt — host prerequisites (run from the repo so relative checks work).
+capture doctor.txt sh -c 'cd "$1" && exec ./bin/doctor' sh "$PANEL_HOST_DIR"
+
+# 3) security-status.txt — firewall/fail2ban/auto-updates booleans.
+capture security-status.txt sh -c 'cd "$1" && exec ./bin/security-status' sh "$PANEL_HOST_DIR"
+
+# 4) panel-logs.txt — recent panel service logs.
+capture panel-logs.txt journalctl -u vibe-wp-panel.service -n 500 --no-pager
+
+# 5) sites.txt + per-site logs/doctor. Discover sites by scanning the roots for
+# bin/vibe entrypoints (same loop shape as bin/vibe-panel-run siteinfo).
+printf '# installDir\tslug\tdomain\tprodPort\n' >"$BUNDLE/sites.txt"
+
+discover_sites() {
+  IFS=:
+  for root in $PANEL_SITES_ROOTS; do
+    [ -n "$root" ] || continue
+    [ -d "$root" ] || continue
+    find "$root" -maxdepth 4 -type f -path '*/bin/vibe' 2>/dev/null
+  done
+  unset IFS
+}
+
+discover_sites | while IFS= read -r vibebin; do
+  dir="${vibebin%/bin/vibe}"
+  prod="$dir/env/prod.env"
+  home="$(env_value "$prod" WP_HOME)"
+  [ -n "$home" ] || continue
+  fallback="${dir##*/}"
+  slug="$(slug_of "$(env_value "$prod" COMPOSE_PROJECT_NAME)" "$fallback")"
+  fslug="$(safe_slug "$slug")"
+  # host part of WP_HOME
+  domain="${home#*://}"; domain="${domain%%/*}"; domain="${domain%%:*}"
+  # numeric tail of HTTP_PORT
+  rawport="$(env_value "$prod" HTTP_PORT)"; port="${rawport##*:}"
+  case "$port" in ''|*[!0-9]*) port="" ;; esac
+  printf '%s\t%s\t%s\t%s\n' "$dir" "$slug" "$domain" "$port" >>"$BUNDLE/sites.txt"
+
+  say "collecting site '$slug' (recent logs + runtime doctor)…"
+  # Per-site recent logs (prod, all services, 200 lines) + runtime doctor. Both
+  # require env/prod.env, which we already confirmed exists (WP_HOME read above).
+  capture "site-${fslug}-logs.txt" \
+    sh -c 'cd "$1" && exec ./bin/vibe prod logs-recent all 200' sh "$dir"
+  capture "site-${fslug}-doctor.txt" \
+    sh -c 'cd "$1" && exec ./bin/vibe prod doctor-runtime' sh "$dir"
+done
+
+# 6) env.nonsecret.txt — ONLY the fixed non-secret keys, read per site without
+# sourcing. NEVER a `cat` of any env file (that would dump every secret).
+{
+  echo "# Non-secret configuration only. Passwords, salts, API keys and tokens"
+  echo "# are NOT included in this bundle."
+  echo ""
+  discover_sites | while IFS= read -r vibebin; do
+    dir="${vibebin%/bin/vibe}"
+    prod="$dir/env/prod.env"
+    [ -f "$prod" ] || continue
+    echo "## $dir (prod)"
+    for key in $ENV_KEY_ALLOWLIST; do
+      val="$(env_value "$prod" "$key")"
+      [ -n "$val" ] && printf '%s=%s\n' "$key" "$val"
+    done
+    echo ""
+  done
+} >"$STAGE/.raw" 2>&1 || true
+redact_stream <"$STAGE/.raw" >"$BUNDLE/env.nonsecret.txt"; rm -f "$STAGE/.raw"
+
+say "writing archive to stdout…"
+# Emit the gzipped tar to STDOUT. -C so the archive contains a single top-level
+# `vibe-wp-support/` dir. Binary on fd 1; nothing else writes to stdout.
+tar -C "$STAGE" -czf - vibe-wp-support
+say "done."
