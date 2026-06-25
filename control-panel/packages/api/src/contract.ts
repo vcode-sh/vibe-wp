@@ -162,6 +162,83 @@ export interface MonitoringSummaryEntry {
 	uptimePercent: number | null;
 }
 
+// --- Feature #5: Smart performance advisor (advisory-first) ---
+
+/** A windowed performance measurement snapshot from bin/perf-measure --json. */
+export interface PerfMeasurements {
+	fastcgi: { hitRatePercent: number };
+	fpm: {
+		active: number;
+		idle: number;
+		total: number;
+		maxChildren: number;
+		listenQueue: number;
+		maxActiveReached: number;
+		slowRequests: number;
+		avgRssMiB: number;
+	};
+	host: { ramTotalMiB: number; ramFreeMiB: number; ramAvailableMiB: number };
+	innodb: {
+		bufferPoolReadRatioPercent: number;
+		bufferPoolSizeMiB: number;
+		bufferPoolFreePct: number;
+	};
+	opcache: {
+		hitRatePercent: number;
+		usedMiB: number;
+		freeMiB: number;
+		wastedMiB: number;
+		oomRestarts: number;
+	};
+	redis: {
+		hitRatePercent: number;
+		evictedKeysDelta: number;
+		evictedKeysTotal: number;
+		usedMemoryMiB: number;
+		maxMemoryMiB: number;
+		fragmentationRatio: number;
+	};
+	window: { sampleMs: number; samples: number };
+}
+
+export type PerfRisk = "low" | "medium" | "high";
+
+/** One explainable env-delta recommendation produced by the advisor. */
+export interface PerfRecommendation {
+	category: "fpm" | "innodb" | "opcache" | "redis" | "wp";
+	current: string;
+	key: string;
+	label: string;
+	/**
+	 * One-sentence, non-technical explanation of what this setting controls — so a
+	 * non-engineer reading the card understands the change without docs. Distinct
+	 * from `reason`, which states the measured evidence that triggered the rec.
+	 */
+	plain: string;
+	reason: string;
+	risk: PerfRisk;
+	suggested: string;
+	unit: string;
+}
+
+/** A single line of the preview diff (env key: from → to). */
+export interface PerfPreviewDiff {
+	from: string;
+	key: string;
+	to: string;
+}
+
+/** The full advisory payload returned by the perfAdvice procedure. */
+export interface PerfAdvice {
+	capMiB: number;
+	headroomMiB: number;
+	measurements: PerfMeasurements;
+	previewDiff: PerfPreviewDiff[];
+	previewText: string;
+	recommendations: PerfRecommendation[];
+	reservedMiB: number;
+}
+
 export type JobStatus =
 	| "queued"
 	| "running"

@@ -80,6 +80,9 @@ export const securityScoreQuery = (siteId: string) =>
 export const securityRadarQuery = (siteId: string) =>
 	orpc.securityRadar.queryOptions({ input: { siteId } });
 
+export const perfAdviceQuery = (siteId: string) =>
+	orpc.perfAdvice.queryOptions({ input: { siteId } });
+
 export const sharedDbStatusQuery = () => orpc.sharedDbStatus.queryOptions();
 
 export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) =>

@@ -9,6 +9,7 @@ import { lifecycleRouter } from "./lifecycle";
 import { logsRouter } from "./logs";
 import { monitoringRouter } from "./monitoring";
 import { operationsRouter } from "./operations";
+import { performanceRouter } from "./performance";
 import { pluginsRouter } from "./plugins";
 import { provisioningRouter } from "./provisioning";
 import { securityRadarRouter } from "./security-radar";
@@ -44,6 +45,7 @@ export const appRouter = {
 	...securityScoreRouter,
 	...monitoringRouter,
 	...securityRadarRouter,
+	...performanceRouter,
 };
 
 export type AppRouter = typeof appRouter;
