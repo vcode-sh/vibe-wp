@@ -1,11 +1,27 @@
 import { env } from "@control-panel/env/server";
+import { ORPCError } from "@orpc/server";
 
 import type { SecurityStatus, ServerInfo } from "../contract";
-import { hostExec, runVibe } from "../core-bridge/exec";
-import { startJob } from "../core-bridge/jobs";
+import {
+	hostExec,
+	runSupportBundle,
+	runVibe,
+	SUPPORT_BUNDLE_MAX_BYTES,
+} from "../core-bridge/exec";
+import { launchPanelUpdateJob, startJob } from "../core-bridge/jobs";
+import { writeAudit } from "../core-bridge/jobs-db";
 import { parseSecurityStatus, parseSmoke } from "../core-bridge/parse";
 import { detectSites } from "../core-bridge/sites";
 import { adminProcedure, protectedProcedure } from "../procedures";
+
+/** UTC YYYYMMDD-HHMM stamp for the downloaded support-bundle filename. */
+function bundleStamp(now = new Date()): string {
+	const p = (n: number) => String(n).padStart(2, "0");
+	return (
+		`${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}` +
+		`-${p(now.getUTCHours())}${p(now.getUTCMinutes())}`
+	);
+}
 
 const WHITESPACE = /\s+/;
 
@@ -53,7 +69,11 @@ export const serverRouter = {
 		async (): Promise<SecurityStatus> => {
 			// Host-level check; runs against the canonical PANEL_HOST_DIR checkout,
 			// not a per-site dir — so it works with zero sites.
-			const { stdout } = await runVibe(env.PANEL_HOST_DIR, "prod", "securityStatus");
+			const { stdout } = await runVibe(
+				env.PANEL_HOST_DIR,
+				"prod",
+				"securityStatus"
+			);
 			return parseSecurityStatus(stdout);
 		}
 	),
@@ -69,5 +89,60 @@ export const serverRouter = {
 			userId: context.session.user.id,
 			action: "harden",
 		});
+	}),
+
+	/**
+	 * Admin-only: generate a REDACTED diagnostics support bundle and return it as
+	 * base64 for the browser to save. The host script (bin/support-bundle) emits a
+	 * gzip tar with every text member redacted BEFORE archiving — passwords, salts,
+	 * API keys and tokens are never included. We carry the bytes as base64 over
+	 * oRPC (the wire is JSON, so binary needs encoding) and cap the size defensively
+	 * (runSupportBundle rejects archives over SUPPORT_BUNDLE_MAX_BYTES).
+	 */
+	supportBundleDownload: adminProcedure.handler(
+		async ({ context }): Promise<{ base64: string; filename: string }> => {
+			let bytes: Uint8Array;
+			try {
+				bytes = await runSupportBundle();
+			} catch (cause) {
+				const message =
+					cause instanceof Error ? cause.message : "support bundle failed";
+				if (message.includes("too large")) {
+					throw new ORPCError("PAYLOAD_TOO_LARGE", {
+						message: `Support bundle exceeds the ${Math.round(
+							SUPPORT_BUNDLE_MAX_BYTES / (1024 * 1024)
+						)} MB limit.`,
+					});
+				}
+				throw new ORPCError("INTERNAL_SERVER_ERROR", {
+					message: "Couldn't generate the support bundle.",
+				});
+			}
+			await writeAudit(
+				context.session.user.id,
+				"support-bundle",
+				"server",
+				null
+			);
+			return {
+				base64: Buffer.from(bytes).toString("base64"),
+				filename: `vibe-wp-support-${bundleStamp()}.tar.gz`,
+			};
+		}
+	),
+
+	/**
+	 * Admin-only: update the whole Vibe WP stack + panel from the GUI. Runs
+	 * `bin/panel update` (git pull + rebuild + restart) as a STREAMED job, surfaced
+	 * in the operations tray. The update detaches itself from the panel process
+	 * tree (systemd-run) so the panel's own restart at the end does not kill the
+	 * job; the stream follows the update unit's journal, so the client reconnects
+	 * and sees completion once the panel is back. Returns { jobId } like serverHarden.
+	 */
+	serverUpdateStack: adminProcedure.handler(async ({ context }) => {
+		const result = await launchPanelUpdateJob({
+			userId: context.session.user.id,
+		});
+		return result;
 	}),
 };

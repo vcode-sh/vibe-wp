@@ -408,12 +408,41 @@ $CADDY_TLS_LINE
   echo "Done. Open $ACCESS_ORIGIN and sign in."
 }
 
+# Fast-forward the source checkout to the latest committed code before rebuilding.
+# GUARDS (fail CLEANLY rather than leave a half-updated tree):
+#   - skip silently when $REPO_DIR is not a git work tree (e.g. a tarball deploy)
+#     or when git is unavailable — the rebuild then ships the checked-out code;
+#   - abort on a DIRTY tree (uncommitted changes) so a `--ff-only` does not clash
+#     with local edits, and so we never rebuild from an inconsistent worktree;
+#   - `git pull --ff-only` itself refuses to merge a diverged branch, so a
+#     non-fast-forwardable remote aborts before anything is rebuilt.
+pull_latest_source() {
+  command -v git >/dev/null 2>&1 || { echo "panel: git not found — rebuilding the current checkout."; return 0; }
+  if ! git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "panel: $REPO_DIR is not a git checkout — rebuilding the current files."
+    return 0
+  fi
+  if [ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]; then
+    echo "panel: refusing to pull — $REPO_DIR has uncommitted changes. Commit or stash them, then re-run." >&2
+    return 1
+  fi
+  echo "panel: pulling latest code (git pull --ff-only)..."
+  if ! git -C "$REPO_DIR" pull --ff-only; then
+    echo "panel: git pull --ff-only failed (the branch has diverged from its remote). Resolve it, then re-run; nothing was rebuilt." >&2
+    return 1
+  fi
+}
+
 update_panel() {
   env_file="$PANEL_DIR/app/server/.env"
   if ! $SUDO test -f "$env_file"; then
     echo "panel: no existing installation found at $PANEL_DIR — run 'bin/panel install' first." >&2
     return 1
   fi
+
+  # Pull the latest code FIRST (dirty/diverged tree aborts cleanly before any
+  # rebuild). Done before the Bun preflight so a failed pull short-circuits.
+  pull_latest_source
 
   # Bun preflight (operator may have rebooted since install)
   if ! command -v bun >/dev/null 2>&1; then

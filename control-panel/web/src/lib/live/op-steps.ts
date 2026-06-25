@@ -97,6 +97,19 @@ const STAGING_PUSH: StepDef[] = [
 	{ match: /auto-restoring|Rolled back/i, label: "Rolling back" },
 ];
 
+// panel-update (GUI "Update Vibe WP") — keys off bin/panel update's own log
+// lines (also visible through the journalctl follow in prod, which only prefixes
+// each line, so the substrings still match). Strictly linear; the trailing
+// "Restarting panel" step lights up as the panel restarts and the stream then
+// reconnects to report completion.
+const PANEL_UPDATE: StepDef[] = [
+	{ match: /pulling latest code|git pull/i, label: "Pulling latest code" },
+	{ match: /Building installer binary/i, label: "Building installer" },
+	{ match: /updating \(domain=/i, label: "Rebuilding the panel" },
+	{ match: /db:push|drizzle/i, label: "Migrating the database" },
+	{ match: /update complete|service up/i, label: "Restarting the panel" },
+];
+
 export const OP_STEPS: Record<string, StepDef[]> = {
 	backup: BACKUP,
 	restore: RESTORE,
@@ -104,4 +117,5 @@ export const OP_STEPS: Record<string, StepDef[]> = {
 	attachStaging: ATTACH_STAGING,
 	removeSite: REMOVE_SITE,
 	stagingPushToLive: STAGING_PUSH,
+	"panel-update": PANEL_UPDATE,
 };

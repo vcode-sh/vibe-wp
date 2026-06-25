@@ -2,6 +2,7 @@ import type { Job, StreamEvent } from "../contract";
 
 import {
 	STREAM_TIMEOUT_MS,
+	streamPanelUpdate,
 	streamVibe,
 	type VibeEnv,
 	type VibeOp,
@@ -283,6 +284,38 @@ export async function startJob(
 				timeoutMs: STREAM_TIMEOUT_MS,
 				env: input.extraEnv,
 			}),
+		d
+	);
+}
+
+/** Stable identifiers for the GUI stack-update job (server-scoped sentinel). */
+const PANEL_UPDATE_KIND = "panel-update";
+
+/**
+ * Launch the GUI "Update Vibe WP" job. Unlike startJob this does NOT go through
+ * the vibe-only sentinel guard (op must be "harden" for siteId "server"); it
+ * supplies its OWN producer — streamPanelUpdate — to the shared launchJob path,
+ * inheriting the same persist + audit + cancel + drain guarantees. The job is
+ * server-scoped (siteId "server") and singleton per server (a second start is
+ * refused while one is running). streamPanelUpdate follows the detached
+ * updater's journal so the stream survives the panel's own self-restart.
+ */
+export async function launchPanelUpdateJob(
+	input: { userId: string },
+	deps?: JobDeps
+): Promise<{ jobId: string }> {
+	const d = deps ?? (await getRealDeps());
+	if (hasRunningJob(SERVER_SITE_ID, PANEL_UPDATE_KIND)) {
+		throw new Error("A Vibe WP update is already running.");
+	}
+	return launchJob(
+		{
+			action: PANEL_UPDATE_KIND,
+			kind: PANEL_UPDATE_KIND,
+			siteId: SERVER_SITE_ID,
+			userId: input.userId,
+		},
+		() => streamPanelUpdate({ timeoutMs: STREAM_TIMEOUT_MS }),
 		d
 	);
 }

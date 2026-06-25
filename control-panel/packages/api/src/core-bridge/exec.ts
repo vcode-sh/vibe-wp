@@ -449,6 +449,142 @@ export function streamVibe(
 }
 
 // ---------------------------------------------------------------------------
+// Support bundle (download) + GUI stack update. Both are SERVER-level ops (not
+// per-site), so neither uses wrapVibeArgv. Each maps to its OWN top-level
+// bin/vibe-panel-run subcommand (`support-bundle` / `panel-update`), gated on
+// PANEL_PRIVILEGED_RUNNER exactly like wrapVibeArgv.
+// ---------------------------------------------------------------------------
+
+/** Largest support-bundle archive we will buffer/return (defensive cap). */
+export const SUPPORT_BUNDLE_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+
+/** Wall-clock limit for collecting the support bundle. */
+const SUPPORT_BUNDLE_TIMEOUT_MS = 60_000;
+
+/**
+ * Build the argv for the support-bundle collector. With a privileged runner
+ * (prod): `["sudo","-n",runner,"support-bundle"]` — the root wrapper asserts the
+ * collector is root-owned and execs it, streaming its archive bytes straight
+ * back. Without a runner (dev): spawn the repo script directly from
+ * PANEL_HOST_DIR/bin. ZERO args ever — there is no caller input to validate.
+ */
+export function wrapSupportBundleArgv(): string[] {
+	const runner = privilegedRunner();
+	if (runner) {
+		return ["sudo", "-n", runner, "support-bundle"];
+	}
+	const hostDir = process.env.PANEL_HOST_DIR ?? ".";
+	return [`${hostDir}/bin/support-bundle`];
+}
+
+/**
+ * Run the support-bundle collector and return its gzip-tar archive as raw bytes.
+ *
+ * IMPORTANT: stdout here is BINARY (a gzipped tar) — we read it as bytes, NOT
+ * text, and we do NOT run redact() on it. redact() operates on text and would
+ * corrupt the gzip stream. Redaction is done per-MEMBER inside bin/support-bundle
+ * BEFORE the tar is built, so the archive is already secret-free. The collector
+ * writes all human/status output to stderr, keeping stdout a clean archive.
+ *
+ * Rejects if the archive exceeds SUPPORT_BUNDLE_MAX_BYTES (defensive) or the
+ * collector exits non-zero.
+ */
+export async function runSupportBundle(
+	opts: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<Uint8Array> {
+	const argv = wrapSupportBundleArgv();
+	const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+	const timer = setTimeout(
+		() => proc.kill(),
+		opts.timeoutMs ?? SUPPORT_BUNDLE_TIMEOUT_MS
+	);
+	try {
+		// Read stdout as bytes (NOT text) — it is a gzip archive.
+		// no redact: archive members are redacted pre-tar in bin/support-bundle.
+		const bytes = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
+		const code = await proc.exited;
+		if (code !== 0) {
+			const stderr = redact(await new Response(proc.stderr).text());
+			throw new Error(`support-bundle exited ${code}: ${stderr.slice(0, 500)}`);
+		}
+		const cap = opts.maxBytes ?? SUPPORT_BUNDLE_MAX_BYTES;
+		if (bytes.byteLength > cap) {
+			throw new Error(
+				`support bundle is too large (${bytes.byteLength} bytes > ${cap})`
+			);
+		}
+		return bytes;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/**
+ * Build the argv for the GUI stack update. With a privileged runner (prod):
+ * `["sudo","-n",runner,"panel-update"]` — the root wrapper runs `bin/panel
+ * update` DETACHED (systemd-run) so the panel's own self-restart at the end of
+ * the update cannot kill the updater. Without a runner (dev): spawn the repo
+ * bin/panel directly with the single fixed `update` verb (no detach needed in
+ * dev — nothing restarts the dev server). ZERO free args ever.
+ */
+export function wrapPanelUpdateArgv(): string[] {
+	const runner = privilegedRunner();
+	if (runner) {
+		return ["sudo", "-n", runner, "panel-update"];
+	}
+	const hostDir = process.env.PANEL_HOST_DIR ?? ".";
+	return [`${hostDir}/bin/panel`, "update"];
+}
+
+/**
+ * Stream the GUI stack update as a `{ proc, lines }` job.
+ *
+ * Why the source is `journalctl -f`, not the updater's own stdout: in prod the
+ * detached updater runs as a transient systemd unit (vibe-wp-panel-update) and
+ * ITS last step restarts the panel server (us). If we streamed the updater's
+ * stdout pipe directly, the panel restart would tear our process group down and
+ * the stream would die mid-update with no completion. Instead we kick the
+ * detached update off, then follow the transient unit's JOURNAL — those lines
+ * survive the panel restart, so once the panel is back the web client can
+ * reconnect (operationsStream → or DB-backed operationsGet) and see the result.
+ *
+ * In dev (no runner) there is no detach + no journal, so we stream bin/panel's
+ * own stdout directly (spawnStream of the wrapPanelUpdateArgv argv).
+ */
+export function streamPanelUpdate(opts: { timeoutMs?: number } = {}) {
+	const runner = privilegedRunner();
+	const deadline = opts.timeoutMs ?? STREAM_TIMEOUT_MS;
+	if (!runner) {
+		// Dev: run bin/panel update directly and stream its stdout/stderr.
+		return spawnStream(wrapPanelUpdateArgv(), { timeoutMs: deadline });
+	}
+	// Prod: launch the detached update (fire-and-forget — the wrapper execs
+	// systemd-run, which returns once the transient unit is started), then follow
+	// the unit's journal so the lines survive the panel's self-restart.
+	const launch = Bun.spawn(wrapPanelUpdateArgv(), {
+		stdout: "ignore",
+		stderr: "ignore",
+	});
+	// The launch process is fire-and-forget (systemd-run returns immediately once
+	// the transient unit starts). Swallow its exit promise so an early failure
+	// never surfaces as an unhandled rejection — the journal follow + the job's
+	// own exit code are authoritative for success/failure.
+	launch.exited.catch(() => {
+		// ignored: status is reported via the journalctl stream below.
+	});
+	return spawnStream(
+		[
+			"journalctl",
+			"--unit=vibe-wp-panel-update.service",
+			"--follow",
+			"--lines=200",
+			"--no-pager",
+		],
+		{ timeoutMs: deadline }
+	);
+}
+
+// ---------------------------------------------------------------------------
 // Shared-DB ops (the ONE global MariaDB project). These are NOT per-site, so
 // they do NOT use wrapVibeArgv (which is `sudo -n runner vibe <siteDir> …`). A
 // dedicated top-level `shared-db <op> [slug]` wrapper subcommand handles them;
