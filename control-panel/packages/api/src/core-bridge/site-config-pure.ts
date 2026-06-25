@@ -184,3 +184,31 @@ export function fastcgiCachePatchToEnv(enabled: boolean): {
 		VIBE_SITE_CONFIG_KEYS: "NGINX_FASTCGI_CACHE",
 	};
 }
+
+/** One-click security hardening toggles the panel can apply via siteConfigApply. */
+export type SecurityFixKind = "disableXmlRpc" | "disableFileEdit";
+
+/** The single env key each security fix writes (always set to "1" — hardening). */
+const SECURITY_FIX_KEY: Record<SecurityFixKind, string> = {
+	// Read by the vibe-wp-environment MU plugin, which then forces xmlrpc_enabled
+	// false + strips pingback XML-RPC methods + drops the X-Pingback header.
+	disableXmlRpc: "VIBE_WP_DISABLE_XMLRPC",
+	// Read by the WordPress image entrypoint when it renders wp-config; restores
+	// the secure default (the file editor stays closed).
+	disableFileEdit: "DISALLOW_FILE_EDIT",
+};
+
+/**
+ * Map a one-click security fix to the env vars site-config-apply consumes. Each
+ * fix flips exactly one boolean key to "1" (always tightening, never loosening).
+ * Naming only the changed key in VIBE_SITE_CONFIG_KEYS tells the writer to rewrite
+ * exactly that key; the root shell writer revalidates the 0|1 value independently.
+ * Both keys are rendered only at container start, so the caller must restart the
+ * container for the fix to take effect (surfaced as restartRequired by the exec
+ * layer). Shape mirrors fastcgiCachePatchToEnv/imagePatchToEnv: a flat env map
+ * with VIBE_SITE_CONFIG_KEYS naming exactly the changed key.
+ */
+export function securityFixToEnv(fix: SecurityFixKind): Record<string, string> {
+	const key = SECURITY_FIX_KEY[fix];
+	return { [key]: "1", VIBE_SITE_CONFIG_KEYS: key };
+}

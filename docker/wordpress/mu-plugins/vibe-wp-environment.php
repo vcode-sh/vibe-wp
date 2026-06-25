@@ -64,6 +64,28 @@ if (vibe_wp_environment_bool('VIBE_WP_DISABLE_OUTBOUND_MAIL', vibe_wp_is_staging
     }, 10, 2);
 }
 
+if (vibe_wp_environment_bool('VIBE_WP_DISABLE_XMLRPC')) {
+    add_filter('xmlrpc_enabled', '__return_false');
+
+    add_filter('xmlrpc_methods', static function ($methods) {
+        if (!is_array($methods)) {
+            return $methods;
+        }
+
+        return array_filter($methods, static function ($name): bool {
+            return strpos((string) $name, 'pingback.') !== 0;
+        }, ARRAY_FILTER_USE_KEY);
+    });
+
+    add_filter('wp_headers', static function ($headers) {
+        if (is_array($headers)) {
+            unset($headers['X-Pingback']);
+        }
+
+        return $headers;
+    });
+}
+
 add_action('admin_notices', static function (): void {
     if ((!vibe_wp_is_staging() && !vibe_wp_environment_bool('VIBE_WP_FORCE_NOINDEX') && !vibe_wp_environment_bool('VIBE_WP_DISABLE_OUTBOUND_MAIL')) || !current_user_can('manage_options')) {
         return;
