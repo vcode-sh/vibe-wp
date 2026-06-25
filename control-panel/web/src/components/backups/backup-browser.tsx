@@ -249,7 +249,7 @@ export function BackupBrowser({
 				confirmLabel="Restore this item"
 				consequence={
 					pending
-						? `This replaces the live ${pending.kind} "${pending.name}" with the copy from this backup. We back up the current state first.`
+						? `This replaces the live ${pending.kind} "${pending.name}" with the copy from this backup. The current ${pending.kind} is saved to a pre-restore safety copy first, so this can be undone.`
 						: ""
 				}
 				onConfirm={handleRestoreItem}

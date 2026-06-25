@@ -23,6 +23,15 @@ die() {
   exit 1
 }
 
+# Where pre-restore safety copies land, inside the backup dir we are restoring
+# FROM. Each restore writes the CURRENT (about-to-be-overwritten) version of the
+# item here under a UTC timestamp, so a single-item restore is actually
+# recoverable — the panel/UI promises "we back up the current state first", and
+# this is what makes that promise true.
+restore_safety_dir() {
+  printf '%s/pre-restore-safety/%s' "${backup_dir}" "$(date -u +"%Y%m%dT%H%M%SZ")"
+}
+
 backup_dir="${1:-}"
 kind="${2:-}"
 name="${3:-}"
@@ -130,6 +139,29 @@ if [ "${kind}" = "table" ]; then
   # shellcheck disable=SC2086
   vibe_compose up -d ${services} >/dev/null
 
+  # SAFETY NET: dump the table's CURRENT contents BEFORE we overwrite it, so the
+  # operator can recover. The single-table import below is otherwise irreversible.
+  # DB creds stay inside the in-container `sh -c` env (never on argv/logs); the
+  # validated table name is passed through a positional arg ($1 inside sh -c), so
+  # it is never interpolated into the shell command string.
+  safety_dir="$(restore_safety_dir)"
+  mkdir -p "${safety_dir}" || die "could not create pre-restore safety dir: ${safety_dir}"
+  safety_sql="${safety_dir}/table-${name}.sql"
+  echo "Saving current '${name}' to a pre-restore safety copy..."
+  if vibe_compose_service_exists db; then
+    # --no-tablespaces avoids a PROCESS-privilege requirement on shared MariaDB.
+    vibe_compose exec -T db sh -c \
+      'mariadb-dump --single-transaction --no-tablespaces -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE" "$1"' \
+      sh "${name}" > "${safety_sql}" 2>/dev/null \
+      || die "failed to take a pre-restore backup of table '${name}' — aborting before any change"
+  else
+    vibe_wp_stdin db export - --single-transaction --no-tablespaces --tables="${name}" > "${safety_sql}" 2>/dev/null \
+      || die "failed to take a pre-restore backup of table '${name}' — aborting before any change"
+  fi
+  [ -s "${safety_sql}" ] || die "pre-restore backup of table '${name}' is empty — aborting before any change"
+  gzip -f "${safety_sql}"
+  echo "Pre-restore safety copy: ${safety_sql}.gz"
+
   echo "Importing table block into the database..."
   if vibe_compose_service_exists db; then
     vibe_compose exec -T db sh -c 'mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' < "${tmp_slice}"
@@ -213,6 +245,26 @@ fi
 echo "Restoring single file: ${name}"
 vibe_require_env_file
 vibe_compose up -d wordpress >/dev/null
+
+# SAFETY NET: copy the CURRENT live file out BEFORE we overwrite it, preserving
+# its sub-path so the operator can put it back. If the file does not exist live
+# yet, the restore is trivially reversible (delete the new file), so we record a
+# marker instead of failing. The container path is a fixed prefix + the validated
+# relative name (argv to `cp`, no shell expansion), so it cannot escape wp-content.
+safety_dir="$(restore_safety_dir)"
+safety_parent="$(dirname -- "${name}")"
+mkdir -p "${safety_dir}/${safety_parent}" || die "could not create pre-restore safety dir: ${safety_dir}"
+if vibe_compose exec -T wordpress test -f "/var/www/html/wp-content/${name}" 2>/dev/null; then
+  echo "Saving current '${name}' to a pre-restore safety copy..."
+  vibe_compose cp "wordpress:/var/www/html/wp-content/${name}" "${safety_dir}/${name}" \
+    || die "failed to take a pre-restore backup of '${name}' — aborting before any change"
+  echo "Pre-restore safety copy: ${safety_dir}/${name}"
+else
+  # No live file to preserve: the restore only ADDS this file, so undo = delete.
+  printf 'file did not exist before restore; undo by deleting wp-content/%s\n' "${name}" \
+    > "${safety_dir}/RESTORE_ADDED_${name##*/}.txt"
+  echo "No existing '${name}' to preserve; restore is reversible by deletion."
+fi
 
 # Ensure the parent directory exists inside the container, then copy the file in.
 # The container path is a fixed prefix + the validated relative name (argv to cp,
