@@ -59,6 +59,7 @@ const EXTERNAL: StepId[] = [
 export function visibleStepIds(mode: InstallMode, quickInstall: boolean): StepId[] {
   switch (mode) {
     case "external-services":
+    case "shared-db":
       return EXTERNAL;
     case "manage-existing":
       return ["welcome", "sites", "dashboard"];

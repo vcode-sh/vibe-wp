@@ -1,6 +1,7 @@
 import { SECRET_ENV_KEYS, writeEnvFile } from "./env-writer";
 import { EXTERNAL_PRESERVE_KEYS } from "./external-plan";
 import { redact } from "./redaction";
+import { SHARED_DB_PRESERVE_KEYS } from "./shared-db-plan";
 import type { InstallPlan, InstallTask } from "./types";
 
 export type TaskStatus = "pending" | "running" | "done" | "failed" | "skipped";
@@ -108,7 +109,10 @@ export async function runTask(
 const ENV_WRITE_SPECS: Record<string, { suffix: string; preserve: ReadonlySet<string> }> = {
   "env-prod": { suffix: "/env/prod.env", preserve: SECRET_ENV_KEYS },
   "env-stage": { suffix: "/env/stage.env", preserve: SECRET_ENV_KEYS },
-  "env-external": { suffix: "/env/external.env", preserve: EXTERNAL_PRESERVE_KEYS }
+  "env-external": { suffix: "/env/external.env", preserve: EXTERNAL_PRESERVE_KEYS },
+  // shared-db: DB creds are panel-provided (reflect latest input); the generated
+  // salts AND the generated internal-Redis password are write-once.
+  "env-shared-db": { suffix: "/env/shared-db.env", preserve: SHARED_DB_PRESERVE_KEYS }
 };
 
 async function runEnvWrite(taskId: string, plan: InstallPlan): Promise<TaskResult | null> {

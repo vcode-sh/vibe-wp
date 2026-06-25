@@ -7,6 +7,7 @@ export type InstallMode =
   | "update-existing"
   | "staging-only"
   | "external-services"
+  | "shared-db"
   | "panel-bootstrap";
 export type PerformancePreset = "conservative" | "balanced" | "high-memory";
 export type BackupPolicy = "manual" | "local-first" | "external-later";

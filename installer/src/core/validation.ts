@@ -1,5 +1,11 @@
-import type { InstallerState } from "./types";
+import { validateServices } from "./service-validation";
+import type { InstallerState, InstallMode } from "./types";
 
+const EXISTING_SITE_MODES = new Set<InstallMode>([
+  "manage-existing",
+  "remove-existing",
+  "update-existing"
+]);
 const domainPattern = /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const siteSlugPattern = /^[a-z0-9][a-z0-9-]{1,48}$/;
@@ -63,39 +69,23 @@ export function validateEmail(email: string): string | null {
 }
 
 export function validateState(state: InstallerState): string[] {
-  if (state.mode === "manage-existing" || state.mode === "remove-existing") {
-    return validateExistingMode(state);
-  }
-
-  // update-existing acts on an already-installed site, so it needs a selected site.
-  if (state.mode === "update-existing") {
+  // manage/remove/update act on an installed site: only the site dir matters.
+  if (EXISTING_SITE_MODES.has(state.mode)) {
     return validateExistingMode(state);
   }
 
   // staging-only attaches staging to an existing site: needs the site AND a
   // valid, distinct staging domain (its DNS is checked by dns-preflight).
   if (state.mode === "staging-only") {
-    const errors = validateExistingMode(state);
-    const stagingError = validateDomain(state.stagingDomain);
-    if (stagingError) {
-      errors.push(`Staging domain: ${stagingError}`);
-    }
-    if (state.stagingDomain.trim().toLowerCase() === state.productionDomain.trim().toLowerCase()) {
-      errors.push("Staging domain must be different from production.");
-    }
-    return errors;
+    return [...validateExistingMode(state), ...validateStagingDomain(state)];
   }
 
-  if (state.mode === "external-services") {
-    return [
-      ...validateSiteIdentity(state),
-      ...validatePorts(state),
-      ...validateExternalServices(state),
-      ...validateBackup(state)
-    ];
-  }
-
-  return [...validateSiteIdentity(state), ...validatePorts(state), ...validateBackup(state)];
+  return [
+    ...validateSiteIdentity(state),
+    ...validatePorts(state),
+    ...validateServices(state),
+    ...validateBackup(state)
+  ];
 }
 
 function validateBackup(state: InstallerState): string[] {
@@ -110,42 +100,29 @@ function validateBackup(state: InstallerState): string[] {
     errors.push("Backup retention must be a whole number of backups to keep.");
   }
   if (state.backupPolicy === "external-later") {
-    if (!state.r2AccountId.trim()) {
-      errors.push("Cloudflare R2 account ID is required for off-server backups.");
-    }
-    if (!state.r2AccessKeyId.trim()) {
-      errors.push("Cloudflare R2 access key ID is required.");
-    }
-    if (!state.r2SecretKey.trim()) {
-      errors.push("Cloudflare R2 secret access key is required.");
-    }
-    if (!state.r2Bucket.trim()) {
-      errors.push("Cloudflare R2 bucket name is required.");
+    const r2: [string, string][] = [
+      [state.r2AccountId, "Cloudflare R2 account ID is required for off-server backups."],
+      [state.r2AccessKeyId, "Cloudflare R2 access key ID is required."],
+      [state.r2SecretKey, "Cloudflare R2 secret access key is required."],
+      [state.r2Bucket, "Cloudflare R2 bucket name is required."]
+    ];
+    for (const [value, message] of r2) {
+      if (!value.trim()) {
+        errors.push(message);
+      }
     }
   }
   return errors;
 }
 
-function validateExternalServices(state: InstallerState): string[] {
+function validateStagingDomain(state: InstallerState): string[] {
   const errors: string[] = [];
-  if (!state.extDbHost.trim()) {
-    errors.push("External database host is required, for example db.example.com:3306.");
+  const stagingError = validateDomain(state.stagingDomain);
+  if (stagingError) {
+    errors.push(`Staging domain: ${stagingError}`);
   }
-  if (!state.extDbName.trim()) {
-    errors.push("External database name is required.");
-  }
-  if (!state.extDbUser.trim()) {
-    errors.push("External database user is required.");
-  }
-  if (state.extDbPassword.length < 1) {
-    errors.push("External database password is required.");
-  }
-  if (!state.extRedisHost.trim()) {
-    errors.push("External Redis host is required.");
-  }
-  const redisPort = Number(state.extRedisPort);
-  if (!Number.isInteger(redisPort) || redisPort < 1 || redisPort > 65_535) {
-    errors.push("External Redis port must be between 1 and 65535.");
+  if (state.stagingDomain.trim().toLowerCase() === state.productionDomain.trim().toLowerCase()) {
+    errors.push("Staging domain must be different from production.");
   }
   return errors;
 }
@@ -169,13 +146,7 @@ function validateSiteIdentity(state: InstallerState): string[] {
   }
 
   if (state.stagingEnabled) {
-    const stagingError = validateDomain(state.stagingDomain);
-    if (stagingError) {
-      errors.push(`Staging domain: ${stagingError}`);
-    }
-    if (state.stagingDomain.trim().toLowerCase() === state.productionDomain.trim().toLowerCase()) {
-      errors.push("Staging domain must be different from production.");
-    }
+    errors.push(...validateStagingDomain(state));
   }
 
   const emailError = validateEmail(state.adminEmail);

@@ -1,40 +1,10 @@
 import { buildDnsPreflightTask } from "./dns-preflight";
-import { productionEnvValues, stagingEnvValues } from "./env-writer";
-import { externalEnvValues } from "./external-plan";
+import { NO_PROD_REWRITE_MODES } from "./env-files";
 import { shellQuote } from "./shell";
-import type { EnvFilePlan, InstallerState, InstallMode, InstallTask } from "./types";
-
-const NO_PROD_REWRITE_MODES = new Set<InstallMode>([
-  "manage-existing",
-  "remove-existing",
-  "update-existing"
-]);
+import type { InstallerState, InstallMode, InstallTask } from "./types";
 
 export function skipCaddyForMode(mode: InstallMode): boolean {
   return NO_PROD_REWRITE_MODES.has(mode) || mode === "staging-only";
-}
-
-export function buildEnvFiles(state: InstallerState): EnvFilePlan[] {
-  const dir = state.selectedSiteDir || state.installDir;
-  if (state.mode === "external-services") {
-    // Bring-your-own MariaDB/Redis: only the external env file is emitted.
-    return [{ path: `${state.installDir}/env/external.env`, values: externalEnvValues(state) }];
-  }
-  if (state.mode === "staging-only") {
-    // Staging-only attaches to a live prod site: emit only the stage env file.
-    return [{ path: `${dir}/env/stage.env`, values: stagingEnvValues(state) }];
-  }
-  // manage/remove/update preserve existing secrets and regenerate nothing.
-  if (NO_PROD_REWRITE_MODES.has(state.mode)) {
-    return [];
-  }
-  const envFiles: EnvFilePlan[] = [
-    { path: `${state.installDir}/env/prod.env`, values: productionEnvValues(state) }
-  ];
-  if (state.stagingEnabled) {
-    envFiles.push({ path: `${state.installDir}/env/stage.env`, values: stagingEnvValues(state) });
-  }
-  return envFiles;
 }
 
 export function buildStagingOnlyTasks(state: InstallerState): InstallTask[] {
