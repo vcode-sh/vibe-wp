@@ -53,6 +53,21 @@ export function applyNewSiteOverrides(
 	if (typeof input.monitorEnabled === "boolean") {
 		next.monitorEnabled = input.monitorEnabled;
 	}
+	// Optional AI connector keys → site env (OPENAI_API_KEY / GOOGLE_API_KEY /
+	// ANTHROPIC_API_KEY) via env-writer/external-plan/shared-db-plan. They are
+	// SECRETS: set into the state object so they ride the bridge's STDIN JSON —
+	// never argv, never logged. Only override when provided; otherwise the
+	// installer's "" default stays so we never clobber with an empty value. Shared
+	// by createSite/createExternal/createSharedDb (all call applyNewSiteOverrides).
+	if (input.aiOpenAiKey) {
+		next.aiOpenAiKey = input.aiOpenAiKey;
+	}
+	if (input.aiGoogleKey) {
+		next.aiGoogleKey = input.aiGoogleKey;
+	}
+	if (input.aiAnthropicKey) {
+		next.aiAnthropicKey = input.aiAnthropicKey;
+	}
 	return next;
 }
 

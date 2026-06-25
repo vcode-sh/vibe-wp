@@ -1,4 +1,4 @@
-import type { ProvisionMode, WizardForm } from "./wizard-types";
+import type { ProvisionMode, StepKey, WizardForm } from "./wizard-types";
 
 /**
  * Lightweight client-side validation mirroring the KEY rules from the server
@@ -131,22 +131,20 @@ export function validateExternal(form: WizardForm): Errors {
 	return errors;
 }
 
-export function validateStep(
-	step: "basics" | "database" | "options" | "external",
-	form: WizardForm
-): Errors {
+export function validateStep(step: StepKey, form: WizardForm): Errors {
 	if (step === "basics") {
 		return validateBasics(form);
-	}
-	// The database step is a pure choice (dedicated vs shared) with no fields to
-	// validate; the shared option is already gated on health in the UI.
-	if (step === "database") {
-		return {};
 	}
 	if (step === "options") {
 		return validateOptions(form);
 	}
-	return validateExternal(form);
+	if (step === "external") {
+		return validateExternal(form);
+	}
+	// database (pure dedicated/shared choice), connectors (all optional AI keys),
+	// dns (advisory preflight gate handled separately), and review have no inline
+	// field validation that should block stepping forward.
+	return {};
 }
 
 /** Whole-form validity used to enable the final Create button. */

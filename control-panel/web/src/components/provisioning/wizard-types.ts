@@ -7,12 +7,24 @@ export type ProvisionMode = "standard" | "external";
 export type DbMode = "dedicated" | "shared";
 
 /** Wizard step keys. The database step only appears in standard mode (external
- * mode brings its own DB), and the external-services step only in external. */
-export type StepKey = "basics" | "database" | "options" | "external" | "review";
+ * mode brings its own DB); the external-services step only in external; the
+ * connectors (optional AI keys) and dns (preflight gate) steps appear in both. */
+export type StepKey =
+	| "basics"
+	| "database"
+	| "options"
+	| "external"
+	| "connectors"
+	| "dns"
+	| "review";
 
 /** Mutable form state for the new-site wizard (strings everywhere for inputs). */
 export interface WizardForm {
 	adminEmail: string;
+	// Optional AI connector keys — masked, secret, sent only when non-empty.
+	aiAnthropicKey: string;
+	aiGoogleKey: string;
+	aiOpenAiKey: string;
 	backupSchedule: BackupScheduleInput;
 	dbMode: DbMode;
 	domain: string;
@@ -32,6 +44,9 @@ export interface WizardForm {
 
 export const emptyForm: WizardForm = {
 	adminEmail: "",
+	aiAnthropicKey: "",
+	aiGoogleKey: "",
+	aiOpenAiKey: "",
 	backupSchedule: "daily",
 	dbMode: "dedicated",
 	domain: "",
@@ -69,9 +84,11 @@ export const backupOptions: ReadonlyArray<{
 
 /** Build the ordered step list for the given mode. The database-choice step is
  * standard-mode only; external mode already pins the DB to the operator's own
- * MariaDB via the external-services step. */
+ * MariaDB via the external-services step. The connectors (optional AI keys) step
+ * comes before the dns preflight gate, which sits last so the operator sees the
+ * gate immediately before Create. */
 export function stepsFor(mode: ProvisionMode): StepKey[] {
 	return mode === "external"
-		? ["basics", "options", "external", "review"]
-		: ["basics", "database", "options", "review"];
+		? ["basics", "options", "external", "connectors", "dns", "review"]
+		: ["basics", "database", "options", "connectors", "dns", "review"];
 }

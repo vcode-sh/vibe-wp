@@ -2,7 +2,9 @@ import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StepBasics } from "./step-basics";
+import { StepConnectors } from "./step-connectors";
 import { StepDatabase } from "./step-database";
+import { StepDns } from "./step-dns";
 import { StepExternal } from "./step-external";
 import { StepOptions } from "./step-options";
 import { StepReview } from "./step-review";
@@ -14,6 +16,8 @@ const STEP_LABELS: Record<StepKey, string> = {
 	database: "Database",
 	options: "Options",
 	external: "External services",
+	connectors: "AI keys",
+	dns: "DNS",
 	review: "Review",
 };
 
@@ -74,7 +78,26 @@ export function ProvisionWizard({ mode }: { mode: ProvisionMode }) {
 				{w.step === "external" ? (
 					<StepExternal errors={w.errors} form={w.form} set={w.set} />
 				) : null}
+				{w.step === "connectors" ? (
+					<StepConnectors form={w.form} set={w.set} />
+				) : null}
+				{w.step === "dns" ? (
+					<StepDns
+						domain={w.form.domain}
+						onResult={w.setDnsOk}
+						override={w.dnsOverride}
+						setOverride={w.setDnsOverride}
+					/>
+				) : null}
 				{w.step === "review" ? <StepReview form={w.form} mode={mode} /> : null}
+
+				{w.isLast && w.valid && !(w.dnsOk || w.dnsOverride) ? (
+					<p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+						DNS doesn't point to this server yet. Go back to the DNS step to
+						re-check, or turn on “Create anyway” to continue while it
+						propagates.
+					</p>
+				) : null}
 
 				<div className="flex items-center justify-between">
 					<Button
@@ -88,7 +111,11 @@ export function ProvisionWizard({ mode }: { mode: ProvisionMode }) {
 
 					{w.isLast ? (
 						<Button
-							disabled={!w.valid || w.submitting || w.started}
+							disabled={
+								!(w.valid && (w.dnsOk || w.dnsOverride)) ||
+								w.submitting ||
+								w.started
+							}
 							onClick={w.submit}
 						>
 							{w.submitting || w.started ? (

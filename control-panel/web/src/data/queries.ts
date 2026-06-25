@@ -85,6 +85,10 @@ export const perfAdviceQuery = (siteId: string) =>
 
 export const sharedDbStatusQuery = () => orpc.sharedDbStatus.queryOptions();
 
+/** Advisory DNS preflight for the create-site wizard (domain must be valid). */
+export const dnsPreflightQuery = (domain: string) =>
+	orpc.dnsPreflight.queryOptions({ input: { domain } });
+
 export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) =>
 	orpc.monitoringHistory.queryOptions({ input: { siteId, sinceDays } });
 

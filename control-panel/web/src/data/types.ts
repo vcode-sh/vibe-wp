@@ -7,6 +7,7 @@ export type {
 	CreateExternalInput,
 	CreateSiteInput,
 	CveRef,
+	DnsPreflightResult,
 	FlaggedPlugin,
 	HealthReport,
 	InsightsPlugin,
