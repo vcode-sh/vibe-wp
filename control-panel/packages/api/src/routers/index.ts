@@ -11,6 +11,7 @@ import { monitoringRouter } from "./monitoring";
 import { operationsRouter } from "./operations";
 import { performanceRouter } from "./performance";
 import { pluginsRouter } from "./plugins";
+import { preflightRouter } from "./preflight";
 import { provisioningRouter } from "./provisioning";
 import { securityRadarRouter } from "./security-radar";
 import { securityScoreRouter } from "./security-score";
@@ -31,6 +32,7 @@ export const appRouter = {
 	...sitesRouter,
 	...backupsRouter,
 	...operationsRouter,
+	...preflightRouter,
 	...provisioningRouter,
 	...serverRouter,
 	...stagingRouter,

@@ -18,6 +18,21 @@ function labelFor(
 	return options.find((o) => o.value === value)?.label ?? value;
 }
 
+/** Names of the AI connectors whose key was provided (never the values). */
+function connectorNames(form: WizardForm): string[] {
+	const names: string[] = [];
+	if (form.aiOpenAiKey.trim()) {
+		names.push("OpenAI");
+	}
+	if (form.aiGoogleKey.trim()) {
+		names.push("Google");
+	}
+	if (form.aiAnthropicKey.trim()) {
+		names.push("Anthropic");
+	}
+	return names;
+}
+
 /** Final step — read-only summary. Secrets are never displayed. */
 export function StepReview({
 	form,
@@ -65,6 +80,14 @@ export function StepReview({
 				<Row
 					label="Monitoring"
 					value={form.monitorEnabled ? "Enabled" : "Disabled"}
+				/>
+				<Row
+					label="AI connectors"
+					value={
+						connectorNames(form).length > 0
+							? connectorNames(form).join(", ")
+							: "None (add later in Settings)"
+					}
 				/>
 				{mode === "external" ? (
 					<>

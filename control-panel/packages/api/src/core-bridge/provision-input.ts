@@ -59,9 +59,11 @@ export function validateDomainValue(domain: string): string | null {
 	return null;
 }
 
-const domainSchema = z.string().refine((v) => validateDomainValue(v) === null, {
-	message: "Enter a real domain with DNS pointing to this VPS.",
-});
+export const domainSchema = z
+	.string()
+	.refine((v) => validateDomainValue(v) === null, {
+		message: "Enter a real domain with DNS pointing to this VPS.",
+	});
 
 const adminEmailSchema = z
 	.string()
@@ -89,9 +91,23 @@ export const performancePresetSchema = z.enum([
 ]);
 export const backupScheduleSchema = z.enum(["off", "daily", "weekly"]);
 
-/** Base new-site fields shared by createSite + createExternal. */
+/**
+ * Optional AI connector key — "non-empty if provided" and nothing more (per
+ * spec). The value rides the InstallerState object on STDIN; it is never placed
+ * on argv or logged. Trimmed so accidental whitespace doesn't become a "secret".
+ * The generous max guards against a paste error without rejecting real keys.
+ */
+const aiKeySchema = z.string().trim().min(1).max(400).optional();
+
+/** Base new-site fields shared by createSite + createExternal + createSharedDb. */
 const createSiteBase = z.object({
 	adminEmail: adminEmailSchema,
+	// AI connector keys are OPTIONAL on every create mode. They flow to the site
+	// env (OPENAI_API_KEY / GOOGLE_API_KEY / ANTHROPIC_API_KEY) via InstallerState
+	// → STDIN. Declared OUTSIDE the staging superRefine so all modes inherit them.
+	aiAnthropicKey: aiKeySchema,
+	aiGoogleKey: aiKeySchema,
+	aiOpenAiKey: aiKeySchema,
 	backupSchedule: backupScheduleSchema.optional(),
 	domain: domainSchema,
 	monitorEnabled: z.boolean().optional(),

@@ -64,6 +64,51 @@ describe("applyNewSiteOverrides", () => {
 		expect(next.stagingEnabled).toBe(false);
 		expect(next.stagingDomain).toBe("stage.shop.io");
 	});
+
+	it("threads optional AI keys into the state (STDIN-bound secrets)", () => {
+		const next = applyNewSiteOverrides(base(), {
+			adminEmail: "owner@real.dev",
+			domain: "shop.io",
+			stagingEnabled: false,
+			aiOpenAiKey: "sk-openai-test",
+			aiGoogleKey: "google-test-key",
+			aiAnthropicKey: "anthropic-test-key",
+		});
+		expect(next.aiOpenAiKey).toBe("sk-openai-test");
+		expect(next.aiGoogleKey).toBe("google-test-key");
+		expect(next.aiAnthropicKey).toBe("anthropic-test-key");
+	});
+
+	it("keeps installer empty-string defaults when AI keys are omitted", () => {
+		const next = applyNewSiteOverrides(base(), {
+			adminEmail: "owner@real.dev",
+			domain: "shop.io",
+			stagingEnabled: false,
+		});
+		// Base seed had no AI keys → never clobber with undefined/empty.
+		expect(next.aiOpenAiKey).toBeUndefined();
+		expect(next.aiGoogleKey).toBeUndefined();
+		expect(next.aiAnthropicKey).toBeUndefined();
+	});
+
+	it("does NOT override a base key when only some keys are provided", () => {
+		const seeded: InstallerStateLike = {
+			...base(),
+			aiOpenAiKey: "",
+			aiGoogleKey: "",
+			aiAnthropicKey: "",
+		};
+		const next = applyNewSiteOverrides(seeded, {
+			adminEmail: "owner@real.dev",
+			domain: "shop.io",
+			stagingEnabled: false,
+			aiOpenAiKey: "sk-only-openai",
+		});
+		expect(next.aiOpenAiKey).toBe("sk-only-openai");
+		// Untouched keys keep the installer's "" default — never undefined.
+		expect(next.aiGoogleKey).toBe("");
+		expect(next.aiAnthropicKey).toBe("");
+	});
 });
 
 describe("applyExternalOverrides", () => {

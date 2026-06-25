@@ -295,6 +295,14 @@ export type BackupScheduleInput = "off" | "daily" | "weekly";
 /** Shared, validated shape for the new-site + external-services wizards. */
 export interface CreateSiteInput {
 	adminEmail: string;
+	/**
+	 * Optional AI connector API keys. Secrets — sent over TLS, written only to the
+	 * site's env file, never returned by any procedure. Omit to add them later in
+	 * the site's Settings.
+	 */
+	aiAnthropicKey?: string;
+	aiGoogleKey?: string;
+	aiOpenAiKey?: string;
 	backupSchedule?: BackupScheduleInput;
 	domain: string;
 	monitorEnabled?: boolean;
@@ -323,6 +331,25 @@ export interface AttachStagingInput {
 export interface RemoveSiteInput {
 	purge: boolean;
 	siteId: string;
+}
+
+/**
+ * Result of a DNS preflight check for the create-site wizard. `ok` is true only
+ * when the domain's A record(s) include this VPS's detected public IP. When the
+ * server's own IP can't be detected (egress blocked), `ok` is false but the
+ * wizard treats it as a soft warning, not a hard block — `expectedIp` is null
+ * and the copy in `message` says so.
+ */
+export interface DnsPreflightResult {
+	domain: string;
+	/** This VPS's detected public IP, or null when detection failed. */
+	expectedIp: string | null;
+	/** Human-friendly, idiot-proof one-liner for the wizard to show verbatim. */
+	message: string;
+	/** True only when a resolved A record matches `expectedIp`. */
+	ok: boolean;
+	/** First resolved A record (for display), or null when DNS didn't resolve. */
+	resolvedIp: string | null;
 }
 
 export interface InsightsPlugin {

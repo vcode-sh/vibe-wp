@@ -17,6 +17,11 @@ import {
 /** Trim and drop empty optional fields so the server sees only real values. */
 function toCreateSiteInput(form: WizardForm): CreateSiteInput {
 	const title = form.siteTitle.trim();
+	// AI keys are optional + secret: send each only when non-empty (trimmed), so
+	// the server never sees an empty "secret". They ride STDIN to the site env.
+	const openAi = form.aiOpenAiKey.trim();
+	const google = form.aiGoogleKey.trim();
+	const anthropic = form.aiAnthropicKey.trim();
 	return {
 		adminEmail: form.adminEmail.trim(),
 		backupSchedule: form.backupSchedule,
@@ -24,6 +29,9 @@ function toCreateSiteInput(form: WizardForm): CreateSiteInput {
 		monitorEnabled: form.monitorEnabled,
 		performancePreset: form.performancePreset,
 		...(title ? { siteTitle: title } : {}),
+		...(openAi ? { aiOpenAiKey: openAi } : {}),
+		...(google ? { aiGoogleKey: google } : {}),
+		...(anthropic ? { aiAnthropicKey: anthropic } : {}),
 		stagingEnabled: form.stagingEnabled,
 		...(form.stagingEnabled
 			? { stagingDomain: form.stagingDomain.trim().toLowerCase() }
@@ -53,6 +61,11 @@ export function useProvisionWizard(mode: ProvisionMode) {
 	const [form, setForm] = useState<WizardForm>(emptyForm);
 	const [index, setIndex] = useState(0);
 	const [errors, setErrors] = useState<Errors>({});
+	// DNS preflight gate: dnsOk reflects the latest check for the current domain;
+	// dnsOverride is the explicit "Create anyway" escape hatch. The Create button
+	// is blocked until DNS resolves here OR the operator overrides.
+	const [dnsOk, setDnsOk] = useState(false);
+	const [dnsOverride, setDnsOverride] = useState(false);
 	// Synthetic siteId for the ops tray: the real site does not exist yet, so we
 	// key the provision job on the domain we are about to create. Stored in
 	// state so the watcher effect re-runs and the UI reflects the in-flight job.
@@ -75,6 +88,12 @@ export function useProvisionWizard(mode: ProvisionMode) {
 		<K extends keyof WizardForm>(key: K, value: WizardForm[K]) => {
 			setForm((prev) => ({ ...prev, [key]: value }));
 			setErrors((prev) => ({ ...prev, [key]: undefined }));
+			// Changing the domain invalidates a prior DNS check + override so a
+			// stale OK from an old domain can never slip past the gate.
+			if (key === "domain") {
+				setDnsOk(false);
+				setDnsOverride(false);
+			}
 		},
 		[]
 	);
@@ -100,6 +119,14 @@ export function useProvisionWizard(mode: ProvisionMode) {
 	const submit = useCallback(async () => {
 		if (!isFormValid(form, mode)) {
 			toast.error("Please fix the highlighted fields.");
+			return;
+		}
+		// Defense in depth behind the disabled button: never create while DNS
+		// doesn't point here unless the operator explicitly chose "Create anyway".
+		if (!(dnsOk || dnsOverride)) {
+			toast.error(
+				"DNS doesn't point to this server yet. Re-check, or turn on “Create anyway”."
+			);
 			return;
 		}
 		const domain = form.domain.trim().toLowerCase();
@@ -128,7 +155,16 @@ export function useProvisionWizard(mode: ProvisionMode) {
 				err instanceof Error ? err.message : "Failed to start provisioning.";
 			toast.error(message);
 		}
-	}, [createExternal, createSharedDb, createSite, form, mode, start]);
+	}, [
+		createExternal,
+		createSharedDb,
+		createSite,
+		dnsOk,
+		dnsOverride,
+		form,
+		mode,
+		start,
+	]);
 
 	// Watch the tracked provision job's TERMINAL status. We read the current
 	// status (not a transition) so there is no race if the job finishes before
@@ -158,12 +194,16 @@ export function useProvisionWizard(mode: ProvisionMode) {
 
 	return {
 		back,
+		dnsOk,
+		dnsOverride,
 		errors,
 		form,
 		index,
 		isLast,
 		next,
 		set,
+		setDnsOk,
+		setDnsOverride,
 		step,
 		steps,
 		submit,
