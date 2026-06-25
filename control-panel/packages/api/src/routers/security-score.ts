@@ -11,7 +11,7 @@ import {
 } from "../core-bridge/security-score";
 import { applySecurityFix } from "../core-bridge/site-config";
 import { findSite } from "../core-bridge/sites";
-import { operatorProcedure } from "../procedures";
+import { adminProcedure, operatorProcedure } from "../procedures";
 
 /**
  * Per-site security score — composes the Insights mu-plugin posture (WordPress)
@@ -61,13 +61,15 @@ export const securityScoreRouter = {
 	 * the fix is inert until then. The score reflects the change on the NEXT
 	 * insights collection after the restart.
 	 *
-	 * Role: operatorProcedure per the feature scope (these are pure hardening
-	 * toggles that only ever tighten security and can never leak secrets). NOTE the
-	 * other siteConfigApply callers (siteDebugSet/siteFastcgiCacheSet/sitePhpImageSet)
-	 * are adminProcedure — this divergence is intentional but a human should confirm
-	 * the RBAC choice (see the feature's OPEN DECISION).
+	 * Role: adminProcedure, matching every other siteConfigApply caller
+	 * (siteDebugSet / siteFastcgiCacheSet / sitePhpImageSet are all admin). RBAC
+	 * decision: although a hardening toggle only ever tightens posture, it writes
+	 * the same root-owned site env file and triggers a visitor-facing container
+	 * restart as those mutations, so it belongs at the same privilege tier. Keeping
+	 * all env-file writers at one tier removes a confusing "operators can harden but
+	 * not configure" split and the surprise of an operator-triggered restart.
 	 */
-	applySecurityFix: operatorProcedure
+	applySecurityFix: adminProcedure
 		.input(
 			z.object({
 				siteId: z.string().min(1),
