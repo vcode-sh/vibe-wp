@@ -44,7 +44,7 @@ Grounded in a 2026-06-23 research pass (full dossier in this session's history).
 ### High-leverage extras (ride existing signal)
 - **A. Staging clone + safe "push to live"** (S–M) — extends existing staging refresh/promote with the safe-update backup/rollback pattern.
 - **B. Uptime + cert-expiry + DNS monitoring with history** (S) — `monitor --json` + `notify-config` already collect/deliver; add a status-page view + cert-days/DNS-drift tiles.
-- **C. Per-site security score + one-click Secure** (M) — `harden`/`security-status` + Insights signals → a score + fix buttons (XML-RPC, file-edit, version hiding, vuln plugins).
+- **C. Per-site security score + one-click Secure** (M) 🚧 IN PROGRESS (branch `control-panel-security-score`) — `harden`/`security-status` + Insights signals → a score + fix buttons. **Done:** `computeSecurityScore` core (pure, 8 tests — graded 0-100 + prioritized fixable findings: debug-display, outdated core/plugins, XML-RPC, file-edit, Site Health, host firewall/fail2ban/auto-updates) + `siteSecurityScore` procedure; per-site Security UI card (building). **Remaining:** the two NEW fix ops — `disableXmlRpc` (a `VIBE_WP_DISABLE_XMLRPC` filter in the `vibe-wp-environment` MU plugin ×2 mirror) + `disableFileEdit` (a `fileEdit`→`DISALLOW_FILE_EDIT` site-config key; the WP image already honors the env) — plus their VPS validation. Other fixes (debug/core/plugins/host) route to existing actions.
 - **D. Backup browser + granular restore + verified-offsite badge** (S–M) — browse a backup, restore just a file/table; surface "last offsite backup verified N h ago".
 - **E. Vulnerability + abandoned-plugin radar with quarantine** (M) — Insights + host-fetched vuln feed → flag CVEs/abandoned, offer safe-update or deactivate.
 
