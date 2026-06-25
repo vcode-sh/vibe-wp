@@ -1,0 +1,514 @@
+#!/bin/sh
+# migrate-to-shared-db <siteDir> [<env>=prod]
+#
+# Migrate a per-container-DB WordPress site to the shared vibe-wp-shared-db MariaDB.
+# REVERSIBLE: on any failure in steps 5-9 the script rolls back to the per-container
+# stack with no data loss (the source DB volume is NEVER deleted).
+#
+# Run as root. Works from any directory (uses absolute paths throughout).
+#
+# SF-8: verify uses table-set + per-table row count; any mismatch -> ROLLBACK.
+# MF-1: passwords never reach stderr or stdout. All root SQL off-ps via the
+#        marker-split protocol (mirrors sdb_mariadb_root in lib/shared-db.sh).
+# MF-2/MF-4: randomised in-container temp paths, umask 077, cleaned on exit.
+set -eu
+export LC_ALL=C
+
+VIBE_BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+. "${VIBE_BIN_DIR}/lib/shared-db.sh"
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+die() {
+  echo "migrate-to-shared-db: ERROR: $*" >&2
+  exit 1
+}
+
+log() {
+  echo "migrate-to-shared-db: $*"
+}
+
+warn() {
+  echo "migrate-to-shared-db: WARNING: $*" >&2
+}
+
+# Read one key from an env file without sourcing it (no side-effects, no code
+# execution). Strips surrounding single or double quotes.
+env_file_value() {
+  file="$1"; key="$2"
+  [ -f "$file" ] || { printf ''; return 0; }
+  line="$(grep -m1 "^${key}=" "$file" 2>/dev/null || true)"
+  val="${line#*=}"
+  case "$val" in
+    \"*\") val="${val#\"}"; val="${val%\"}";; \
+    \'*\') val="${val#\'}"; val="${val%\'}";;
+  esac
+  printf '%s' "$val"
+}
+
+# ---------------------------------------------------------------------------
+# Args
+# ---------------------------------------------------------------------------
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage:
+  bin/migrate-to-shared-db <siteDir> [<env>=prod]
+
+  <siteDir>  Absolute path to the site install dir (e.g. /opt/vibe-wp/mysite).
+             Must contain bin/vibe and env/<env>.env.
+  <env>      Compose environment to migrate (default: prod).
+
+The site must currently be running in per-container-DB mode (compose.yaml or
+compose.prod.yaml with a local `db` service).  The shared vibe-wp-shared-db
+container must be initialized and healthy (bin/shared-db-status).
+
+On SUCCESS: the site runs in shared-db mode; the old DB volume is preserved
+(tagged, not deleted) — an operator must manually prune it after 7 days.
+
+On FAILURE (steps 5-9): full rollback — old env restored, per-container stack
+restarted, half-created shared DB deprovisioned.  No data lost.
+USAGE
+  exit 1
+}
+
+[ "$#" -ge 1 ] || usage
+SITE_DIR="$1"
+SITE_ENV="${2:-prod}"
+
+# Validate site dir is absolute and no '..'.
+case "$SITE_DIR" in /*) : ;; *) die "siteDir must be an absolute path" ;; esac
+case "$SITE_DIR" in *..*) die "siteDir must not contain '..'" ;; esac
+[ -d "$SITE_DIR" ] || die "siteDir does not exist: $SITE_DIR"
+[ -x "$SITE_DIR/bin/vibe" ] || die "siteDir has no bin/vibe entrypoint: $SITE_DIR"
+
+# Validate env token.
+case "$SITE_ENV" in
+  local|stage|prod|external) : ;;
+  *) die "invalid env '$SITE_ENV' — must be local|stage|prod|external" ;;
+esac
+
+# Must run as root.
+[ "$(id -u)" = "0" ] || die "must be run as root"
+
+# Resolve the env file the site uses for this env.
+case "$SITE_ENV" in
+  local)    SITE_ENV_FILE="$SITE_DIR/.env" ;;
+  prod)     SITE_ENV_FILE="$SITE_DIR/env/prod.env" ;;
+  stage)    SITE_ENV_FILE="$SITE_DIR/env/stage.env" ;;
+  external) SITE_ENV_FILE="$SITE_DIR/env/external.env" ;;
+esac
+
+[ -f "$SITE_ENV_FILE" ] \
+  || die "env file not found for env '$SITE_ENV': $SITE_ENV_FILE"
+
+# The output shared-db env file lives in the site's env/ directory.
+SITE_SHARED_ENV="$SITE_DIR/env/shared-db.env"
+
+# Refuse if already on shared-db.
+if [ -f "$SITE_SHARED_ENV" ]; then
+  die "site already has env/shared-db.env — may already be migrated. Remove it manually if you want to re-migrate."
+fi
+
+# Derive the slug from COMPOSE_PROJECT_NAME (strips vibe-wp- prefix and
+# -prod/-stage suffixes, matching the siteinfo logic in vibe-panel-run).
+COMPOSE_PROJECT_NAME="$(env_file_value "$SITE_ENV_FILE" COMPOSE_PROJECT_NAME)"
+[ -n "$COMPOSE_PROJECT_NAME" ] \
+  || die "COMPOSE_PROJECT_NAME not found in $SITE_ENV_FILE"
+
+# slug: strip leading 'vibe-wp-' and trailing '-prod'/'-stage'.
+SLUG="${COMPOSE_PROJECT_NAME#vibe-wp-}"
+SLUG="${SLUG%-prod}"
+SLUG="${SLUG%-stage}"
+[ -n "$SLUG" ] || die "could not derive slug from COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
+
+# Validate the slug through the lib (dies on any invalid character).
+SHARED_IDENT="$(sdb_validate_slug "$SLUG")"   # vibe_<slug>
+log "site slug: $SLUG  ->  shared DB/user identifier: $SHARED_IDENT"
+
+# ---------------------------------------------------------------------------
+# STEP 1: Preflight — shared container healthy, per-container db service exists
+# ---------------------------------------------------------------------------
+
+log "Step 1: preflight checks ..."
+
+# shared-db-status is the authoritative healthiness check.
+SHARED_STATUS="$("${VIBE_BIN_DIR}/shared-db-status" 2>/dev/null || true)"
+healthy="$(printf '%s' "$SHARED_STATUS" | grep -o '"healthy":[^,}]*' | sed 's/.*: *//' | tr -d ' ')"
+if [ "$healthy" != "true" ]; then
+  die "shared vibe-wp-shared-db container is not healthy. Run bin/shared-db-status for details."
+fi
+log "shared-db container: healthy."
+
+# Confirm the site's current compose has a 'db' service (per-container mode).
+# We run `bin/vibe <env> compose config --services` from the site dir.
+SRC_SERVICES="$(
+  VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+    "$SITE_DIR/bin/vibe" "$SITE_ENV" compose config --services 2>/dev/null || true
+)"
+printf '%s\n' "$SRC_SERVICES" | grep -qx 'db' \
+  || die "site's '$SITE_ENV' compose config has no 'db' service — is it already external/shared-db?"
+
+# Extract per-container DB credentials from the site's env file.
+SRC_DB_NAME="$(env_file_value "$SITE_ENV_FILE" MARIADB_DATABASE)"
+SRC_DB_USER="$(env_file_value "$SITE_ENV_FILE" MARIADB_USER)"
+SRC_DB_PASS="$(env_file_value "$SITE_ENV_FILE" MARIADB_PASSWORD)"
+[ -n "$SRC_DB_NAME" ] || die "MARIADB_DATABASE not found in $SITE_ENV_FILE"
+[ -n "$SRC_DB_USER" ] || die "MARIADB_USER not found in $SITE_ENV_FILE"
+[ -n "$SRC_DB_PASS" ] || die "MARIADB_PASSWORD not found in $SITE_ENV_FILE"
+
+log "source DB: name=$SRC_DB_NAME user=$SRC_DB_USER (password read from env file)"
+
+# The Docker volume name for the per-container DB (Compose convention:
+# <project>_<volume>). The Compose project name comes from COMPOSE_PROJECT_NAME.
+# The standard per-container compose.yaml names the volume 'db_data'.
+SRC_VOLUME="${COMPOSE_PROJECT_NAME}_db_data"
+log "source DB volume (will be preserved, NOT deleted): $SRC_VOLUME"
+
+# ---------------------------------------------------------------------------
+# Rollback state tracking
+# ---------------------------------------------------------------------------
+
+NEW_PW=""            # captured from db-provision; never logged
+
+rollback() {
+  reason="$1"
+  log ""
+  log "*** ROLLBACK TRIGGERED: $reason ***"
+  log "Restoring per-container stack ..."
+
+  # 1. Restore the old env file (atomically — the backup is at SITE_ENV_FILE.mig-bak).
+  if [ -f "${SITE_ENV_FILE}.mig-bak" ]; then
+    cp "${SITE_ENV_FILE}.mig-bak" "$SITE_ENV_FILE"
+    log "  env file restored from backup."
+  fi
+  # 2. Remove the half-written shared-db env if it was created.
+  if [ -f "$SITE_SHARED_ENV" ]; then
+    rm -f "$SITE_SHARED_ENV"
+    log "  partial shared-db env removed."
+  fi
+  # 3. Bring the per-container stack back up.
+  log "  restarting per-container stack ($SITE_ENV) ..."
+  VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+    "$SITE_DIR/bin/vibe" "$SITE_ENV" up >/dev/null 2>&1 || true
+
+  # 4. Maintenance mode off — enable the site again.
+  log "  disabling maintenance mode ..."
+  VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+    "$SITE_DIR/bin/vibe" "$SITE_ENV" compose exec -T wordpress \
+      sh -c 'rm -f /var/www/html/.maintenance' >/dev/null 2>&1 || true
+
+  # 5. Deprovision the half-created shared DB (safe to call even if provision
+  #    didn't complete — db-deprovision is a no-op when the DB/user don't exist).
+  log "  deprovisioning shared DB ($SHARED_IDENT) ..."
+  "${VIBE_BIN_DIR}/db-deprovision" "$SLUG" >/dev/null 2>&1 || true
+
+  log ""
+  log "ROLLBACK COMPLETE. The per-container stack is back up. No data was lost."
+  log "(The per-container DB volume '$SRC_VOLUME' was never deleted.)"
+  log ""
+  log "Reason for rollback: $reason"
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# STEP 2: Maintenance mode (stop write traffic)
+# ---------------------------------------------------------------------------
+
+log "Step 2: enabling WordPress maintenance mode ..."
+VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+  "$SITE_DIR/bin/vibe" "$SITE_ENV" compose up -d wordpress >/dev/null 2>&1 || true
+VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+  "$SITE_DIR/bin/vibe" "$SITE_ENV" compose exec -T wordpress \
+    sh -c 'echo "<?php \$upgrading = $(date +%s);" > /var/www/html/.maintenance' \
+  >/dev/null 2>&1 || warn "could not write .maintenance file (continuing)"
+
+# From this point on any failure triggers rollback.
+
+# ---------------------------------------------------------------------------
+# STEP 3: Dump the per-container database
+# ---------------------------------------------------------------------------
+
+log "Step 3: dumping per-container database ($SRC_DB_NAME) ..."
+
+# Ensure the db container is running.
+VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+  "$SITE_DIR/bin/vibe" "$SITE_ENV" compose up -d db >/dev/null 2>&1
+
+# Temp files for the dump. Root-owned, 0600. Both cleaned up on any exit.
+# Declare both before the trap so the trap can reference them safely.
+DUMP_SQL_TMP="$(mktemp /tmp/vibe-mig-dump.XXXXXX.sql)"
+DUMP_TMP="$(mktemp /tmp/vibe-mig-dump.XXXXXX.sql.gz)"
+chmod 600 "$DUMP_SQL_TMP" "$DUMP_TMP"
+trap 'rm -f "$DUMP_SQL_TMP" "$DUMP_TMP" 2>/dev/null; true' EXIT INT TERM
+
+# Dump via the per-container db service (mirrors bin/backup pattern exactly:
+# exec -T db sh -c '... -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"').
+# The credentials come from the container's own env (not from host argv).
+# Use a temp uncompressed file first to capture the exit code from mariadb-dump
+# independently from gzip (POSIX sh has no pipefail).
+
+VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+  "$SITE_DIR/bin/vibe" "$SITE_ENV" compose exec -T db \
+    sh -c 'mariadb-dump --single-transaction --routines --triggers \
+             -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' \
+    > "$DUMP_SQL_TMP" \
+  || { rollback "mariadb-dump from per-container db failed"; }
+
+# Non-empty check: a valid dump always contains at least the MariaDB header.
+DUMP_SQL_BYTES="$(wc -c < "$DUMP_SQL_TMP")"
+[ "$DUMP_SQL_BYTES" -gt 0 ] \
+  || { rollback "dump file is empty (0 bytes) — mariadb-dump produced no output"; }
+
+# Now compress. The SQL tmp is cleaned up by the EXIT trap after this.
+gzip -c "$DUMP_SQL_TMP" > "$DUMP_TMP" \
+  || { rollback "gzip compression of dump failed"; }
+
+DUMP_BYTES="$(wc -c < "$DUMP_TMP")"
+log "  dump written: ${DUMP_BYTES} bytes compressed (${DUMP_SQL_BYTES} bytes raw)"
+
+# ---------------------------------------------------------------------------
+# STEP 4: Provision per-site DB on the shared server
+# ---------------------------------------------------------------------------
+
+log "Step 4: provisioning shared DB for slug '$SLUG' ..."
+
+# db-provision prints EXACTLY the 32-hex password on stdout (its output contract).
+# Capture it without logging it (MF-1).
+NEW_PW="$("${VIBE_BIN_DIR}/db-provision" "$SLUG")" \
+  || { rollback "db-provision $SLUG failed"; }
+[ -n "$NEW_PW" ] \
+  || { rollback "db-provision returned an empty password"; }
+log "  shared DB provisioned: $SHARED_IDENT (password captured, not logged)"
+
+# ---------------------------------------------------------------------------
+# STEP 5: Import the dump into the shared server's DB
+# ---------------------------------------------------------------------------
+
+log "Step 5: importing dump into shared DB ($SHARED_IDENT) ..."
+
+# Import via the SAME marker-split / in-container mktemp mechanism as
+# sdb_mariadb_root (MF-2/MF-4: cred never in argv or env MYSQL_PWD).
+# We pipe the dump as the SQL payload; the cred section is split by a marker.
+rpw="$(sdb_root_password)"
+gunzip -c "$DUMP_TMP" | (
+  { printf '[client]\npassword=%s\n__VIBE_IMPORT_BEGIN__\n' "$rpw"; cat; } \
+  | docker compose -f "${SHARED_DB_DIR}/compose.yaml" --env-file "$SHARED_DB_ENV" \
+      exec -T db sh -c "
+        umask 077; cf=\"\$(mktemp)\"
+        while IFS= read -r l; do
+          [ \"\$l\" = \"__VIBE_IMPORT_BEGIN__\" ] && break
+          printf '%s\n' \"\$l\" >> \"\$cf\"
+        done
+        mariadb --defaults-extra-file=\"\$cf\" -u root \"${SHARED_IDENT}\"
+        rc=\$?; rm -f \"\$cf\"; exit \$rc
+      " 2>&1
+) || {
+  unset rpw
+  rollback "import into shared DB $SHARED_IDENT failed (see container logs)"
+}
+unset rpw
+log "  import complete."
+
+# ---------------------------------------------------------------------------
+# STEP 6: VERIFY — table set + per-table row counts (SF-8)
+# ---------------------------------------------------------------------------
+
+log "Step 6: verifying table set and row counts (SF-8) ..."
+
+# --- Source (per-container): table list ---
+SRC_TABLES="$(
+  VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+    "$SITE_DIR/bin/vibe" "$SITE_ENV" compose exec -T db \
+      sh -c 'mariadb --batch --skip-column-names \
+               -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" \
+               -e "SELECT table_name FROM information_schema.tables \
+                   WHERE table_schema=DATABASE() ORDER BY table_name;" \
+               "$MARIADB_DATABASE"' 2>/dev/null
+)" || { rollback "could not query table list from source per-container DB"; }
+
+# --- Destination (shared): table list ---
+DST_TABLES="$(
+  sdb_mariadb_root "SELECT table_name FROM information_schema.tables \
+    WHERE table_schema='${SHARED_IDENT}' ORDER BY table_name;" 2>/dev/null
+)" || { rollback "could not query table list from shared DB $SHARED_IDENT"; }
+
+# Normalise (trim whitespace, skip blanks).
+src_sorted="$(printf '%s\n' "$SRC_TABLES" | sed 's/[[:space:]]//g' | grep -v '^$' | sort)"
+dst_sorted="$(printf '%s\n' "$DST_TABLES" | sed 's/[[:space:]]//g' | grep -v '^$' | sort)"
+
+if [ "$src_sorted" != "$dst_sorted" ]; then
+  rollback "table set mismatch between source and shared DB.
+  Source tables : $(printf '%s' "$src_sorted" | tr '\n' ' ')
+  Shared tables : $(printf '%s' "$dst_sorted" | tr '\n' ' ')"
+fi
+log "  table set matches: $(printf '%s\n' "$src_sorted" | wc -l | tr -d ' ') tables."
+
+# --- Per-table row count comparison ---
+mismatch_tables=""
+while IFS= read -r tbl; do
+  [ -n "$tbl" ] || continue
+
+  src_cnt="$(
+    VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+      "$SITE_DIR/bin/vibe" "$SITE_ENV" compose exec -T db \
+        sh -c "mariadb --batch --skip-column-names \
+                 -u\"\$MARIADB_USER\" -p\"\$MARIADB_PASSWORD\" \
+                 -e \"SELECT COUNT(*) FROM \\\`${tbl}\\\`;\" \
+                 \"\$MARIADB_DATABASE\"" 2>/dev/null \
+      | tr -d '[:space:]'
+  )" || { rollback "row count query failed on source table: $tbl"; }
+
+  dst_cnt="$(
+    sdb_mariadb_root "SELECT COUNT(*) FROM \`${SHARED_IDENT}\`.\`${tbl}\`;" 2>/dev/null \
+      | tr -d '[:space:]'
+  )" || { rollback "row count query failed on shared table: $SHARED_IDENT.$tbl"; }
+
+  if [ "$src_cnt" != "$dst_cnt" ]; then
+    mismatch_tables="${mismatch_tables} ${tbl}(src=${src_cnt},dst=${dst_cnt})"
+  else
+    log "  table $tbl: $src_cnt rows OK"
+  fi
+done << _TABLES_
+$src_sorted
+_TABLES_
+
+if [ -n "$mismatch_tables" ]; then
+  rollback "row count mismatch on tables:$mismatch_tables"
+fi
+log "  all per-table row counts match."
+
+# ---------------------------------------------------------------------------
+# STEP 7: Write the site's new env/shared-db.env
+# ---------------------------------------------------------------------------
+
+log "Step 7: writing new env/shared-db.env (preserving salts, Redis, WP settings) ..."
+
+# Back up the current env file before any modification.
+cp "$SITE_ENV_FILE" "${SITE_ENV_FILE}.mig-bak"
+log "  backed up $SITE_ENV_FILE -> ${SITE_ENV_FILE}.mig-bak"
+
+# Build the new shared-db env by starting from the current env file, then
+# overriding/injecting the DB keys and the site's existing salts/Redis/WP
+# settings are preserved by keeping the rest of the file intact.
+#
+# The shared-db env file is the ONLY env file for the shared-db compose mode
+# (compose.shared-db.yaml / bin/vibe shared-db) — it must be self-contained.
+#
+# Strategy: copy the current prod.env as the base, then sed-replace the four
+# DB host/name/user/password lines with the new shared values.
+# A temp file (umask 077, then chmod 600) avoids a world-readable window.
+umask 077
+SHARED_ENV_TMP="$(mktemp "$SITE_DIR/env/.shared-db.env.XXXXXX")"
+chmod 600 "$SHARED_ENV_TMP"
+chown root:root "$SHARED_ENV_TMP"
+
+# Copy the source env file, stripping the per-container DB and mariadb lines
+# that are specific to the local db service (MARIADB_*, WORDPRESS_DB_*) and
+# re-injecting with shared-db values.
+grep -v '^\(MARIADB_DATABASE=\|MARIADB_USER=\|MARIADB_PASSWORD=\|MARIADB_ROOT_PASSWORD=\|MARIADB_AUTO_UPGRADE=\|MARIADB_IMAGE=\|MARIADB_RUNTIME_IMAGE=\|WORDPRESS_DB_HOST=\|WORDPRESS_DB_NAME=\|WORDPRESS_DB_USER=\|WORDPRESS_DB_PASSWORD=\)' \
+  "$SITE_ENV_FILE" > "$SHARED_ENV_TMP" || true
+
+# Inject shared-db connection values.
+# WORDPRESS_DB_HOST=db resolves to the shared container's `db` service alias
+# on the vibe-wp-shared-db network (as documented in compose.shared-db.yaml).
+cat >> "$SHARED_ENV_TMP" << _SHARED_DB_VARS_
+# --- Shared MariaDB (migrated from per-container DB by migrate-to-shared-db) ---
+WORDPRESS_DB_HOST=db
+WORDPRESS_DB_NAME=${SHARED_IDENT}
+WORDPRESS_DB_USER=${SHARED_IDENT}
+WORDPRESS_DB_PASSWORD=${NEW_PW}
+_SHARED_DB_VARS_
+
+# Atomically move the temp into place.
+mv "$SHARED_ENV_TMP" "$SITE_SHARED_ENV"
+chmod 600 "$SITE_SHARED_ENV"
+chown root:root "$SITE_SHARED_ENV"
+log "  written: $SITE_SHARED_ENV (0600 root-only)"
+
+# Clear the NEW_PW from memory now that it's written to disk.
+unset NEW_PW
+
+# ---------------------------------------------------------------------------
+# STEP 8: Swap to shared-db mode (validate config, down per-container, up shared)
+# ---------------------------------------------------------------------------
+
+log "Step 8: swapping to shared-db compose mode ..."
+
+# Validate the shared-db compose config BEFORE touching the running stack.
+VIBE_ENV="shared-db" VIBE_ENV_FILE="$SITE_SHARED_ENV" \
+  "$SITE_DIR/bin/vibe" "shared-db" config >/dev/null 2>&1 \
+  || { rollback "compose.shared-db.yaml config validation failed for this site"; }
+log "  compose.shared-db.yaml config: valid."
+
+# Down the per-container stack (stop and remove the per-container containers).
+# We do NOT pass --volumes — the db_data volume is preserved (tagged below).
+log "  stopping per-container stack ($SITE_ENV) ..."
+VIBE_ENV="$SITE_ENV" VIBE_ENV_FILE="$SITE_ENV_FILE" \
+  "$SITE_DIR/bin/vibe" "$SITE_ENV" down >/dev/null 2>&1 \
+  || { rollback "could not stop per-container stack"; }
+
+# Bring up the shared-db stack.
+log "  starting shared-db stack ..."
+VIBE_ENV="shared-db" VIBE_ENV_FILE="$SITE_SHARED_ENV" \
+  "$SITE_DIR/bin/vibe" "shared-db" up >/dev/null 2>&1 \
+  || { rollback "could not start shared-db stack"; }
+log "  shared-db stack up."
+
+# ---------------------------------------------------------------------------
+# STEP 9: Maintenance off + smoke test
+# ---------------------------------------------------------------------------
+
+log "Step 9: disabling maintenance mode and running smoke test ..."
+
+# Remove the .maintenance file.
+VIBE_ENV="shared-db" VIBE_ENV_FILE="$SITE_SHARED_ENV" \
+  "$SITE_DIR/bin/vibe" "shared-db" compose exec -T wordpress \
+    sh -c 'rm -f /var/www/html/.maintenance' >/dev/null 2>&1 || true
+log "  maintenance mode disabled."
+
+# Smoke test.
+VIBE_ENV="shared-db" VIBE_ENV_FILE="$SITE_SHARED_ENV" \
+  "$SITE_DIR/bin/vibe" "shared-db" smoke \
+  || { rollback "smoke test failed after switching to shared-db mode"; }
+log "  smoke test passed."
+
+# ---------------------------------------------------------------------------
+# STEP 10: Tag the old per-container DB volume (do NOT delete it)
+# ---------------------------------------------------------------------------
+
+log "Step 10: tagging old per-container DB volume for 7-day operator prune ..."
+# Compute prune timestamp: try GNU date (-d), then BSD date (-v), then fallback.
+_prune_ts="$(date -u -d '+7 days' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+  || date -u -v+7d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+  || echo 'check-manually')"
+PRUNE_LABEL="vibe.mig.prune-after=${_prune_ts}"
+
+docker volume inspect "$SRC_VOLUME" >/dev/null 2>&1 \
+  && docker volume update --label "$PRUNE_LABEL" "$SRC_VOLUME" >/dev/null 2>&1 \
+  && log "  volume '$SRC_VOLUME' labelled: $PRUNE_LABEL" \
+  || warn "could not label volume '$SRC_VOLUME' (it may not exist or docker version may not support 'volume update'). Prune it manually after 7 days."
+
+# ---------------------------------------------------------------------------
+# SUCCESS
+# ---------------------------------------------------------------------------
+
+log ""
+log "============================================================"
+log "MIGRATION COMPLETE for slug '$SLUG'"
+log "============================================================"
+log ""
+log "  Site dir    : $SITE_DIR"
+log "  Old env     : $SITE_ENV_FILE  (backup: ${SITE_ENV_FILE}.mig-bak)"
+log "  New env     : $SITE_SHARED_ENV"
+log "  Shared DB   : $SHARED_IDENT"
+log "  Compose mode: shared-db  (compose.shared-db.yaml)"
+log ""
+log "OLD DB VOLUME PRESERVED (NOT deleted): $SRC_VOLUME"
+log "=> Prune it manually after 7 days once satisfied with the migration:"
+log "   docker volume rm $SRC_VOLUME"
+log ""
+log "Smoke test: PASSED"
+log ""
