@@ -1,5 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { ArrowDownToLine, ArrowUpFromLine, ShieldCheck } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -17,6 +19,71 @@ import { orpc } from "@/lib/orpc/client";
 export const Route = createFileRoute("/_auth/sites/$siteId/staging")({
 	component: StagingPage,
 });
+
+/** Empty state: no staging copy exists yet — explain what staging is for. */
+function NoStagingCard({ onAdd }: { onAdd: () => void }) {
+	return (
+		<Card>
+			<CardContent className="flex flex-col items-start gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
+				<div className="grid gap-1">
+					<span className="font-medium text-sm">No staging site yet</span>
+					<span className="max-w-prose text-muted-foreground text-sm">
+						Staging is a private, search-engine-hidden copy of this site. Add
+						one to test plugin updates, theme changes, or content before they go
+						live — without any risk to visitors.
+					</span>
+				</div>
+				<Button onClick={onAdd}>Add staging</Button>
+			</CardContent>
+		</Card>
+	);
+}
+
+/** One direction of the live<->staging sync, with plain-language help + action. */
+function SyncAction({
+	icon,
+	title,
+	description,
+	buttonLabel,
+	pendingLabel,
+	pending,
+	onClick,
+	variant,
+	footer,
+}: {
+	icon: ReactNode;
+	title: string;
+	description: string;
+	buttonLabel: string;
+	pendingLabel: string;
+	pending: boolean;
+	onClick: () => void;
+	variant?: "default" | "outline";
+	footer?: ReactNode;
+}) {
+	return (
+		<div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+			<div className="flex items-start gap-3">
+				<span aria-hidden className="mt-0.5 text-muted-foreground">
+					{icon}
+				</span>
+				<div className="grid gap-1">
+					<span className="font-medium text-sm">{title}</span>
+					<span className="text-muted-foreground text-sm">{description}</span>
+				</div>
+			</div>
+			{footer}
+			<Button
+				className="self-start"
+				disabled={pending}
+				onClick={onClick}
+				variant={variant}
+			>
+				{pending ? pendingLabel : buttonLabel}
+			</Button>
+		</div>
+	);
+}
 
 function StagingCard({
 	url,
@@ -36,16 +103,7 @@ function StagingCard({
 	publishPending: boolean;
 }) {
 	if (!url) {
-		return (
-			<Card>
-				<CardContent className="flex items-center justify-between py-6">
-					<span className="text-muted-foreground text-sm">
-						No staging site yet.
-					</span>
-					<Button onClick={onAdd}>Add staging</Button>
-				</CardContent>
-			</Card>
-		);
+		return <NoStagingCard onAdd={onAdd} />;
 	}
 	return (
 		<Card>
@@ -55,13 +113,36 @@ function StagingCard({
 					{noindex ? <Badge variant="outline">noindex</Badge> : null}
 				</CardTitle>
 			</CardHeader>
-			<CardContent className="flex flex-wrap gap-2">
-				<Button disabled={refreshPending} onClick={onRefresh}>
-					Copy live to staging
-				</Button>
-				<Button disabled={publishPending} onClick={onPublish} variant="outline">
-					Publish staging to live
-				</Button>
+			<CardContent className="grid gap-3 sm:grid-cols-2">
+				<SyncAction
+					buttonLabel="Copy live to staging"
+					description="Overwrite staging with a fresh copy of the live site's database and files, so you're testing against what visitors see right now."
+					icon={<ArrowDownToLine className="size-5" />}
+					onClick={onRefresh}
+					pending={refreshPending}
+					pendingLabel="Copying…"
+					title="Refresh staging from live"
+				/>
+				<SyncAction
+					buttonLabel="Publish staging to live"
+					description="Push the staging plugins, themes, and content over to the live site, replacing it with what you've tested."
+					footer={
+						<p className="flex items-start gap-2 rounded-md bg-muted px-3 py-2 text-muted-foreground text-xs">
+							<ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+							<span>
+								Safe by default: we back up the live site first and
+								automatically roll it back if it fails its health check after
+								publishing.
+							</span>
+						</p>
+					}
+					icon={<ArrowUpFromLine className="size-5" />}
+					onClick={onPublish}
+					pending={publishPending}
+					pendingLabel="Publishing…"
+					title="Publish staging to live"
+					variant="outline"
+				/>
 			</CardContent>
 		</Card>
 	);

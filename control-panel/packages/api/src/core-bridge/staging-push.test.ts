@@ -5,7 +5,10 @@ import { buildStagingPushStream } from "./staging-push";
 function fakeStream(lines: string[], code: number) {
 	return {
 		proc: { exited: Promise.resolve(code), kill: () => undefined },
+		// A genuine AsyncIterable<string> (StreamLike.lines) — the leading await
+		// keeps it a real async generator (and satisfies biome's useAwait).
 		lines: (async function* () {
+			await Promise.resolve();
 			for (const l of lines) {
 				yield l;
 			}
@@ -134,13 +137,17 @@ describe("staging-push", () => {
 			return fakeStream(["Importing managed wp-content files"], 0);
 		});
 		let smokeCall = 0;
-		const runVibe = vi.fn(async (_d, _e, op) => {
+		const runVibe = vi.fn((_d, _e, op) => {
 			if (op === "smoke") {
 				smokeCall += 1;
 				// First smoke (verify) fails; second (post-restore) passes.
-				return { stdout: "", stderr: "", code: smokeCall === 1 ? 1 : 0 };
+				return Promise.resolve({
+					stdout: "",
+					stderr: "",
+					code: smokeCall === 1 ? 1 : 0,
+				});
 			}
-			return { stdout: "", stderr: "", code: 0 };
+			return Promise.resolve({ stdout: "", stderr: "", code: 0 });
 		});
 		const fetchFn = vi.fn(async () => ({ ok: true })) as never;
 		const { lines } = buildStagingPushStream(
