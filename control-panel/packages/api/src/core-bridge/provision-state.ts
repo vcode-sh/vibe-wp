@@ -1,6 +1,7 @@
 import type { ProvisionMode } from "./provision";
 import { type InstallerStateLike, runHeadlessRequest } from "./provision";
 import type { CreateExternalSchema, CreateSiteSchema } from "./provision-input";
+import { provisionSiteDb, sharedDbIdentifier } from "./shared-db";
 
 /**
  * Build a COMPLETE, valid InstallerState for a provisioning run WITHOUT
@@ -163,4 +164,29 @@ export async function buildRemoveSiteState(
 ): Promise<InstallerStateLike> {
 	const base = await fetchBaseState("remove-existing", site.productionDomain);
 	return applyRemoveSiteOverrides(base, site, purge);
+}
+
+/**
+ * Shared-DB create: fetch the base state (which assigns the non-colliding slug),
+ * PROVISION the per-site `vibe_<slug>` DB+user on the shared server, then point
+ * the new site at it (external DB host `db` on the shared network; Redis stays
+ * internal — the installer's shared-db plan generates it). The provisioned
+ * per-site password is captured in-process and set into the state object, which
+ * the bridge pipes to the installer on STDIN → the site's env file. It is NEVER
+ * logged and NEVER returned to the browser (the procedure returns only a jobId).
+ */
+export async function buildCreateSharedDbState(
+	input: CreateSiteSchema
+): Promise<InstallerStateLike> {
+	const base = await fetchBaseState("shared-db", input.domain);
+	const slug = String(base.siteSlug ?? "");
+	const { password } = await provisionSiteDb(slug);
+	const ident = sharedDbIdentifier(slug);
+	return {
+		...applyNewSiteOverrides(base, input),
+		extDbHost: "db",
+		extDbName: ident,
+		extDbPassword: password,
+		extDbUser: ident,
+	};
 }

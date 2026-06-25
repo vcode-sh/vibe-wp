@@ -159,6 +159,11 @@ export const removeSiteSchema = z.object({
 	siteId: z.string().min(1),
 });
 
+// Creating a site on the SHARED database takes the SAME inputs as a normal new
+// site — the panel provisions the per-site `vibe_<slug>` DB+user on the shared
+// server itself, so the operator supplies NO external DB credentials.
+export const createSharedDbSchema = createSiteSchema;
+
 export type CreateSiteSchema = z.infer<typeof createSiteSchema>;
 export type CreateExternalSchema = z.infer<typeof createExternalSchema>;
 export type AttachStagingSchema = z.infer<typeof attachStagingSchema>;
