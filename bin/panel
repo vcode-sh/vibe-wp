@@ -542,14 +542,15 @@ sync_site_mu_plugins() {
         "$REPO_DIR"|"$PANEL_DIR") continue ;;
       esac
 
-      # (1) host bind copy
+      # (1) host bind copy. Touch ONLY the exact platform files we ship (chmod by
+      # basename, never a dest glob) so a customer's same-named mu-plugin is safe.
       dest_mu="$site_dir/content/mu-plugins"
       if $SUDO test -d "$dest_mu"; then
         for f in "$src_mu"/vibe-wp-*.php; do
           $SUDO test -f "$f" || continue
           $SUDO cp -f "$f" "$dest_mu/" 2>/dev/null || true
+          $SUDO chmod 0644 "$dest_mu/$(basename "$f")" 2>/dev/null || true
         done
-        $SUDO chmod 0644 "$dest_mu"/vibe-wp-*.php 2>/dev/null || true
       fi
 
       # (2) into the running container (covers the named-volume prod topology).
@@ -558,9 +559,10 @@ sync_site_mu_plugins() {
       [ -n "$wp_cid" ] || continue
       for f in "$src_mu"/vibe-wp-*.php; do
         $SUDO test -f "$f" || continue
-        $SUDO docker cp "$f" "$wp_cid:/var/www/html/wp-content/mu-plugins/$(basename "$f")" 2>/dev/null || true
+        base="$(basename "$f")"
+        $SUDO docker cp "$f" "$wp_cid:/var/www/html/wp-content/mu-plugins/$base" 2>/dev/null || true
+        $SUDO docker exec "$wp_cid" sh -c 'chown www-data:www-data "/var/www/html/wp-content/mu-plugins/$1" 2>/dev/null; chmod 0644 "/var/www/html/wp-content/mu-plugins/$1" 2>/dev/null' _ "$base" 2>/dev/null || true
       done
-      $SUDO docker exec "$wp_cid" sh -c 'chown www-data:www-data /var/www/html/wp-content/mu-plugins/vibe-wp-*.php 2>/dev/null; chmod 0644 /var/www/html/wp-content/mu-plugins/vibe-wp-*.php 2>/dev/null' 2>/dev/null || true
     done
   done
 }

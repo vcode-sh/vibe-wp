@@ -208,9 +208,9 @@ case "${command}" in
     case "$_uid" in ''|*[!0-9]*) echo "wp-user-set-password: id must be numeric: $_uid" >&2; exit 1 ;; esac
     _login="$(vibe_wp user get "$_uid" --field=user_login --skip-plugins --skip-themes </dev/null 2>/dev/null | tr -d '\r\n')"
     [ -n "$_login" ] || { echo "wp-user-set-password: no such user id: $_uid" >&2; exit 1; }
+    _rc=0
     vibe_wp_stdin eval \
-      'wp_set_password(stream_get_contents(STDIN), '"$_uid"');' --skip-plugins --skip-themes
-    _rc=$?
+      'wp_set_password(stream_get_contents(STDIN), '"$_uid"');' --skip-plugins --skip-themes || _rc=$?
     [ "$_rc" -eq 0 ] || { echo "wp-user-set-password: failed to set password" >&2; exit 1; }
     echo "Password updated for WordPress user '$_login' (id $_uid)."
     ;;
@@ -231,8 +231,8 @@ case "${command}" in
     [ "${#_hash}" -eq 64 ] || { echo "wp-login-link: token hash must be 64 hex chars" >&2; exit 1; }
     _login="$(vibe_wp user get "$_uid" --field=user_login --skip-plugins --skip-themes </dev/null 2>/dev/null | tr -d '\r\n')"
     [ -n "$_login" ] || { echo "wp-login-link: no such user id: $_uid" >&2; exit 1; }
-    vibe_wp eval 'set_transient("vibe_sso_'"$_hash"'", '"$_uid"', 60);' --skip-plugins --skip-themes </dev/null >/dev/null
-    _rc=$?
+    _rc=0
+    vibe_wp eval 'set_transient("vibe_sso_'"$_hash"'", '"$_uid"', 60);' --skip-plugins --skip-themes </dev/null >/dev/null || _rc=$?
     [ "$_rc" -eq 0 ] || { echo "wp-login-link: failed to mint login link" >&2; exit 1; }
     echo "Login link minted for WordPress user '$_login' (id $_uid), valid 60s."
     ;;
