@@ -172,7 +172,9 @@ OP_ALLOWLIST="smoke doctor-runtime monitor perf-report perf-measure perf-apply s
 # Anything beginning with '-' is allowed only if it is a known panel flag — this
 # is exactly the set of flags exec.ts VIBE_OPS bake into their argv (plus --yes):
 #   monitor --json --no-notify | perf-report --json | backup --local-only | *--yes
-FLAG_ALLOWLIST="--local-only --yes --json --no-notify"
+#   promote-files-to-prod --no-backup (the panel's "Push to live" job owns its
+#   own pre-promote prod snapshot, so the promote script must not take a second one)
+FLAG_ALLOWLIST="--local-only --yes --json --no-notify --no-backup"
 # The `logs`/`logs-recent` ops are special-cased: their args are a fixed
 # service enum (all nginx wordpress cron db redis) + a fixed tail enum
 # (100 200 500 2000), validated by validate_logs_args — NOT the generic

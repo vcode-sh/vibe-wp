@@ -127,6 +127,21 @@ export const VIBE_OPS = {
 	backupVerify: { argv: ["backup-verify"], stream: true, takesArg: true },
 	refresh: { argv: ["refresh-from-prod"], stream: true, yes: true },
 	promote: { argv: ["promote-files-to-prod"], stream: true, yes: true },
+	/**
+	 * Promote staged files to prod WITHOUT the script's own pre-promote backup.
+	 * Used only by the panel's "Push to live" job (staging-push.ts), which takes
+	 * and captures its OWN authoritative prod snapshot first and rolls back to it
+	 * on failure — so the promote script must not take a redundant second backup
+	 * (and the --no-backup path also skips the typed-confirm prompt, which has no
+	 * TTY in the panel). The flag lives in the op's own argv (allowlisted, exactly
+	 * like backupLocal's --local-only), so it never trips buildVibeArgv's leading-
+	 * dash guard. --yes is still appended for the same headless-confirm reason.
+	 */
+	promoteFilesNoBackup: {
+		argv: ["promote-files-to-prod", "--no-backup"],
+		stream: true,
+		yes: true,
+	},
 	harden: { argv: ["harden"], stream: true },
 	wpCoreUpdate: { argv: ["wp", "core", "update"], stream: true },
 	wpPluginUpdateAll: {

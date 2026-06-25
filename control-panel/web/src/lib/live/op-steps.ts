@@ -77,10 +77,31 @@ const REMOVE_SITE: StepDef[] = [
 	{ match: /Delete site files/i, label: "Deleting files" },
 ];
 
+// stagingPushToLive (safe "Push to live") — buildStagingPushStream emits labelled
+// lines: [backup] (taking the pre-promote prod snapshot, incl. "Backup written"),
+// [promote] (publishing staging files, incl. "Importing managed"), [smoke]/[ttfb]
+// (the prod health check), and on failure [restore] (auto-rollback) lines.
+//
+// deriveSteps is positional: every step BEFORE the latest matched one renders as
+// "done", so this rail stays strictly LINEAR (no mutually-exclusive branches).
+// "Rolling back" is the trailing step: on a clean push the auto-restore lines
+// never arrive, so it stays pending and "Checking response time" is the last
+// active row; on a failed push it becomes the latest match and lights up while
+// the earlier rows read done. We deliberately do NOT add a separate success
+// terminal — that would falsely render "done" whenever a later rollback matched.
+const STAGING_PUSH: StepDef[] = [
+	{ match: /\[backup\].*Backup written/i, label: "Backing up live" },
+	{ match: /\[promote\].*Importing managed/i, label: "Publishing to live" },
+	{ match: /\[smoke\]/i, label: "Running smoke test" },
+	{ match: /\[ttfb\].*Homepage/i, label: "Checking response time" },
+	{ match: /auto-restoring|Rolled back/i, label: "Rolling back" },
+];
+
 export const OP_STEPS: Record<string, StepDef[]> = {
 	backup: BACKUP,
 	restore: RESTORE,
 	provision: PROVISION,
 	attachStaging: ATTACH_STAGING,
 	removeSite: REMOVE_SITE,
+	stagingPushToLive: STAGING_PUSH,
 };
