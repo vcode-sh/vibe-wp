@@ -1,8 +1,43 @@
 # Vibe WP Installer TUI Plan
 
 Date: 2026-06-20
-Status: installer released; `new-site` install + manage dashboard validated end-to-end on a real VPS; headless core done; other modes wired but not all hardware-tested
+Status: installer code is `0.1.5`; `new-site` install + manage dashboard validated end-to-end on real VPSes; headless core done; 2026-06-26 VPS proof covered panel install/update rollback, support bundle, production+staging install, staging refresh, safe push-to-live, and authenticated browser GUI/realtime proof for the staging publish flow
 Primary decision: OpenTUI + React + Bun
+
+## Current reconciliation - 2026-06-26
+
+- Current installer version in live code is `0.1.5` (`installer/package.json` and
+  `src/core/defaults.ts`). Older `0.1.2` / `0.1.3` notes below are historical.
+- The local sandbox remains for UI/planner iteration. The new headless local
+  workflow foundation stores blueprint inventory under `.vibe-local` and supports
+  local create/reset/delete metadata only; it does not perform desktop sync.
+- Installer manage staging tasks now append `--yes` for `refresh-from-prod` and
+  `promote-files-to-prod`, so headless task execution will not block on script
+  confirmation prompts.
+- The panel now exposes a read-only `stagingSyncPlan` for staging refresh and
+  managed-file push. VPS proof covered refresh-from-prod and safe push-to-live
+  through the panel compound stream, including auto-restore after a forced
+  permission failure and a clean happy path after `stage-promote-files`
+  normalized managed wp-content ownership. Authenticated browser proof also
+  covered sign-in, site discovery, staging navigation, destructive confirmation,
+  operations tray creation, active operation dialog streaming, and terminal
+  success for the safe push-to-live path. It is not a persisted desktop/local
+  sync plan yet; freshness checks and URL rewrite counts remain required before
+  Tauri.
+- `bin/panel update` now snapshots the previous panel app and data directory
+  before deploy and restores that snapshot if deploy fails. VPS proof covered a
+  forced deploy failure rollback and a clean update. Still open before broad
+  distribution: health-based post-deploy rollback and release-channel/version
+  pinning.
+- VPS validation found and fixed three install/update blockers: Bun bootstrap
+  now installs `unzip` before running the Bun installer, host package prep
+  installs `make` before `make init-*`, and CLI domain overrides rederive the
+  default backup root instead of keeping `/var/backups/vibe-wp/example`.
+- Command output redaction now covers human-readable colon-style secret lines
+  such as generated WordPress admin passwords.
+- Still open before Tauri/product distribution: final install summary,
+  first-class failure recovery dialogs, automated terminal snapshot fixtures,
+  post-deploy health rollback, and structured/persisted sync plan ids.
 
 ## Ground-truth reconciliation - 2026-06-20
 
@@ -72,7 +107,7 @@ Wired in the planner and **now validated on real hardware (2026-06-20)**:
   full task chain ALL DONE. The root stack's `compose.external.yaml` + `env/external.env`
   are now driven by the installer.
 
-## Current Audit - 2026-06-19
+## Historical Audit - 2026-06-19
 
 The public bootstrap and release host are working, but the installer is not complete against the done definition below.
 
@@ -88,7 +123,7 @@ Important fixes made during the VPS audit:
 
 - `0.1.0` should be treated as superseded because immutable `/releases/0.1.0/...gz` URLs were overwritten during testing and could be cached with mismatched checksums.
 - `0.1.1` was the first usable public installer version after bootstrap terminal handling fixes.
-- `0.1.2` is the current public installer version with the management/UI pass.
+- `0.1.2` was the public installer version with the management/UI pass at the time of this audit.
 - Bootstrap status output must stay on stderr so `--dry-run`, `--version`, and automation modes keep clean stdout.
 - Interactive `curl | sh` must keep using `/dev/tty`; otherwise OpenTUI receives pipe stdin and exits with terminal escape noise.
 
@@ -108,9 +143,9 @@ Implemented in the management/UI pass after the first VPS TUI audit:
 - Wired the interactive Execute screen to the real task runner with typed confirmation.
 - Added DNS preflight as the first create/install task and blocked placeholder domains/emails such as `example.com`.
 
-## Current Capability Matrix - 2026-06-19
+## Historical Capability Matrix - 2026-06-19
 
-### Available in `0.1.2`
+### Available in `0.1.2` at that time
 
 - Public `curl | sh` bootstrap downloads the current manifest, verifies SHA256, and executes the Linux installer from `/dev/tty`.
 - `VIBE_WP_INSTALLER_NO_EXEC=1` verifies the artifact without execution.

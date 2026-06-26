@@ -13,6 +13,11 @@ import { emptyMeasurements } from "./perf-measure";
 /** Raw env-key / metric jargon that plain-language copy must never expose. */
 const JARGON_RE = /[A-Z_]{4,}=|MiB|listenQueue|InnoDB/;
 const SAFETY_RE = /safety/i;
+const EVICTED_RE = /evicted/i;
+const CLAMPED_RE = /clamped/i;
+const NO_CHANGES_RE = /no changes/i;
+const REMOVED_LINE_RE = /^- /m;
+const ADDED_LINE_RE = /^\+ /m;
 
 function measurements(over: Partial<PerfMeasurements> = {}): PerfMeasurements {
 	const base = emptyMeasurements();
@@ -95,7 +100,7 @@ describe("advisePerf", () => {
 		const redis = r.recommendations.find((x) => x.key === "REDIS_MAXMEMORY");
 		expect(redis).toBeDefined();
 		expect(sizeToMiB(redis?.suggested)).toBeGreaterThan(512);
-		expect(redis?.reason).toMatch(/evicted/i);
+		expect(redis?.reason).toMatch(EVICTED_RE);
 	});
 
 	it("every recommendation carries a non-empty, non-technical plain-language line", () => {
@@ -216,7 +221,7 @@ describe("advisePerf", () => {
 		const redis = r.recommendations.find((x) => x.key === "REDIS_MAXMEMORY");
 		// Either it was clamped (annotated) or dropped because no room remained.
 		if (redis) {
-			expect(redis.reason).toMatch(/clamped/i);
+			expect(redis.reason).toMatch(CLAMPED_RE);
 			expect(sizeToMiB(redis.suggested)).toBeLessThanOrEqual(cap);
 		}
 	});
@@ -285,7 +290,7 @@ describe("buildPreviewDiff", () => {
 	it("empty recs → empty diff + 'No changes' text", () => {
 		const { diff, text } = buildPreviewDiff([]);
 		expect(diff).toHaveLength(0);
-		expect(text).toMatch(/no changes/i);
+		expect(text).toMatch(NO_CHANGES_RE);
 	});
 
 	it("maps recommendations into from→to lines", () => {
@@ -297,7 +302,7 @@ describe("buildPreviewDiff", () => {
 		expect(diff[0]).toHaveProperty("key");
 		expect(diff[0]).toHaveProperty("from");
 		expect(diff[0]).toHaveProperty("to");
-		expect(text).toMatch(/^- /m);
-		expect(text).toMatch(/^\+ /m);
+		expect(text).toMatch(REMOVED_LINE_RE);
+		expect(text).toMatch(ADDED_LINE_RE);
 	});
 });

@@ -77,6 +77,28 @@ detect_public_ip() {
   curl -fsS https://api.ipify.org 2>/dev/null || true
 }
 
+ensure_bun() {
+  if command -v bun >/dev/null 2>&1; then
+    BUN="$(command -v bun)"
+    return 0
+  fi
+
+  echo "Installing Bun..."
+  if ! command -v unzip >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+      $SUDO apt-get update || return 1
+      $SUDO env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y unzip || return 1
+    else
+      echo "panel: unzip is required to install Bun; install unzip, then re-run." >&2
+      return 1
+    fi
+  fi
+
+  curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash || return 1
+  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+  [ -x "$BUN" ] || { echo "panel: Bun install finished but $BUN is not executable" >&2; return 1; }
+}
+
 # Resolve all access-dependent values from (ACCESS_MODE, DOMAIN, PORT).
 # Sets: ACCESS_MODE ACCESS_HOST ACCESS_ORIGIN CADDY_SITE_ADDRESS CADDY_TLS_LINE
 # Default mode: magic-dns when no --domain/--access given, else domain.
@@ -242,17 +264,17 @@ deploy_panel() {
   # Least-privilege account + the root-owned host-exec wrapper + sudoers rule.
   # Done up-front so the systemd unit can run as vibe-panel and the server's
   # PANEL_PRIVILEGED_RUNNER points at a wrapper that already exists.
-  ensure_panel_user
-  install_runner_and_sudoers
+  ensure_panel_user || return 1
+  install_runner_and_sudoers || return 1
 
   # Web bundles the panel's own origin for /rpc and /api/auth (Caddy routes them to the server).
-  printf 'VITE_SERVER_URL=%s\n' "$ACCESS_ORIGIN" > "$REPO_DIR/control-panel/web/.env"
-  ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build )
-  $SUDO rm -rf "$PANEL_DIR/app"
-  $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app"
+  printf 'VITE_SERVER_URL=%s\n' "$ACCESS_ORIGIN" > "$REPO_DIR/control-panel/web/.env" || return 1
+  ( cd "$REPO_DIR/control-panel" && "$BUN" install && "$BUN" run build ) || return 1
+  $SUDO rm -rf "$PANEL_DIR/app" || return 1
+  $SUDO cp -R "$REPO_DIR/control-panel" "$PANEL_DIR/app" || return 1
 
   # Installer binary — the provisioning bridge drives this (PANEL_INSTALLER_BIN).
-  install_installer_bin
+  install_installer_bin || return 1
 
   # Env (contains BETTER_AUTH_SECRET). Owned by vibe-panel + 0600: the service
   # (running as vibe-panel) can read it; nobody else can. PANEL_PRIVILEGED_RUNNER
@@ -267,16 +289,16 @@ deploy_panel() {
     "PANEL_HOST_DIR=$REPO_DIR" \
     "PANEL_INSTALLER_BIN=$PANEL_DIR/bin/vibe-wp-installer" \
     "PANEL_PRIVILEGED_RUNNER=$PANEL_DIR/bin/vibe-panel-run" \
-    | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null )
+    | $SUDO tee "$PANEL_DIR/app/server/.env" >/dev/null ) || return 1
   # Re-emit a preserved custom-panel-domain trusted origin (see the read above).
   # Appended only when one was applied; the value is a metachar-free https URL that
   # panel-domain-apply already strictly validated, so it is safe to append verbatim.
   if [ -n "$EXTRA_TRUSTED_ORIGIN" ]; then
     printf 'PANEL_EXTRA_TRUSTED_ORIGIN=%s\n' "$EXTRA_TRUSTED_ORIGIN" \
-      | $SUDO tee -a "$PANEL_DIR/app/server/.env" >/dev/null
+      | $SUDO tee -a "$PANEL_DIR/app/server/.env" >/dev/null || return 1
   fi
-  $SUDO chown "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/app/server/.env"
-  $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
+  $SUDO chown "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/app/server/.env" || return 1
+  $SUDO chmod 600 "$PANEL_DIR/app/server/.env" || return 1
 
   # DB migrate (the auth DB holds password hashes + sessions). Run as root, then
   # hand the data dir + db to vibe-panel so the service can read/write its DB.
@@ -289,9 +311,9 @@ deploy_panel() {
   if [ -f "$PANEL_DIR/data/panel.db" ]; then
     PANEL_DB="$PANEL_DIR/data/panel.db" "$BUN" -e 'import {Database} from "bun:sqlite"; const d=new Database(process.env.PANEL_DB); d.run("DROP TABLE IF EXISTS rateLimit"); d.close();' 2>/dev/null || true
   fi
-  ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push )
-  $SUDO chown -R "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/data"
-  $SUDO chmod 700 "$PANEL_DIR/data"
+  ( cd "$PANEL_DIR/app" && DATABASE_URL="file:$PANEL_DIR/data/panel.db" "$BUN" run db:push ) || return 1
+  $SUDO chown -R "$PANEL_USER:$PANEL_USER" "$PANEL_DIR/data" || return 1
+  $SUDO chmod 700 "$PANEL_DIR/data" || return 1
   $SUDO chmod 600 "$PANEL_DIR/data/panel.db" 2>/dev/null || true
 
   # The app dir + wrapper + installer binary stay root-owned but world-readable/
@@ -306,7 +328,7 @@ deploy_panel() {
   # Defensively re-assert 0600 (owned by vibe-panel, so the service still reads
   # it). With the prune above this is now a belt-and-braces no-op rather than a
   # required re-tighten, but keeping it guards against any future widen path.
-  $SUDO chmod 600 "$PANEL_DIR/app/server/.env"
+  $SUDO chmod 600 "$PANEL_DIR/app/server/.env" || return 1
   # Ensure the Bun runtime itself is executable by vibe-panel.
   $SUDO chmod a+rx "$BUN" 2>/dev/null || true
 
@@ -327,10 +349,10 @@ Restart=always
 [Install]
 WantedBy=multi-user.target"
 
-  printf '%s\n' "$service" | $SUDO tee /etc/systemd/system/$UNIT.service >/dev/null
-  $SUDO systemctl daemon-reload
+  printf '%s\n' "$service" | $SUDO tee /etc/systemd/system/$UNIT.service >/dev/null || return 1
+  $SUDO systemctl daemon-reload || return 1
   $SUDO systemctl enable "$UNIT.service" >/dev/null 2>&1 || true
-  $SUDO systemctl restart "$UNIT.service"
+  $SUDO systemctl restart "$UNIT.service" || return 1
 }
 
 install_panel() {
@@ -360,12 +382,7 @@ install_panel() {
     read -r ADMIN_EMAIL
   fi
 
-  # Bun preflight
-  if ! command -v bun >/dev/null 2>&1; then
-    echo "Installing Bun..."
-    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
-  fi
-  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+  ensure_bun || return 1
 
   command -v caddy >/dev/null 2>&1 || die "Caddy is not installed. Install Caddy first (the bootstrap installer does this), then re-run."
 
@@ -387,7 +404,7 @@ install_panel() {
     SECRET="$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | cut -c1-44)"
   fi
 
-  deploy_panel
+  deploy_panel || return 1
 
   # Caddy snippet
   $SUDO install -d -m 0755 /etc/caddy/sites-enabled
@@ -567,6 +584,61 @@ sync_site_mu_plugins() {
   done
 }
 
+panel_update_snapshot() {
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  snapshot="$PANEL_DIR/backups/update-$stamp"
+  $SUDO install -d -m 0700 "$PANEL_DIR/backups"
+  $SUDO rm -rf "$snapshot"
+  $SUDO install -d -m 0700 "$snapshot"
+  $SUDO systemctl stop "$UNIT.service" 2>/dev/null || true
+  if $SUDO test -d "$PANEL_DIR/app"; then
+    $SUDO cp -a "$PANEL_DIR/app" "$snapshot/app"
+  fi
+  if $SUDO test -d "$PANEL_DIR/data"; then
+    $SUDO cp -a "$PANEL_DIR/data" "$snapshot/data"
+  fi
+  if $SUDO test -f "/etc/systemd/system/$UNIT.service"; then
+    $SUDO cp -a "/etc/systemd/system/$UNIT.service" "$snapshot/$UNIT.service"
+  fi
+  if $SUDO test -f /etc/caddy/sites-enabled/vibe-wp-panel.caddy; then
+    $SUDO cp -a /etc/caddy/sites-enabled/vibe-wp-panel.caddy "$snapshot/vibe-wp-panel.caddy"
+  fi
+  $SUDO chmod 0700 "$snapshot"
+  printf '%s\n' "$snapshot"
+}
+
+panel_update_restore() {
+  snapshot="$1"
+  if [ -z "$snapshot" ] || ! $SUDO test -d "$snapshot"; then
+    echo "panel: update rollback snapshot is missing; manual recovery required." >&2
+    return 1
+  fi
+
+  echo "panel: restoring previous panel snapshot..."
+  $SUDO systemctl stop "$UNIT.service" 2>/dev/null || true
+  if $SUDO test -d "$snapshot/app"; then
+    $SUDO rm -rf "$PANEL_DIR/app"
+    $SUDO cp -a "$snapshot/app" "$PANEL_DIR/app"
+  fi
+  if $SUDO test -d "$snapshot/data"; then
+    $SUDO rm -rf "$PANEL_DIR/data"
+    $SUDO cp -a "$snapshot/data" "$PANEL_DIR/data"
+  fi
+  if $SUDO test -f "$snapshot/$UNIT.service"; then
+    $SUDO cp -a "$snapshot/$UNIT.service" "/etc/systemd/system/$UNIT.service"
+  fi
+  if $SUDO test -f "$snapshot/vibe-wp-panel.caddy"; then
+    $SUDO cp -a "$snapshot/vibe-wp-panel.caddy" /etc/caddy/sites-enabled/vibe-wp-panel.caddy
+  fi
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl restart "$UNIT.service" 2>/dev/null || true
+  if command -v caddy >/dev/null 2>&1; then
+    $SUDO caddy validate --config /etc/caddy/Caddyfile \
+      && $SUDO systemctl reload caddy || true
+  fi
+  echo "panel: previous panel snapshot restored"
+}
+
 update_panel() {
   env_file="$PANEL_DIR/app/server/.env"
   if ! $SUDO test -f "$env_file"; then
@@ -578,12 +650,7 @@ update_panel() {
   # rebuild). Done before the Bun preflight so a failed pull short-circuits.
   pull_latest_source
 
-  # Bun preflight (operator may have rebooted since install)
-  if ! command -v bun >/dev/null 2>&1; then
-    echo "Installing Bun..."
-    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
-  fi
-  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+  ensure_bun || return 1
 
   # Source domain, secret, and port from the existing env — no re-prompting.
   # BETTER_AUTH_SECRET must be read BEFORE rm -rf "$PANEL_DIR/app" in deploy_panel.
@@ -599,7 +666,22 @@ update_panel() {
   fi
 
   echo "panel: updating (domain=$DOMAIN port=$PORT)..."
-  deploy_panel
+  if snapshot="$(panel_update_snapshot)"; then
+    :
+  else
+    code="$?"
+    echo "panel: update snapshot failed; restarting the existing panel." >&2
+    $SUDO systemctl start "$UNIT.service" 2>/dev/null || true
+    return "$code"
+  fi
+  if deploy_panel; then
+    :
+  else
+    code="$?"
+    echo "panel: update failed; restoring previous panel snapshot." >&2
+    panel_update_restore "$snapshot" || true
+    return "$code"
+  fi
   # Re-lock any per-site env files an older build left world-readable.
   secure_site_env_files
   # Propagate bin/ fixes (env-resolution, wp-cli ops) to existing managed sites.
@@ -629,11 +711,7 @@ reset_password_panel() {
   fi
   [ -n "$RESET_EMAIL" ] || { echo "panel: --email is required" >&2; return 1; }
 
-  if ! command -v bun >/dev/null 2>&1; then
-    echo "Installing Bun..."
-    curl -fsSL https://bun.sh/install | $SUDO env BUN_INSTALL=/usr/local bash
-  fi
-  BUN="$(command -v bun || echo /usr/local/bin/bun)"
+  ensure_bun || return 1
 
   if [ "$PASSWORD_STDIN" = 1 ]; then
     if [ "$YES" != 1 ]; then

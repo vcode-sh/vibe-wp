@@ -1,14 +1,14 @@
 export interface SmtpConfigRow {
-	siteId: string;
-	mode: string | null;
-	host: string | null;
-	port: number | null;
-	secure: string | null;
 	auth: string | null;
-	username: string | null;
-	password: string | null;
 	fromAddress: string | null;
 	fromName: string | null;
+	host: string | null;
+	mode: string | null;
+	password: string | null;
+	port: number | null;
+	secure: string | null;
+	siteId: string;
+	username: string | null;
 }
 
 /** Site row overrides global field-by-field; nulls fall through to global. */

@@ -1,5 +1,7 @@
 import type { PanelAccessMode } from "./panel-access";
 
+export type { InstallerOptions } from "./options";
+
 export type InstallMode =
   | "new-site"
   | "manage-existing"
@@ -12,55 +14,6 @@ export type InstallMode =
 export type PerformancePreset = "conservative" | "balanced" | "high-memory";
 export type BackupPolicy = "manual" | "local-first" | "external-later";
 export type BackupSchedule = "off" | "daily" | "weekly";
-
-export interface InstallerOptions {
-  access?: PanelAccessMode;
-  adminEmail?: string;
-  adminPassword?: string;
-  ascii: boolean;
-  backupDir?: string;
-  backupSchedule?: BackupSchedule;
-  bootstrapPanel?: boolean;
-  compact: boolean;
-  domain?: string;
-  dryRun: boolean;
-  exportPlan?: string;
-  extDbHost?: string;
-  extDbName?: string;
-  extDbPassword?: string;
-  extDbUser?: string;
-  extRedisHost?: string;
-  extRedisPassword?: string;
-  extRedisPort?: string;
-  headlessJson: boolean;
-  headlessPlan?: string;
-  help: boolean;
-  installDir: string;
-  local: boolean;
-  mode?: InstallMode;
-  monitorEmail?: string;
-  monitorTelegramChat?: string;
-  monitorTelegramToken?: string;
-  monitorWebhook?: string;
-  noCaddy: boolean;
-  noHarden: boolean;
-  noHostInstall: boolean;
-  noMonitor: boolean;
-  noWww: boolean;
-  perfOverrides?: string[];
-  purge: boolean;
-  r2AccessKeyId?: string;
-  r2AccountId?: string;
-  r2Bucket?: string;
-  r2SecretKey?: string;
-  ref: string;
-  repo: string;
-  resume: boolean;
-  stagingDomain?: string;
-  supportBundle?: string;
-  version: boolean;
-  yes: boolean;
-}
 
 export interface HostFacts {
   arch: string;

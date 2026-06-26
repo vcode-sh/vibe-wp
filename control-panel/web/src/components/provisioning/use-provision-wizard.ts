@@ -15,7 +15,10 @@ import {
 } from "./wizard-types";
 
 /** Trim and drop empty optional fields so the server sees only real values. */
-function toCreateSiteInput(form: WizardForm, dnsOverride = false): CreateSiteInput {
+function toCreateSiteInput(
+	form: WizardForm,
+	dnsOverride = false
+): CreateSiteInput {
 	const title = form.siteTitle.trim();
 	// AI keys are optional + secret: send each only when non-empty (trimmed), so
 	// the server never sees an empty "secret". They ride STDIN to the site env.
@@ -149,7 +152,9 @@ export function useProvisionWizard(mode: ProvisionMode) {
 					toCreateSiteInput(form, dnsOverride)
 				);
 			} else {
-				result = await createSite.mutateAsync(toCreateSiteInput(form, dnsOverride));
+				result = await createSite.mutateAsync(
+					toCreateSiteInput(form, dnsOverride)
+				);
 			}
 			handledRef.current = false;
 			setTracked(domain);

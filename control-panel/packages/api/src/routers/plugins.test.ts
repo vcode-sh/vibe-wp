@@ -22,6 +22,7 @@ vi.mock("../core-bridge/safe-update", () => ({ startSafeUpdate }));
 import { pluginsRouter } from "./plugins";
 
 const ctx = { session: { user: { id: "u1", role: "operator" } } } as never;
+const INVALID_RE = /Invalid/;
 
 describe("pluginsRouter mutations", () => {
 	it("pluginUpdate starts a wpPluginUpdate job with the slug", async () => {
@@ -84,7 +85,7 @@ describe("pluginsRouter mutations", () => {
 				input: { siteId: "s1", slug: "evil; rm -rf /" },
 				context: ctx,
 			})
-		).toThrow(/Invalid/);
+		).toThrow(INVALID_RE);
 		expect(startJob).not.toHaveBeenCalled();
 	});
 
@@ -138,7 +139,7 @@ describe("pluginsRouter mutations", () => {
 				input: { siteId: "s1", target: { kind: "plugin", slug: "../evil" } },
 				context: ctx,
 			})
-		).rejects.toThrow(/Invalid/);
+		).rejects.toThrow(INVALID_RE);
 		expect(startSafeUpdate).not.toHaveBeenCalled();
 	});
 });

@@ -125,7 +125,7 @@ function StagingCard({
 				/>
 				<SyncAction
 					buttonLabel="Publish staging to live"
-					description="Push the staging plugins, themes, and content over to the live site, replacing it with what you've tested."
+					description="Push staging plugins, themes, and must-use plugins over to the live site, replacing the managed files you've tested."
 					footer={
 						<p className="flex items-start gap-2 rounded-md bg-muted px-3 py-2 text-muted-foreground text-xs">
 							<ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
@@ -159,8 +159,7 @@ function StagingPage() {
 
 	const refresh = useMutation(orpc.stagingRefresh.mutationOptions());
 	// The UI drives the SAFE push-to-live path (backup -> promote -> health check
-	// -> auto-rollback on failure). The legacy stagingPromote procedure stays in
-	// the router for back-compat but is no longer reachable from this screen.
+	// -> auto-rollback on failure). The legacy raw route now fails closed.
 	const pushToLive = useMutation(orpc.stagingPushToLive.mutationOptions());
 
 	async function handleRefresh() {

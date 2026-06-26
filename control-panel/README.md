@@ -26,7 +26,7 @@ The control-panel server delegates all real work through a typed **exec layer** 
 
 ### Exec-layer chokepoint (`packages/api/src/core-bridge/`)
 
-`exec.ts` is the **only** module that spawns host processes. It maintains an explicit op allowlist (`VIBE_OPS`: `smoke`, `backups`, `backup`) and always passes an argv array — never a shell-interpolated string. Every byte of captured output passes through `redact.ts` before it is stored, logged, or sent to a client.
+`exec.ts` is the **only** module that spawns host processes. It maintains an explicit `VIBE_OPS` allowlist for site health, lifecycle, backup/restore, staging, logs, settings, security, performance, inventory, plugin/theme, and WordPress-user operations. It always passes an argv array — never a shell-interpolated string. Every byte of captured output passes through `redact.ts` before it is stored, logged, or sent to a client.
 
 - `runVibe(siteDir, env, op)` — runs one `<siteDir>/bin/vibe <env> <op>` call and returns buffered stdout/stderr (redacted, with a configurable timeout).
 - `streamVibe(siteDir, env, op)` — returns a live `AsyncIterable<string>` of redacted output lines for long-running ops (used by the backup job).
@@ -78,7 +78,7 @@ user's existing sessions. For automation, pipe the secret on stdin:
 printf '%s\n' "$NEW_PANEL_PASSWORD" | ./bin/panel reset-password --email you@example.com --password-stdin --yes
 ```
 
-Real-VPS end-to-end validation is **complete** (2026-06-23): magic-DNS install with a real Let's Encrypt cert, off-root `vibe-panel` service, owner sign-in + session, host ops through the wrapper, and site detection — all verified on live hardware. See `docs/superpowers/ROADMAP.md` for the full status + the next feature wave.
+Real-VPS bootstrap validation was completed on 2026-06-23: magic-DNS install with a real Let's Encrypt cert, off-root `vibe-panel` service, owner sign-in + session, host ops through the wrapper, and site detection. A 2026-06-26 VPS pass additionally covered panel install, break-glass password reset, support-bundle generation through the wrapper with no secret leak, clean update, failed-update rollback, production+staging site install, staging refresh, safe push-to-live, and authenticated browser GUI/realtime proof for the staging publish flow; see `docs/superpowers/ROADMAP.md` for the current status.
 
 ## Getting Started
 

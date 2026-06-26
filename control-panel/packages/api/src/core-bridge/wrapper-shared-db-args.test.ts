@@ -65,12 +65,17 @@ describe("validate_shared_db_op — allowlist", () => {
 });
 
 describe("sdb_validate_slug — accepts valid site slugs", () => {
-	it.each(["a", "ab", "my-site", "site1", "a-b-c", "wp-prod", "x".repeat(48)])(
-		"accepts %j",
-		(slug) => {
-			expect(runValidateSlug(slug)).toBe(0);
-		}
-	);
+	it.each([
+		"a",
+		"ab",
+		"my-site",
+		"site1",
+		"a-b-c",
+		"wp-prod",
+		"x".repeat(48),
+	])("accepts %j", (slug) => {
+		expect(runValidateSlug(slug)).toBe(0);
+	});
 });
 
 describe("sdb_validate_slug — rejects the injection attack corpus (SF-5)", () => {

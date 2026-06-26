@@ -35,6 +35,7 @@ describe("applyCliState", () => {
     expect(state.siteSlug.length).toBeGreaterThan(0);
     expect(state.stagingDomain).toBe("stage.shop.com");
     expect(state.productionHttpPort.length).toBeGreaterThan(0);
+    expect(state.backupDir).toBe("/var/backups/vibe-wp/shop");
   });
 
   test("explicit staging domain wins and enables staging", () => {

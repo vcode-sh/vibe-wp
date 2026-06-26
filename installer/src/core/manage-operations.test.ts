@@ -35,6 +35,18 @@ test("safe ops never append --yes", () => {
   expect(cmd(task.command)).not.toContain("--yes");
 });
 
+test("staging sync ops append --yes so headless manage tasks do not block", () => {
+  const refresh = MANAGE_OPERATIONS.find((op) => op.id === "stage-refresh");
+  const promote = MANAGE_OPERATIONS.find((op) => op.id === "stage-promote");
+
+  expect(
+    cmd(buildOperationTask(refresh as (typeof MANAGE_OPERATIONS)[number], state).command)
+  ).toContain("./bin/vibe stage refresh-from-prod --yes");
+  expect(
+    cmd(buildOperationTask(promote as (typeof MANAGE_OPERATIONS)[number], state).command)
+  ).toContain("./bin/vibe stage promote-files-to-prod --yes");
+});
+
 test("logs op uses the non-following logs-recent command", () => {
   const logs = MANAGE_OPERATIONS.find((op) => op.id === "logs");
   expect(logs?.vibeCommand).toBe("logs-recent");

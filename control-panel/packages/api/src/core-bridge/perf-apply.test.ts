@@ -7,6 +7,7 @@ function fakeStream(lines: string[], code: number) {
 	return {
 		proc: { exited: Promise.resolve(code), kill: () => undefined },
 		lines: (async function* () {
+			await Promise.resolve();
 			for (const l of lines) {
 				yield l;
 			}
@@ -35,6 +36,11 @@ const recs: PerfRecommendation[] = [
 		category: "redis",
 	},
 ];
+const NOTHING_TO_APPLY_RE = /nothing to apply/i;
+const DONE_APPLIED_RE = /\[done\].*applied/i;
+const ROLLBACK_RE = /\[rollback\]/;
+const DONE_ROLLED_BACK_RE = /\[done\].*rolled back/i;
+const REFUSED_RE = /refused/i;
 
 describe("perfRecsToEnv", () => {
 	it("builds VIBE_PERF_* env + VIBE_PERF_KEYS, dropping unknown keys", () => {
@@ -74,7 +80,7 @@ describe("perf-apply stream", () => {
 			{ workDir: "/opt/s", env: "prod", recommendations: [] }
 		);
 		const out = await collect(lines);
-		expect(out.join("\n")).toMatch(/nothing to apply/i);
+		expect(out.join("\n")).toMatch(NOTHING_TO_APPLY_RE);
 		expect(streamVibe).not.toHaveBeenCalled();
 	});
 
@@ -103,7 +109,7 @@ describe("perf-apply stream", () => {
 			{ workDir: "/opt/s", env: "prod", recommendations: recs }
 		);
 		const out = await collect(lines);
-		expect(out.join("\n")).toMatch(/\[done\].*applied/i);
+		expect(out.join("\n")).toMatch(DONE_APPLIED_RE);
 		expect(
 			streamVibe.mock.calls.some((c) => c[2] === "perfApplyRollback")
 		).toBe(false);
@@ -123,6 +129,7 @@ describe("perf-apply stream", () => {
 		});
 		let smokeCall = 0;
 		const runVibe = vi.fn(async (_d, _e, op) => {
+			await Promise.resolve();
 			if (op === "smoke") {
 				smokeCall += 1;
 				return { stdout: "", stderr: "", code: smokeCall === 1 ? 1 : 0 };
@@ -143,8 +150,8 @@ describe("perf-apply stream", () => {
 		);
 		const out = await collect(lines);
 		expect(calls).toContain("perfApplyRollback");
-		expect(out.join("\n")).toMatch(/\[rollback\]/);
-		expect(out.join("\n")).toMatch(/\[done\].*rolled back/i);
+		expect(out.join("\n")).toMatch(ROLLBACK_RE);
+		expect(out.join("\n")).toMatch(DONE_ROLLED_BACK_RE);
 	});
 
 	it("perf-apply refused (root cap/validation) → aborts, no recreate", async () => {
@@ -174,6 +181,6 @@ describe("perf-apply stream", () => {
 		);
 		const out = await collect(lines);
 		expect(calls).not.toContain("up"); // never recreated
-		expect(out.join("\n")).toMatch(/refused/i);
+		expect(out.join("\n")).toMatch(REFUSED_RE);
 	});
 });

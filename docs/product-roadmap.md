@@ -1,6 +1,6 @@
 # Vibe WP — Product Roadmap
 
-> **⚠️ Superseded (2026-06-23):** this 2026-06-20 snapshot predates the entire control-panel backend, the one-command bootstrap, the user-manager, and the feature-wave planning. For the current status + the next-task roadmap, see **`docs/superpowers/ROADMAP.md`**. The vision/principles below remain useful context.
+> **Superseded (updated 2026-06-26):** this 2026-06-20 snapshot predates the current control-panel backend, one-command bootstrap, pre-Tauri reconciliation, and 2026-06-26 VPS proof. For current status and next work, see **`docs/superpowers/ROADMAP.md`**. The vision/principles below remain useful context only; do not use this file to justify Tauri work.
 
 Status: Living document. Last updated 2026-06-20.
 

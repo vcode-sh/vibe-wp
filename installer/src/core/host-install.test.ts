@@ -39,6 +39,14 @@ describe("buildHostInstallTasks", () => {
     expect(ids).toContain("install-bun");
   });
 
+  it("installs make with the host packages used by env initialization", () => {
+    const state = hostState({ docker: null, caddy: "x" });
+    const task = buildHostInstallTasks(state).find((t) => t.id === "install-docker");
+    const command = task?.command?.join(" ") ?? "";
+
+    expect(command).toContain("make");
+  });
+
   it("skips Bun when already present", () => {
     const state = hostState({ docker: "x", caddy: "x", bun: "1.2.3" });
     state.installBun = true;

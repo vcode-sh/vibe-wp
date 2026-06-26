@@ -1,3 +1,4 @@
+import { suggestedBackupDir } from "../core/backup";
 import {
   defaultInstallDir,
   portPairFromSlug,
@@ -178,12 +179,16 @@ function applyExternalServices(state: InstallerState, options: InstallerOptions)
 }
 
 function applyDomain(state: InstallerState, domain: string, deriveStaging: boolean): void {
+  const previousDefaultBackupDir = suggestedBackupDir(state.siteSlug);
   const slug = siteSlugFromDomain(domain);
   const ports = portPairFromSlug(slug);
   state.productionDomain = domain;
   state.siteSlug = slug;
   state.productionHttpPort = ports.production;
   state.stagingHttpPort = ports.staging;
+  if (!state.backupDir.trim() || state.backupDir === previousDefaultBackupDir) {
+    state.backupDir = suggestedBackupDir(slug);
+  }
 
   if (deriveStaging) {
     state.stagingDomain = stagingDomainFor(domain);

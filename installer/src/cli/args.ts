@@ -1,112 +1,9 @@
 import type { PanelAccessMode } from "../core/panel-access";
 import { PANEL_ACCESS_MODES } from "../core/panel-access";
 import type { BackupSchedule, InstallerOptions, InstallMode } from "../core/types";
+import { booleanFlags, INSTALL_MODES, stringFlags } from "./arg-definitions";
 
 export const DEFAULT_INSTALL_DIR = "/opt/vibe-wp";
-
-const INSTALL_MODES: InstallMode[] = [
-  "new-site",
-  "manage-existing",
-  "remove-existing",
-  "update-existing",
-  "staging-only",
-  "external-services",
-  "shared-db"
-];
-
-type BooleanOption =
-  | "ascii"
-  | "bootstrapPanel"
-  | "compact"
-  | "dryRun"
-  | "headlessJson"
-  | "help"
-  | "local"
-  | "noCaddy"
-  | "noWww"
-  | "noHostInstall"
-  | "noHarden"
-  | "noMonitor"
-  | "purge"
-  | "resume"
-  | "version"
-  | "yes";
-type StringOption =
-  | "adminEmail"
-  | "adminPassword"
-  | "backupDir"
-  | "domain"
-  | "exportPlan"
-  | "monitorEmail"
-  | "monitorWebhook"
-  | "monitorTelegramToken"
-  | "monitorTelegramChat"
-  | "supportBundle"
-  | "r2AccountId"
-  | "r2AccessKeyId"
-  | "r2Bucket"
-  | "r2SecretKey"
-  | "extDbHost"
-  | "extDbName"
-  | "extDbPassword"
-  | "extDbUser"
-  | "extRedisHost"
-  | "extRedisPassword"
-  | "extRedisPort"
-  | "headlessPlan"
-  | "installDir"
-  | "ref"
-  | "repo"
-  | "stagingDomain";
-
-const booleanFlags = new Map<string, BooleanOption>([
-  ["--ascii", "ascii"],
-  ["--bootstrap-panel", "bootstrapPanel"],
-  ["--compact", "compact"],
-  ["--dry-run", "dryRun"],
-  ["--headless-json", "headlessJson"],
-  ["--help", "help"],
-  ["-h", "help"],
-  ["--local", "local"],
-  ["--no-caddy", "noCaddy"],
-  ["--no-www", "noWww"],
-  ["--no-host-install", "noHostInstall"],
-  ["--no-harden", "noHarden"],
-  ["--no-monitor", "noMonitor"],
-  ["--purge", "purge"],
-  ["--resume", "resume"],
-  ["--version", "version"],
-  ["--yes", "yes"]
-]);
-
-const stringFlags = new Map<string, StringOption>([
-  ["--admin-email", "adminEmail"],
-  ["--admin-password", "adminPassword"],
-  ["--backup-dir", "backupDir"],
-  ["--monitor-email", "monitorEmail"],
-  ["--monitor-webhook", "monitorWebhook"],
-  ["--monitor-telegram-token", "monitorTelegramToken"],
-  ["--monitor-telegram-chat", "monitorTelegramChat"],
-  ["--support-bundle", "supportBundle"],
-  ["--r2-account", "r2AccountId"],
-  ["--r2-access-key", "r2AccessKeyId"],
-  ["--r2-bucket", "r2Bucket"],
-  ["--r2-secret", "r2SecretKey"],
-  ["--domain", "domain"],
-  ["--export-plan", "exportPlan"],
-  ["--ext-db-host", "extDbHost"],
-  ["--ext-db-name", "extDbName"],
-  ["--ext-db-password", "extDbPassword"],
-  ["--ext-db-user", "extDbUser"],
-  ["--ext-redis-host", "extRedisHost"],
-  ["--ext-redis-password", "extRedisPassword"],
-  ["--ext-redis-port", "extRedisPort"],
-  ["--headless", "headlessPlan"],
-  ["--install-dir", "installDir"],
-  ["--ref", "ref"],
-  ["--repo", "repo"],
-  ["--staging-domain", "stagingDomain"]
-]);
 
 export function parseArgs(argv: string[]): InstallerOptions {
   const options: InstallerOptions = {
@@ -118,6 +15,7 @@ export function parseArgs(argv: string[]): InstallerOptions {
     repo: "https://github.com/vcode-sh/vibe-wp.git",
     ref: "main",
     local: false,
+    localInventory: false,
     noCaddy: false,
     noWww: false,
     noHostInstall: false,

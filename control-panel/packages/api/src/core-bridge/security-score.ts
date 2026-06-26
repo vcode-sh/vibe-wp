@@ -21,20 +21,20 @@ export type SecurityFix =
 	| { kind: "hardenHost" };
 
 export interface SecurityFinding {
+	category: "wordpress" | "host";
+	detail: string;
+	fix: SecurityFix | null;
 	id: string;
 	severity: Severity;
-	category: "wordpress" | "host";
 	title: string;
-	detail: string;
 	/** Points deducted from 100. */
 	weight: number;
-	fix: SecurityFix | null;
 }
 
 export interface SecurityScore {
-	score: number;
-	grade: "A" | "B" | "C" | "D" | "F";
 	findings: SecurityFinding[];
+	grade: "A" | "B" | "C" | "D" | "F";
+	score: number;
 	summary: Record<Severity, number>;
 }
 

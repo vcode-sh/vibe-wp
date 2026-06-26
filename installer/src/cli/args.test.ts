@@ -60,4 +60,32 @@ describe("parseArgs", () => {
   test("rejects an invalid --access value", () => {
     expect(() => parseArgs(["--access", "nope"])).toThrow("Invalid --access value: nope");
   });
+
+  test("parses local workflow headless flags", () => {
+    const options = parseArgs([
+      "--local-inventory",
+      "--local-create",
+      "demo",
+      "--local-domain",
+      "demo.vibe.local",
+      "--local-title",
+      "Demo",
+      "--local-root",
+      ".vibe-local",
+      "--local-reset",
+      "demo",
+      "--local-delete",
+      "old",
+      "--yes"
+    ]);
+
+    expect(options.localInventory).toBe(true);
+    expect(options.localCreate).toBe("demo");
+    expect(options.localDomain).toBe("demo.vibe.local");
+    expect(options.localTitle).toBe("Demo");
+    expect(options.localRoot).toBe(".vibe-local");
+    expect(options.localReset).toBe("demo");
+    expect(options.localDelete).toBe("old");
+    expect(options.yes).toBe(true);
+  });
 });

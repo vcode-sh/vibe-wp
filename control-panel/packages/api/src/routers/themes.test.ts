@@ -8,6 +8,7 @@ vi.mock("../core-bridge/jobs", () => ({ startJob }));
 import { themesRouter } from "./themes";
 
 const ctx = { session: { user: { id: "u1", role: "operator" } } } as never;
+const INVALID_RE = /Invalid/;
 
 describe("themesRouter", () => {
 	it("themeActivate starts wpThemeActivate with the slug", async () => {
@@ -50,6 +51,6 @@ describe("themesRouter", () => {
 				input: { siteId: "s1", slug: "../evil" },
 				context: ctx,
 			})
-		).toThrow(/Invalid/);
+		).toThrow(INVALID_RE);
 	});
 });

@@ -6,6 +6,7 @@ import { devModeOverride } from "./app/dev-step";
 import { applyCliState } from "./cli/apply-cli-state";
 import { DEFAULT_INSTALL_DIR, parseArgs } from "./cli/args";
 import { runHeadlessJson } from "./cli/headless-cli";
+import { runLocalWorkflowCli } from "./cli/local-workflow-cli";
 import { usage } from "./cli/usage";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
@@ -29,6 +30,9 @@ async function runNonInteractive(options: InstallerOptions): Promise<boolean> {
   }
   if (options.headlessJson) {
     await runHeadlessJson();
+    return true;
+  }
+  if (await runLocalWorkflowCli(options)) {
     return true;
   }
   if (options.supportBundle) {

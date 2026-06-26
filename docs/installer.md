@@ -8,9 +8,9 @@ curl -fsSL https://wp.vcode.sh/install.sh | sh
 
 The public `wp.vcode.sh` host is a small static service. It serves the bootstrap script, the latest manifest, checksums, and immutable versioned installer binaries. It does not host WordPress and it does not store secrets.
 
-Current public installer version: `0.1.2`.
+Current installer version in this checkout: `0.1.5`.
 
-Current status: usable for bootstrap verification, dry-run planning, and interactive TUI review. It is not yet certified as a completed unattended production installer. The remaining production gates are documented below and in [../todo/installer.md](../todo/installer.md).
+Current status: usable for bootstrap verification, dry-run planning, interactive TUI review, panel bootstrap, and validated VPS install/manage flows. A 2026-06-26 VPS pass covered panel install/update rollback, support bundle, a production+staging site install, staging refresh, safe push-to-live, and authenticated browser GUI/realtime proof for the staging publish flow. The remaining production gates are documented below and in [../todo/installer.md](../todo/installer.md).
 
 ## Safety Model
 
@@ -27,7 +27,7 @@ The bootstrap script does not install Docker, edit host reverse-proxy configurat
 
 ## What The Installer Has Now
 
-Installer `0.1.2` includes:
+Installer `0.1.5` includes:
 
 - integrity-checked public bootstrap through `https://wp.vcode.sh/install.sh`
 - Linux x64 and arm64 release artifacts
@@ -73,7 +73,7 @@ The installer accepts these arguments (see `installer/src/cli/args.ts`):
 
 Value flags:
 
-- `--domain <host>` — production domain (also derives the slug, ports, staging domain, and a guessed site title)
+- `--domain <host>` — production domain (also derives the slug, ports, staging domain, default backup root, and a guessed site title)
 - `--admin-email <email>` — WordPress admin email
 - `--staging-domain <host>` — staging domain (enables staging)
 - `--mode <mode>` — `new-site`, `manage-existing`, `remove-existing`, `update-existing`, `staging-only`, or `external-services`
@@ -139,11 +139,11 @@ The installer is not complete until these gaps are closed:
 - ~~full-delete mode for intentionally removing files and Docker volumes~~ done + VPS-validated 2026-06-20 (`remove-existing --purge`)
 - ~~terminal snapshot checks for wide, medium, compact, and emergency layouts~~ manual SSH visual checks at 120x40 / 92x30 / 80x24 / 60x18 done + recorded 2026-06-20 (automated snapshot fixtures still open)
 - real production install proof on a disposable Ubuntu 26.04 VPS with a real domain
-- real production-plus-staging install proof with two fresh isolated domains (the `staging-only` attach-to-live-prod path is now validated end-to-end on a real VPS, 2026-06-20)
-- post-install proof for WordPress Site Health REST and loopback checks
-- post-install proof for uploads year/month directory creation
-- post-install proof for Redis Object Cache connectivity
-- post-install proof for FastCGI cache `HIT`
+- ~~real production-plus-staging install proof with two fresh isolated domains~~ validated on a fresh VPS on 2026-06-26 with production and staging `sslip.io` domains, isolated Compose projects, HTTPS, staging refresh, safe push-to-live, uploads, Redis Object Cache, loopback/REST checks, and FastCGI cache `HIT`
+- post-install proof for WordPress Site Health REST and loopback checks (covered by the 2026-06-26 smoke path; keep as a release checklist item for future fresh VPS claims)
+- post-install proof for uploads year/month directory creation (covered by the 2026-06-26 smoke path)
+- post-install proof for Redis Object Cache connectivity (covered by the 2026-06-26 runtime doctor path)
+- post-install proof for FastCGI cache `HIT` (covered by the 2026-06-26 smoke path)
 
 ## Production Readiness Gate
 
@@ -205,7 +205,7 @@ curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_NO_EXEC=1 sh
 Run a specific installer version:
 
 ```sh
-curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --installer-version 0.1.2
+curl -fsSL https://wp.vcode.sh/install.sh | sh -s -- --installer-version 0.1.5
 ```
 
 Use a staging installer host:
@@ -219,8 +219,8 @@ curl -fsSL https://wp.vcode.sh/install.sh | VIBE_WP_INSTALLER_BASE_URL=https://s
 Create a release by pushing a tag:
 
 ```sh
-git tag installer-v0.1.2
-git push origin installer-v0.1.2
+git tag installer-v0.1.5
+git push origin installer-v0.1.5
 ```
 
 The release workflow:

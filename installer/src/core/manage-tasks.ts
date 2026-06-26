@@ -2,6 +2,8 @@ import type { ManageOperation } from "./manage-operations";
 import { shellQuote } from "./shell";
 import type { InstallerState, InstallTask } from "./types";
 
+const HEADLESS_CONFIRM_COMMANDS = new Set(["refresh-from-prod", "promote-files-to-prod"]);
+
 export function buildOperationTask(
   op: ManageOperation,
   state: InstallerState,
@@ -11,6 +13,8 @@ export function buildOperationTask(
   let command = `cd ${dir} && ./bin/vibe ${op.env} ${op.vibeCommand}`;
   if (op.needsBackup && backupPath) {
     command += ` ${shellQuote(backupPath)} --yes`;
+  } else if (HEADLESS_CONFIRM_COMMANDS.has(op.vibeCommand)) {
+    command += " --yes";
   }
   return {
     id: op.id,

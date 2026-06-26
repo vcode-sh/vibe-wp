@@ -317,6 +317,15 @@ run_vibe "${prod_env}" compose exec -T wordpress sh -lc '
   done
 '
 run_vibe "${prod_env}" compose exec -T wordpress tar -xzf - -C /var/www/html/wp-content < "${tmp_file}"
+run_vibe "${prod_env}" compose exec -T wordpress sh -lc '
+  cd /var/www/html/wp-content
+  for path in plugins themes mu-plugins; do
+    [ -e "$path" ] || continue
+    chown -R www-data:www-data "$path"
+    find "$path" -type d -exec chmod 755 {} +
+    find "$path" -type f -exec chmod 644 {} +
+  done
+'
 run_vibe "${prod_env}" compose up -d --force-recreate wordpress cron >/dev/null
 run_vibe "${prod_env}" compose restart nginx >/dev/null
 run_vibe "${prod_env}" wp cache flush >/dev/null || true

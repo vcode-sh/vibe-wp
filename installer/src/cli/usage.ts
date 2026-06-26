@@ -9,6 +9,10 @@ Usage:
   vibe-wp-installer --headless install-plan.json [--yes]
   vibe-wp-installer --headless install-plan.json --yes --resume
   vibe-wp-installer --headless install-plan.json --support-bundle /tmp
+  vibe-wp-installer --local-inventory [--local-root .vibe-local]
+  vibe-wp-installer --local-create demo --local-domain demo.vibe.local
+  vibe-wp-installer --local-reset demo --yes
+  vibe-wp-installer --local-delete demo --yes
   echo '<json>' | vibe-wp-installer --headless-json
 
 Options:
@@ -29,6 +33,11 @@ Options:
   --repo <url>           Vibe WP git repository
   --ref <ref>            Git branch or tag, default main
   --local                Use a safe local sandbox for macOS/UI testing
+  --local-inventory      Print local workflow inventory as JSON
+  --local-create <slug>  Create a local blueprint under .vibe-local
+  --local-reset <slug>   Clear local runtime files, preserving the blueprint
+  --local-delete <slug>  Delete one local site directory; requires --yes
+  --local-root <path>    Local workflow root, must stay inside .vibe-local
   --no-caddy             Do not manage Caddy
   --no-www               Do not add a www. alias or require its DNS
   --no-host-install      Do not install missing host packages
