@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { DetectedSite } from "./sites";
 
 type SyncEnv = "prod" | "stage";
@@ -17,23 +19,37 @@ export interface StagingSyncPlan {
 	backup: { env: "prod"; required: true; timing: "before-change" };
 	canApply: boolean;
 	conflicts: StagingSyncConflict[];
+	createdAt: string;
 	direction: StagingSyncDirection;
+	expiresAt: string;
+	freshness: { maxAgeMinutes: number; status: "fresh" };
+	planId: string;
 	scope: string[];
 	siteId: string;
 	source: { env: SyncEnv; project: string | null; url: string | null };
 	steps: string[];
 	target: { env: SyncEnv; project: string | null; url: string | null };
 	urlRewrite:
-		| { required: false }
-		| { from: string; required: true; to: string };
+		| { estimatedOccurrences: 0; preview: string; required: false }
+		| {
+				estimatedOccurrences: number | null;
+				from: string;
+				preview: string;
+				required: true;
+				to: string;
+		  };
 }
 
 interface BuildPlanInput {
+	countUrlOccurrences?: (from: string, to: string) => Promise<number | null>;
 	direction: StagingSyncDirection;
+	now?: Date;
 	readEnvValue: (env: SyncEnv, key: string) => Promise<string | undefined>;
 	site: DetectedSite;
 }
 
+const PLAN_TTL_MINUTES = 15;
+const issuedPlans = new Map<string, { expiresAtMs: number }>();
 const REFRESH_SCOPE = [
 	"database",
 	"uploads",
@@ -42,6 +58,47 @@ const REFRESH_SCOPE = [
 	"mu-plugins",
 ];
 const FILE_SCOPE = ["plugins", "themes", "mu-plugins"];
+
+function hashPlan(input: object): string {
+	return createHash("sha256")
+		.update(JSON.stringify(input))
+		.digest("hex")
+		.slice(0, 16);
+}
+
+function safePlanToken(value: string): string {
+	return value.replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+function purgeExpiredIssuedPlans(now: Date) {
+	for (const [planId, issued] of issuedPlans.entries()) {
+		if (issued.expiresAtMs < now.getTime()) {
+			issuedPlans.delete(planId);
+		}
+	}
+}
+
+export function clearIssuedStagingSyncPlansForTests() {
+	issuedPlans.clear();
+}
+
+export function issueStagingSyncPlan(
+	plan: StagingSyncPlan,
+	now = new Date()
+): StagingSyncPlan {
+	purgeExpiredIssuedPlans(now);
+	issuedPlans.set(plan.planId, { expiresAtMs: Date.parse(plan.expiresAt) });
+	return plan;
+}
+
+export function isIssuedStagingSyncPlanCurrent(
+	planId: string,
+	now = new Date()
+): boolean {
+	purgeExpiredIssuedPlans(now);
+	const issued = issuedPlans.get(planId);
+	return Boolean(issued && issued.expiresAtMs >= now.getTime());
+}
 
 async function envIdentity(
 	readEnvValue: BuildPlanInput["readEnvValue"],
@@ -73,7 +130,9 @@ function conflictsFor(input: {
 }
 
 export async function buildStagingSyncPlan({
+	countUrlOccurrences,
 	direction,
+	now = new Date(),
 	readEnvValue,
 	site,
 }: BuildPlanInput): Promise<StagingSyncPlan> {
@@ -86,6 +145,27 @@ export async function buildStagingSyncPlan({
 	const source = refresh ? prod : stage;
 	const target = refresh ? stage : prod;
 	const canApply = conflicts.length === 0;
+	const createdAt = now.toISOString();
+	const expiresAt = new Date(
+		now.getTime() + PLAN_TTL_MINUTES * 60_000
+	).toISOString();
+	const scope = refresh ? REFRESH_SCOPE : FILE_SCOPE;
+	const hash = hashPlan({
+		direction,
+		siteId: site.id,
+		source,
+		target,
+		scope,
+		urlRewrite:
+			refresh && prod.url && stage.url
+				? { from: prod.url, to: stage.url }
+				: null,
+	});
+	const planPrefix = `sync_${direction}_${safePlanToken(site.id)}_`;
+	const rewriteCount =
+		refresh && prod.url && stage.url && countUrlOccurrences
+			? await countUrlOccurrences(prod.url, stage.url)
+			: null;
 	return {
 		apply: canApply
 			? {
@@ -96,8 +176,12 @@ export async function buildStagingSyncPlan({
 		backup: { env: "prod", required: true, timing: "before-change" },
 		canApply,
 		conflicts,
+		createdAt,
 		direction,
-		scope: refresh ? REFRESH_SCOPE : FILE_SCOPE,
+		expiresAt,
+		freshness: { maxAgeMinutes: PLAN_TTL_MINUTES, status: "fresh" },
+		planId: `${planPrefix}${hash}`,
+		scope,
 		siteId: site.id,
 		source,
 		steps: refresh
@@ -115,7 +199,22 @@ export async function buildStagingSyncPlan({
 		target,
 		urlRewrite:
 			refresh && prod.url && stage.url
-				? { from: prod.url, required: true, to: stage.url }
-				: { required: false },
+				? {
+						estimatedOccurrences: rewriteCount,
+						from: prod.url,
+						preview:
+							rewriteCount === null
+								? `Replace ${prod.url} with ${stage.url} during staging restore.`
+								: `Replace ${rewriteCount} occurrence(s) of ${prod.url} with ${stage.url} during staging restore.`,
+						required: true,
+						to: stage.url,
+					}
+				: {
+						estimatedOccurrences: 0,
+						preview: refresh
+							? "No URL rewrite can be planned until both URLs are known."
+							: "No URL rewrite is planned for managed-file promotion.",
+						required: false,
+					},
 	};
 }

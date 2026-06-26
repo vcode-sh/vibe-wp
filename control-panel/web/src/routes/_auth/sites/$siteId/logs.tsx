@@ -2,20 +2,29 @@ import {
 	NativeSelect,
 	NativeSelectOption,
 } from "@control-panel/ui/components/native-select";
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Radio } from "lucide-react";
 import { useState } from "react";
+import {
+	LOG_CACHE_FILTERS,
+	LOG_FILTER_MODES,
+	LOG_SENSITIVE_SOURCES,
+	LOG_SEVERITIES,
+	LOG_SOURCES,
+	LOG_TAILS,
+	type LogCacheFilter,
+	type LogFilterMode,
+	type LogSeverity,
+	type LogSource,
+	type LogTail,
+} from "@/components/logs/log-options";
+import { RecentLogs } from "@/components/logs/recent-log-list";
 import { LiveLogTail } from "@/components/patterns/live-log-tail";
 import { PageHeader } from "@/components/patterns/page-header";
-import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { TopBar } from "@/components/top-bar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { logsQuery } from "@/data/queries";
 import { authClient } from "@/lib/auth-client";
 import { client } from "@/lib/orpc/client";
 
@@ -23,45 +32,31 @@ export const Route = createFileRoute("/_auth/sites/$siteId/logs")({
 	component: LogsPage,
 });
 
-const SOURCES = [
-	"all",
-	"nginx",
-	"php",
-	"wp",
-	"mariadb",
-	"redis",
-	"access",
-] as const;
-const TAILS = ["100", "500", "2000"] as const;
-const SENSITIVE = new Set(["access", "mariadb"]);
-
-type Source = (typeof SOURCES)[number];
-type Tail = (typeof TAILS)[number];
-
-const SEVERITY_CLASS: Record<string, string> = {
-	error: "text-destructive",
-	warn: "text-amber-500",
-	debug: "text-muted-foreground/60",
-	info: "",
-};
-const CACHE_CLASS: Record<string, string> = {
-	HIT: "text-emerald-500",
-	MISS: "text-destructive",
-};
-
-async function downloadLogs(
-	siteId: string,
-	service: Source,
-	filter: string
-): Promise<void> {
+async function downloadLogs(input: {
+	cache: LogCacheFilter;
+	filter: string;
+	filterMode: LogFilterMode;
+	service: LogSource;
+	severity: LogSeverity;
+	siteId: string;
+	tail: LogTail;
+}): Promise<void> {
 	const res = await client.logsExport({
-		siteId,
-		service,
-		...(filter ? { filter } : {}),
+		siteId: input.siteId,
+		service: input.service,
+		tail: input.tail,
+		filterMode: input.filterMode,
+		severity: input.severity,
+		cache: input.cache,
+		...(input.filter ? { filter: input.filter } : {}),
 	});
-	const body = res.lines
-		.map((l) => `${l.whenISO}\t${l.source}\t${l.text}`)
-		.join("\n");
+	const body = [
+		"time\tsource\tseverity\tcache\ttext",
+		...res.lines.map(
+			(l) =>
+				`${l.whenISO}\t${l.source}\t${l.severity ?? "info"}\t${l.cache ?? ""}\t${l.text}`
+		),
+	].join("\n");
 	const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
 	const a = document.createElement("a");
 	a.href = url;
@@ -70,75 +65,21 @@ async function downloadLogs(
 	URL.revokeObjectURL(url);
 }
 
-function RecentLogs({
-	siteId,
-	source,
-	tail,
-	filter,
-}: {
-	siteId: string;
-	source: Source;
-	tail: Tail;
-	filter: string;
-}) {
-	const logs = useQuery(logsQuery(siteId, { service: source, tail, filter }));
-	const lines = logs.data ?? [];
-
-	return (
-		<QueryBoundary
-			errorMessage="Couldn't load the logs."
-			hasData={Boolean(logs.data)}
-			isError={logs.isError}
-			isLoading={logs.isLoading}
-			onRetry={() => logs.refetch()}
-			skeletonClassName="h-64 w-full"
-		>
-			<TabsContent value={source}>
-				{lines.length === 0 ? (
-					<div className="py-8 text-center text-muted-foreground text-xs">
-						No log entries for this source.
-					</div>
-				) : (
-					<ScrollArea className="h-64 rounded-md border border-border bg-background p-3 font-mono text-xs">
-						{lines.map((l) => (
-							<div className="flex gap-3" key={l.id}>
-								<span className="text-muted-foreground">
-									{l.whenISO.slice(11, 19)}
-								</span>
-								<Badge className="h-4" variant="outline">
-									{l.source}
-								</Badge>
-								{l.cache ? (
-									<Badge
-										className={`h-4 ${CACHE_CLASS[l.cache] ?? ""}`}
-										variant="outline"
-									>
-										cache:{l.cache}
-									</Badge>
-								) : null}
-								<span className={SEVERITY_CLASS[l.severity ?? "info"]}>
-									{l.text}
-								</span>
-							</div>
-						))}
-					</ScrollArea>
-				)}
-			</TabsContent>
-		</QueryBoundary>
-	);
-}
-
 function LogsPage() {
 	const { siteId } = Route.useParams();
 	const [tailing, setTailing] = useState(false);
-	const [source, setSource] = useState<Source>("all");
-	const [tail, setTail] = useState<Tail>("500");
+	const [source, setSource] = useState<LogSource>("all");
+	const [tail, setTail] = useState<LogTail>("500");
 	const [filter, setFilter] = useState("");
+	const [filterMode, setFilterMode] = useState<LogFilterMode>("text");
+	const [severity, setSeverity] = useState<LogSeverity>("all");
+	const [cache, setCache] = useState<LogCacheFilter>("all");
 
 	const { data: session } = authClient.useSession();
 	const isAdmin = session?.user.role === "admin";
-
-	const visibleSources = SOURCES.filter((s) => isAdmin || !SENSITIVE.has(s));
+	const visibleSources = LOG_SOURCES.filter(
+		(s) => isAdmin || !LOG_SENSITIVE_SOURCES.has(s)
+	);
 
 	return (
 		<>
@@ -157,7 +98,7 @@ function LogsPage() {
 					subtitle="Recent logs, or a live tail across nginx, PHP-FPM and WordPress. Secrets redacted."
 					title="Logs"
 				/>
-				<Tabs onValueChange={(v) => setSource(v as Source)} value={source}>
+				<Tabs onValueChange={(v) => setSource(v as LogSource)} value={source}>
 					<div className="flex flex-wrap items-center gap-2">
 						<TabsList>
 							{visibleSources.map((s) => (
@@ -168,10 +109,10 @@ function LogsPage() {
 						</TabsList>
 						<NativeSelect
 							className="w-24"
-							onChange={(e) => setTail(e.target.value as Tail)}
+							onChange={(e) => setTail(e.target.value as LogTail)}
 							value={tail}
 						>
-							{TAILS.map((t) => (
+							{LOG_TAILS.map((t) => (
 								<NativeSelectOption key={t} value={t}>
 									{t} lines
 								</NativeSelectOption>
@@ -180,12 +121,58 @@ function LogsPage() {
 						<Input
 							className="w-48"
 							onChange={(e) => setFilter(e.target.value)}
-							placeholder="Filter…"
+							placeholder="Filter..."
 							value={filter}
 						/>
+						<NativeSelect
+							aria-label="Filter mode"
+							className="w-24"
+							onChange={(e) => setFilterMode(e.target.value as LogFilterMode)}
+							value={filterMode}
+						>
+							{LOG_FILTER_MODES.map((mode) => (
+								<NativeSelectOption key={mode} value={mode}>
+									{mode}
+								</NativeSelectOption>
+							))}
+						</NativeSelect>
+						<NativeSelect
+							aria-label="Severity"
+							className="w-28"
+							onChange={(e) => setSeverity(e.target.value as LogSeverity)}
+							value={severity}
+						>
+							{LOG_SEVERITIES.map((s) => (
+								<NativeSelectOption key={s} value={s}>
+									{s}
+								</NativeSelectOption>
+							))}
+						</NativeSelect>
+						<NativeSelect
+							aria-label="Cache"
+							className="w-32"
+							onChange={(e) => setCache(e.target.value as LogCacheFilter)}
+							value={cache}
+						>
+							{LOG_CACHE_FILTERS.map((c) => (
+								<NativeSelectOption key={c} value={c}>
+									{c === "all" ? "all cache" : c}
+								</NativeSelectOption>
+							))}
+						</NativeSelect>
 						{isAdmin ? (
 							<Button
-								onClick={() => downloadLogs(siteId, source, filter)}
+								onClick={() =>
+									downloadLogs({
+										siteId,
+										service: source,
+										tail,
+										filter,
+										filterMode,
+										severity,
+										cache,
+									})
+								}
 								size="sm"
 								variant="outline"
 							>
@@ -194,21 +181,29 @@ function LogsPage() {
 							</Button>
 						) : null}
 					</div>
-					{tailing ? (
-						<LiveLogTail
-							active={tailing}
-							filter={filter || undefined}
-							service={source}
-							siteId={siteId}
-						/>
-					) : (
-						<RecentLogs
-							filter={filter}
-							siteId={siteId}
-							source={source}
-							tail={tail}
-						/>
-					)}
+					<TabsContent value={source}>
+						{tailing ? (
+							<LiveLogTail
+								active={tailing}
+								cache={cache}
+								filter={filter || undefined}
+								filterMode={filterMode}
+								service={source}
+								severity={severity}
+								siteId={siteId}
+							/>
+						) : (
+							<RecentLogs
+								cache={cache}
+								filter={filter}
+								filterMode={filterMode}
+								severity={severity}
+								siteId={siteId}
+								source={source}
+								tail={tail}
+							/>
+						)}
+					</TabsContent>
 				</Tabs>
 			</div>
 		</>

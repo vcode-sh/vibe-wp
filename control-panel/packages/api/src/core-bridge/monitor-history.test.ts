@@ -25,7 +25,7 @@ beforeAll(async () => {
 
 	// Columns mirror the drizzle schema (snake_case, timestamp_ms integers).
 	await client.execute(
-		"CREATE TABLE monitor_samples (id TEXT PRIMARY KEY, site_id TEXT NOT NULL, ts INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, up INTEGER NOT NULL, http_status INTEGER, cert_days_left INTEGER, dns_ok INTEGER, failures INTEGER NOT NULL, warnings INTEGER NOT NULL)"
+		"CREATE TABLE monitor_samples (id TEXT PRIMARY KEY, site_id TEXT NOT NULL, ts INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, up INTEGER NOT NULL, http_status INTEGER, cert_days_left INTEGER, dns_ok INTEGER, failures INTEGER NOT NULL, warnings INTEGER NOT NULL, checks_json TEXT)"
 	);
 
 	mod = await import("./monitor-history");
@@ -49,6 +49,7 @@ describe("recordMonitorSample + monitoringHistory + latestSample", () => {
 		expect(recorded.httpStatus).toBe(200);
 		expect(recorded.certDaysLeft).toBe(9);
 		expect(recorded.dnsOk).toBe(1);
+		expect(recorded.checksJson).toContain("TLS certificate");
 
 		const history = await mod.monitoringHistory({ siteId: SITE, sinceDays: 7 });
 		expect(history.length).toBeGreaterThanOrEqual(1);

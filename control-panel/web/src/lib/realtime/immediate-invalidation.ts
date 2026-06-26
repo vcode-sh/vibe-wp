@@ -1,10 +1,13 @@
 import {
 	healthQuery,
 	inventoryQuery,
+	logRotationConfigQuery,
 	monitoringOverviewQuery,
 	notifyConfigQuery,
+	securityConfigQuery,
 	securityRadarQuery,
 	securityScoreQuery,
+	securityStatusQuery,
 	serverInfoQuery,
 	sharedDbStatusQuery,
 	siteOverviewQuery,
@@ -75,6 +78,18 @@ export function invalidateInventoryRefreshed(
 export function invalidateNotifyConfigSaved(client: QueryClientLike) {
 	client.invalidateQueries(notifyConfigQuery("__global__"));
 	invalidateFamily(client, "healthReport");
+}
+
+export function invalidateLogRotationConfigSaved(client: QueryClientLike) {
+	client.invalidateQueries(logRotationConfigQuery());
+	invalidateFamily(client, "siteSettingsGet");
+}
+
+export function invalidateSecurityConfigSaved(client: QueryClientLike) {
+	client.invalidateQueries(securityConfigQuery());
+	client.invalidateQueries(securityStatusQuery());
+	invalidateFamily(client, "siteOverview");
+	invalidateFamily(client, "siteSecurityScore");
 }
 
 export function invalidateMonitoringSummaryRecorded(client: QueryClientLike) {

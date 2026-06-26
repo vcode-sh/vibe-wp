@@ -10,6 +10,8 @@ export interface PlanJournal {
   logPath: string;
   record(result: TaskResult): Promise<void>;
   statePath: string;
+  summaryPath: string;
+  writeSummary(lines: string[]): Promise<void>;
 }
 
 interface JournalState {
@@ -21,6 +23,7 @@ export async function openJournal(dir: string, resume: boolean): Promise<PlanJou
   await mkdir(dir, { recursive: true });
   const statePath = `${dir}/state.json`;
   const logPath = `${dir}/install.log`;
+  const summaryPath = `${dir}/summary.txt`;
   const results: TaskResult[] = [];
   const completed = new Set<string>();
 
@@ -50,6 +53,7 @@ export async function openJournal(dir: string, resume: boolean): Promise<PlanJou
     completed,
     statePath,
     logPath,
+    summaryPath,
     async record(result: TaskResult): Promise<void> {
       const index = results.findIndex((entry) => entry.id === result.id);
       if (index >= 0) {
@@ -60,6 +64,9 @@ export async function openJournal(dir: string, resume: boolean): Promise<PlanJou
       await persist();
       const body = redact(result.output ?? "").trim();
       await appendFile(logPath, `[${result.status}] ${result.id}\n${body}\n\n`);
+    },
+    async writeSummary(lines: string[]): Promise<void> {
+      await Bun.write(summaryPath, `${redact(lines.join("\n"))}\n`);
     }
   };
 }

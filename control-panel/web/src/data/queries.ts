@@ -40,8 +40,19 @@ export const offsiteVerifiedQuery = (siteId: string) =>
 	orpc.offsiteVerified.queryOptions({ input: { siteId } });
 
 export interface LogParams {
+	cache?:
+		| "all"
+		| "HIT"
+		| "MISS"
+		| "BYPASS"
+		| "EXPIRED"
+		| "STALE"
+		| "UPDATING"
+		| "REVALIDATED";
 	filter?: string;
+	filterMode?: "text" | "regex";
 	service?: "nginx" | "php" | "wp" | "mariadb" | "redis" | "access" | "all";
+	severity?: "all" | "error" | "warn" | "info" | "debug";
 	tail?: "100" | "500" | "2000";
 }
 
@@ -49,14 +60,25 @@ export const logsQuery = (siteId: string, params: LogParams = {}) =>
 	orpc.logsRecent.queryOptions({
 		input: {
 			siteId,
+			cache: params.cache ?? "all",
 			service: params.service ?? "all",
+			severity: params.severity ?? "all",
 			tail: params.tail ?? "500",
 			...(params.filter ? { filter: params.filter } : {}),
+			filterMode: params.filterMode ?? "text",
 		},
 	});
 
 export const stagingQuery = (siteId: string) =>
 	orpc.stagingInfo.queryOptions({ input: { siteId } });
+
+export const stagingSyncPlanQuery = (
+	siteId: string,
+	direction: "refreshFromProd" | "pushFilesToLive"
+) =>
+	orpc.stagingSyncPlan.queryOptions({
+		input: { direction, siteId },
+	});
 
 export const siteStatusQuery = (siteId: string) =>
 	orpc.siteStatus.queryOptions({ input: { siteId } });
@@ -75,6 +97,9 @@ export const notifyConfigQuery = (siteId: string) =>
 export const smtpConfigQuery = (siteId: string) =>
 	orpc.smtpConfigGet.queryOptions({ input: { siteId } });
 
+export const logRotationConfigQuery = () =>
+	orpc.logRotationConfigGet.queryOptions();
+
 export const siteSettingsQuery = (siteId: string) =>
 	orpc.siteSettingsGet.queryOptions({ input: { siteId } });
 
@@ -82,6 +107,8 @@ export const healthPerfQuery = (siteId: string) =>
 	orpc.healthPerf.queryOptions({ input: { siteId } });
 
 export const securityStatusQuery = () => orpc.securityStatus.queryOptions();
+
+export const securityConfigQuery = () => orpc.securityConfigGet.queryOptions();
 
 export const devInfoQuery = (siteId: string) =>
 	orpc.devInfo.queryOptions({ input: { siteId } });

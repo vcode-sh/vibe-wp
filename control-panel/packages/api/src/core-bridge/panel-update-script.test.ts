@@ -66,4 +66,34 @@ describe("bin/panel update safety contract", () => {
 		expect(deployIndex).toBeGreaterThan(snapshotIndex);
 		expect(restoreIndex).toBeGreaterThan(deployIndex);
 	});
+
+	it("restores the previous snapshot when the deployed panel fails healthcheck", () => {
+		const body = functionBody("update_panel");
+		const deployIndex = body.indexOf("if deploy_panel");
+		const healthIndex = body.indexOf("panel_update_healthcheck", deployIndex);
+		const restoreIndex = body.indexOf("panel_update_restore", healthIndex);
+
+		expect(functionBody("panel_update_healthcheck")).toContain(
+			'systemctl is-active --quiet "$UNIT.service"'
+		);
+		expect(functionBody("panel_update_healthcheck")).toContain(
+			'curl -fsS "http://localhost:$PORT/"'
+		);
+		expect(healthIndex).toBeGreaterThan(deployIndex);
+		expect(restoreIndex).toBeGreaterThan(healthIndex);
+	});
+
+	it("supports a pinned update ref with a safe git-ref allowlist", () => {
+		expect(source).toContain("--ref)");
+		expect(source).toContain("VIBE_PANEL_UPDATE_REF:-");
+		expect(functionBody("validate_update_ref")).toContain(
+			"update ref contains unsupported characters"
+		);
+		expect(functionBody("pull_latest_source")).toContain(
+			'git -C "$REPO_DIR" fetch --tags --prune origin'
+		);
+		expect(functionBody("pull_latest_source")).toContain(
+			'git -C "$REPO_DIR" checkout --detach "$UPDATE_REF"'
+		);
+	});
 });

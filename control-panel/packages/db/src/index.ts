@@ -15,6 +15,7 @@ import {
 import { backupVerification } from "./schema/backup-verification";
 import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
+import { logRotationConfig } from "./schema/log-rotation";
 import { monitorSamples } from "./schema/monitoring";
 import { notifyConfig } from "./schema/notify";
 import { siteOverviewCache } from "./schema/site-overview-cache";
@@ -31,6 +32,7 @@ const schema = {
 	verification,
 	auditLog,
 	jobs,
+	logRotationConfig,
 	backupConfig,
 	backupVerification,
 	notifyConfig,

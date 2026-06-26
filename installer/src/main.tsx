@@ -11,6 +11,7 @@ import { usage } from "./cli/usage";
 import { defaultState, INSTALLER_VERSION } from "./core/defaults";
 import { detectHostFacts } from "./core/host";
 import { buildInstallPlan } from "./core/install-plan";
+import { buildInstallSummaryLines } from "./core/install-summary";
 import { openJournal } from "./core/journal";
 import { applyLocalSandboxDefaults, createLocalSandboxHostFacts } from "./core/local-sandbox";
 import { runPlan } from "./core/plan-runner";
@@ -53,6 +54,7 @@ async function runNonInteractive(options: InstallerOptions): Promise<boolean> {
       options.resume
     );
     const results = await runPlan(plan, options.yes, {}, journal);
+    await journal.writeSummary(buildInstallSummaryLines(plan, results));
     console.log(JSON.stringify(results, null, 2));
     return true;
   }

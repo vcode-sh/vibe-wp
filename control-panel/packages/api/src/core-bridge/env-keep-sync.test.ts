@@ -31,7 +31,9 @@ import { fileURLToPath } from "node:url";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { logRotationToEnv } from "./log-rotation-config-pure";
 import { toEnv as notifyToEnv } from "./notify-config-pure";
+import { securityConfigToEnv } from "./security-config-pure";
 import {
 	ALLOWED_WORDPRESS_IMAGES,
 	debugPatchToEnv,
@@ -128,6 +130,8 @@ beforeEach(() => {
  *   backup-config.ts (backupConfigApply) → backupConfigEnv (full creds + retention)
  *   settings.ts     (backupTest)        → backupTestEnv   (subset; already covered)
  *   notify-config.ts (notifyConfigApply) → notify toEnv    (all channels set)
+ *   log-rotation-config.ts (siteConfigApply) → logRotationToEnv
+ *   security-config.ts (securityConfigApply) → securityConfigToEnv
  *   smtp-config.ts  (smtpConfigApply)   → smtp toEnv      (full config incl. password)
  *   settings.ts     (smtpTest)          → smtp toEnv + SMTP_TEST_TO
  *
@@ -162,6 +166,26 @@ async function collectInjectedEnvKeys(): Promise<Set<string>> {
 		for (const k of Object.keys(securityFixToEnv(fix))) {
 			keys.add(k);
 		}
+	}
+
+	// logRotationConfigSet: siteConfigApply receives the Docker json-file
+	// rotation keys plus the VIBE_SITE_CONFIG_KEYS sentinel.
+	for (const k of Object.keys(
+		logRotationToEnv({ maxSize: "25m", maxFile: 5 })
+	)) {
+		keys.add(k);
+	}
+
+	for (const k of Object.keys(
+		securityConfigToEnv({
+			firewallEnabled: true,
+			fail2banEnabled: true,
+			maxRetry: 5,
+			findTime: "10m",
+			banTime: "1h",
+		})
+	)) {
+		keys.add(k);
 	}
 
 	// backupConfigApply: full R2 credentials + enabled + retention → all
@@ -304,15 +328,16 @@ describe("bin/panel env_keep stays in sync with injected env keys", () => {
 		).toEqual([]);
 	});
 
-	it("the two sets are EXACTLY equal (43 keys today)", async () => {
+	it("the two sets are EXACTLY equal (50 keys today)", async () => {
 		const injected = await collectInjectedEnvKeys();
 		const keep = parsePanelEnvKeep();
 		expect(sorted(keep)).toEqual(sorted(injected));
 		// Belt-and-braces: pin the count so a same-size swap can't slip through.
 		// 30 base + 2 security-onefix (DISALLOW_FILE_EDIT, VIBE_WP_DISABLE_XMLRPC)
 		// + 2 vuln-radar (PANEL_VULN_FEED_URL, PANEL_VULN_FEED_KEY)
-		// + 9 perf keys (8 VIBE_PERF_<tunable> + VIBE_PERF_KEYS) = 43.
-		expect(injected.size).toBe(43);
-		expect(keep.size).toBe(43);
+		// + 9 perf keys (8 VIBE_PERF_<tunable> + VIBE_PERF_KEYS)
+		// + 2 log-rotation keys + 5 security-config keys = 50.
+		expect(injected.size).toBe(50);
+		expect(keep.size).toBe(50);
 	});
 });

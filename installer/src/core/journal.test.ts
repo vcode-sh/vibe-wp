@@ -41,9 +41,11 @@ describe("journal + resume", () => {
     const dir = await tempDir();
     const journal = await openJournal(dir, false);
     await journal.record({ id: "checkout", status: "done", output: "ok", code: 0 });
+    await journal.writeSummary(["Install summary", "Site: https://demo.test"]);
     const state = JSON.parse(await readFile(`${dir}/state.json`, "utf8"));
     expect(state.results[0].id).toBe("checkout");
     expect(await readFile(`${dir}/install.log`, "utf8")).toContain("[done] checkout");
+    expect(await readFile(`${dir}/summary.txt`, "utf8")).toContain("Site: https://demo.test");
   });
 
   test("resume reads completed ids and runPlan skips them", async () => {

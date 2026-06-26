@@ -78,7 +78,7 @@ user's existing sessions. For automation, pipe the secret on stdin:
 printf '%s\n' "$NEW_PANEL_PASSWORD" | ./bin/panel reset-password --email you@example.com --password-stdin --yes
 ```
 
-Real-VPS bootstrap validation was completed on 2026-06-23: magic-DNS install with a real Let's Encrypt cert, off-root `vibe-panel` service, owner sign-in + session, host ops through the wrapper, and site detection. A 2026-06-26 VPS pass additionally covered panel install, break-glass password reset, support-bundle generation through the wrapper with no secret leak, clean update, failed-update rollback, production+staging site install, staging refresh, safe push-to-live, and authenticated browser GUI/realtime proof for the staging publish flow; see `docs/superpowers/ROADMAP.md` for the current status.
+Real-VPS bootstrap validation was completed on 2026-06-23: magic-DNS install with a real Let's Encrypt cert, off-root `vibe-panel` service, owner sign-in + session, host ops through the wrapper, and site detection. A 2026-06-26 VPS pass additionally covered panel install, break-glass password reset, support-bundle generation through the wrapper with no secret leak, clean update, failed-update rollback, production+staging site install, staging refresh, safe push-to-live, and authenticated browser GUI/realtime proof for the staging publish flow. Current code also adds post-deploy panel update health rollback plus pinned update refs; see `docs/superpowers/ROADMAP.md` for the current status.
 
 ## Getting Started
 

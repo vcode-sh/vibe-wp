@@ -12,13 +12,30 @@ type LogService =
 	| "redis"
 	| "access"
 	| "all";
+type LogFilterMode = "text" | "regex";
+type LogSeverity = "all" | "error" | "warn" | "info" | "debug";
+type LogCache =
+	| "all"
+	| "HIT"
+	| "MISS"
+	| "BYPASS"
+	| "EXPIRED"
+	| "STALE"
+	| "UPDATING"
+	| "REVALIDATED";
 
 interface LiveLogTailProps {
 	active: boolean;
+	cache?: LogCache;
 	filter?: string;
+	filterMode?: LogFilterMode;
 	service?: LogService;
+	severity?: LogSeverity;
 	siteId: string;
 }
+
+const LOG_VIEWPORT =
+	"h-[min(68vh,44rem)] min-h-[24rem] overflow-y-auto rounded-md border border-border bg-background p-3 font-mono text-muted-foreground text-xs";
 
 /**
  * Outer wrapper owns a retry key so "Reconnect" can fully remount the inner
@@ -27,10 +44,19 @@ interface LiveLogTailProps {
  */
 export function LiveLogTail(props: LiveLogTailProps) {
 	const [retryKey, setRetryKey] = useState(0);
+	const streamKey = [
+		retryKey,
+		props.siteId,
+		props.service ?? "all",
+		props.filter ?? "",
+		props.filterMode ?? "text",
+		props.severity ?? "all",
+		props.cache ?? "all",
+	].join(":");
 	return (
 		<LiveLogTailInner
 			{...props}
-			key={retryKey}
+			key={streamKey}
 			onRetry={() => setRetryKey((k) => k + 1)}
 		/>
 	);
@@ -40,13 +66,23 @@ function LiveLogTailInner({
 	siteId,
 	active,
 	service = "all",
+	cache = "all",
 	filter,
+	filterMode = "text",
+	severity = "all",
 	onRetry,
 }: LiveLogTailProps & { onRetry: () => void }) {
 	const live = useLiveStream(
 		(signal) =>
 			client.logsFollow(
-				{ siteId, service, ...(filter ? { filter } : {}) },
+				{
+					siteId,
+					service,
+					cache,
+					severity,
+					filterMode,
+					...(filter ? { filter } : {}),
+				},
 				{ signal }
 			),
 		active
@@ -60,7 +96,9 @@ function LiveLogTailInner({
 	// offer a real way forward instead of an endless "Waiting for log lines…".
 	if (live.unrecoverable) {
 		return (
-			<div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-border bg-background p-3 text-muted-foreground text-xs">
+			<div
+				className={`${LOG_VIEWPORT} flex flex-col items-center justify-center`}
+			>
 				<p>Live tail disconnected.</p>
 				<Button onClick={onRetry} size="sm" variant="outline">
 					Reconnect
@@ -71,10 +109,7 @@ function LiveLogTailInner({
 
 	return (
 		// Plain div so the ref attaches directly to the scrollable element.
-		<div
-			className="h-64 overflow-y-auto rounded-md border border-border bg-background p-3 font-mono text-muted-foreground text-xs"
-			ref={logRef}
-		>
+		<div className={LOG_VIEWPORT} ref={logRef}>
 			{renderBody(text, live.reconnecting)}
 		</div>
 	);

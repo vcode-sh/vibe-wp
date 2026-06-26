@@ -1,0 +1,170 @@
+#!/usr/bin/env sh
+set -eu
+
+# Host-level firewall/fail2ban configurator used by the control panel.
+# Read mode prints JSON. Apply mode reads only fixed VIBE_SECURITY_* env keys.
+
+if [ "$(id -u)" = 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+JAIL_FILE="/etc/fail2ban/jail.d/vibe-wp.local"
+
+has_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+duration_ok() {
+  case "$1" in
+    [1-9]*[smhd])
+      n="${1%?}"
+      case "$n" in *[!0-9]*|"") return 1 ;; *) return 0 ;; esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+retry_ok() {
+  case "$1" in [1-9]|10) return 0 ;; *) return 1 ;; esac
+}
+
+bool_on() {
+  case "$1" in on|1|true|yes) return 0 ;; *) return 1 ;; esac
+}
+
+check_firewall() {
+  has_cmd ufw || return 1
+  if ufw status 2>/dev/null | grep -q "Status: active"; then return 0; fi
+  if has_cmd sudo && sudo -n ufw status 2>/dev/null | grep -q "Status: active"; then return 0; fi
+  return 1
+}
+
+check_fail2ban() {
+  has_cmd systemctl || return 1
+  [ "$(systemctl is-active fail2ban 2>/dev/null)" = "active" ]
+}
+
+check_auto_updates() {
+  auto_file="/etc/apt/apt.conf.d/20auto-upgrades"
+  if [ -f "$auto_file" ] && grep -q 'APT::Periodic::Unattended-Upgrade "1"' "$auto_file" 2>/dev/null; then
+    return 0
+  fi
+  has_cmd systemctl && [ "$(systemctl is-active unattended-upgrades 2>/dev/null)" = "active" ]
+}
+
+jail_value() {
+  key="$1"
+  fallback="$2"
+  if [ -f "$JAIL_FILE" ]; then
+    value="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$JAIL_FILE" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+    [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+  fi
+  printf '%s' "$fallback"
+}
+
+print_json() {
+  firewall=false; fail2ban=false; auto_updates=false
+  check_firewall && firewall=true
+  check_fail2ban && fail2ban=true
+  check_auto_updates && auto_updates=true
+  maxretry="$(jail_value maxretry 5)"
+  findtime="$(jail_value findtime 10m)"
+  bantime="$(jail_value bantime 1h)"
+  retry_ok "$maxretry" || maxretry=5
+  duration_ok "$findtime" || findtime=10m
+  duration_ok "$bantime" || bantime=1h
+  printf '{"firewall":{"enabled":%s},"fail2ban":{"enabled":%s,"maxRetry":%s,"findTime":"%s","banTime":"%s"},"autoUpdates":%s}\n' \
+    "$firewall" "$fail2ban" "$maxretry" "$findtime" "$bantime" "$auto_updates"
+}
+
+apt_install() {
+  pkg="$1"
+  if ! has_cmd apt-get; then
+    echo "security-config: apt-get not found; cannot install $pkg" >&2
+    return 1
+  fi
+  DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get update -y >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive ${SUDO} apt-get install -y "$pkg" >/dev/null
+}
+
+apply_firewall() {
+  desired="$1"
+  if bool_on "$desired"; then
+    has_cmd ufw || apt_install ufw
+    ${SUDO} ufw default deny incoming
+    ${SUDO} ufw default allow outgoing
+    if ${SUDO} ufw app list 2>/dev/null | grep -q "OpenSSH"; then
+      ${SUDO} ufw allow OpenSSH
+    else
+      ${SUDO} ufw allow 22/tcp
+    fi
+    ${SUDO} ufw allow 80/tcp
+    ${SUDO} ufw allow 443/tcp
+    ${SUDO} ufw --force enable
+  else
+    has_cmd ufw && ${SUDO} ufw --force disable || true
+  fi
+}
+
+write_fail2ban_jail() {
+  enabled="$1"
+  bantime="$2"
+  findtime="$3"
+  maxretry="$4"
+  ${SUDO} mkdir -p "$(dirname "$JAIL_FILE")"
+  {
+    echo "# Managed by vibe-wp bin/security-config."
+    echo "[sshd]"
+    echo "enabled = $enabled"
+    echo "bantime = $bantime"
+    echo "findtime = $findtime"
+    echo "maxretry = $maxretry"
+  } | ${SUDO} tee "$JAIL_FILE" >/dev/null
+}
+
+apply_fail2ban() {
+  desired="$1"; bantime="$2"; findtime="$3"; maxretry="$4"
+  if bool_on "$desired"; then
+    has_cmd fail2ban-client || apt_install fail2ban
+    write_fail2ban_jail true "$bantime" "$findtime" "$maxretry"
+    ${SUDO} systemctl enable --now fail2ban
+    ${SUDO} systemctl reload fail2ban || ${SUDO} systemctl restart fail2ban
+  else
+    write_fail2ban_jail false "$bantime" "$findtime" "$maxretry"
+    has_cmd systemctl && ${SUDO} systemctl disable --now fail2ban || true
+  fi
+}
+
+apply_config() {
+  firewall="${VIBE_SECURITY_FIREWALL:-on}"
+  fail2ban="${VIBE_SECURITY_FAIL2BAN:-on}"
+  maxretry="${VIBE_FAIL2BAN_MAX_RETRY:-5}"
+  findtime="${VIBE_FAIL2BAN_FIND_TIME:-10m}"
+  bantime="${VIBE_FAIL2BAN_BAN_TIME:-1h}"
+  case "$firewall" in on|off) : ;; *) echo "security-config: invalid firewall value" >&2; exit 2 ;; esac
+  case "$fail2ban" in on|off) : ;; *) echo "security-config: invalid fail2ban value" >&2; exit 2 ;; esac
+  retry_ok "$maxretry" || { echo "security-config: invalid max retry" >&2; exit 2; }
+  duration_ok "$findtime" || { echo "security-config: invalid find time" >&2; exit 2; }
+  duration_ok "$bantime" || { echo "security-config: invalid ban time" >&2; exit 2; }
+  apply_firewall "$firewall"
+  apply_fail2ban "$fail2ban" "$bantime" "$findtime" "$maxretry"
+  print_json
+}
+
+case "${1:-}" in
+  "")
+    print_json
+    ;;
+  --apply)
+    [ "$#" -eq 1 ] || { echo "security-config: --apply takes no args" >&2; exit 2; }
+    apply_config
+    ;;
+  -h|--help)
+    echo "Usage: ./bin/security-config [--apply]"
+    ;;
+  *)
+    echo "security-config: unknown option: $1" >&2
+    exit 2
+    ;;
+esac
+

@@ -6,6 +6,7 @@ import { space } from "../app/tokens";
 import { Panel } from "../components/panel";
 import { ActionRow, Field } from "../components/primitives";
 import { ProgressBar, Spinner } from "../components/spinner";
+import { buildInstallSummaryLines } from "../core/install-summary";
 import { runPlan } from "../core/plan-runner";
 import type { TaskResult } from "../core/task-runner";
 import {
@@ -99,7 +100,8 @@ export function ExecuteScreen({
       const hasFailure = taskResults.some((result) => result.status === "failed");
       setStatus(hasFailure ? "failed" : "done");
       appendLog(setExecutionLines, [
-        hasFailure ? "Installation stopped after a failed task." : "Installation completed."
+        hasFailure ? "Installation stopped after a failed task." : "Installation completed.",
+        ...buildInstallSummaryLines(plan, taskResults)
       ]);
     } catch (error) {
       setStatus("failed");

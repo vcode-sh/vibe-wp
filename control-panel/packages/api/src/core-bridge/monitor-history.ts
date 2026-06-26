@@ -15,6 +15,7 @@ export type { MonitorParsed } from "./monitor-history-pure";
 /** A persisted monitor sample row, as returned to the router. */
 export interface MonitorSampleRow {
 	certDaysLeft: number | null;
+	checksJson: string | null;
 	dnsOk: number | null;
 	failures: number;
 	httpStatus: number | null;
@@ -46,6 +47,7 @@ export async function recordMonitorSample(
 		id: crypto.randomUUID(),
 		siteId,
 		ts: new Date(),
+		checksJson: JSON.stringify(parsed.checks),
 		...fields,
 	};
 	await db.insert(monitorSamples).values(row);

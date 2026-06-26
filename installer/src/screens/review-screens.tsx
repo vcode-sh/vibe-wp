@@ -7,11 +7,13 @@ import { useGlyphs } from "../components/glyph-context";
 import { Panel } from "../components/panel";
 import { ActionRow } from "../components/primitives";
 import { NoteBox } from "../components/section";
+import { advancedOverrideWarnings } from "../core/advanced-overrides";
 import { shortPath } from "../core/site-profile";
 import { PanelPlanSummary, PanelSuccess } from "./panel-result";
 
 export function ReviewScreen({ redactedPlan, state, validationErrors, next }: ScreenProps) {
   const isPanel = state.mode === "panel-bootstrap";
+  const overrideWarnings = advancedOverrideWarnings(state);
   // Half-width panel: keep just env/<file> so it never truncates; the site is
   // already named in the plan summary above.
   const envPaths = redactedPlan.envFiles.map((env) => shortPath(env.path, 2)).join("\n");
@@ -28,12 +30,30 @@ export function ReviewScreen({ redactedPlan, state, validationErrors, next }: Sc
       {!isPanel && (
         <Panel content={redactedPlan.caddyfile} maxLines={6} title="CADDYFILE PREVIEW" />
       )}
+      {overrideWarnings.length > 0 && <AdvancedOverrideWarningList state={state} />}
       <ActionRow
         onPrimary={next}
         primary="Open execution"
         secondary="Execution is blocked until confirmation"
       />
     </box>
+  );
+}
+
+function AdvancedOverrideWarningList({ state }: { state: ScreenProps["state"] }) {
+  const warnings = advancedOverrideWarnings(state);
+  if (warnings.length === 0) {
+    return null;
+  }
+  return (
+    <NoteBox tone="danger">
+      <text attributes={TextAttributes.BOLD} fg={color("danger")}>
+        Advanced override checkpoint
+      </text>
+      <text fg={color("text")} wrapMode="word">
+        {warnings.map((item) => `${item.label}: ${item.consequence}`).join("\n")}
+      </text>
+    </NoteBox>
   );
 }
 

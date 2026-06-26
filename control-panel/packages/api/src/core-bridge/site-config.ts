@@ -24,6 +24,7 @@ import {
 	isAllowedWordpressImage,
 	parseScheduleStatus,
 	securityFixToEnv,
+	siteSecurityPatchToEnv,
 } from "./site-config-pure";
 import { findSite } from "./sites";
 
@@ -151,6 +152,22 @@ export async function applySecurityFix(
 	const site = await requireSite(siteId);
 	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
 		env: securityFixToEnv(fix),
+	});
+	ensureOk("site-config-apply", siteId, result);
+	return { restartRequired: true };
+}
+
+export async function applySiteSecuritySettings(
+	siteId: string,
+	patch: { disableXmlRpc?: boolean; disallowFileEdit?: boolean }
+): Promise<{ restartRequired: boolean }> {
+	const env = siteSecurityPatchToEnv(patch);
+	if (Object.keys(env).length === 0) {
+		return { restartRequired: false };
+	}
+	const site = await requireSite(siteId);
+	const result = await runVibe(site.installDir, "prod", "siteConfigApply", {
+		env,
 	});
 	ensureOk("site-config-apply", siteId, result);
 	return { restartRequired: true };

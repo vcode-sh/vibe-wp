@@ -3,7 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
+import { LogRotationCard } from "@/components/settings/log-rotation-card";
 import { PanelDomainCard } from "@/components/settings/panel-domain-card";
+import { SecurityConfigCard } from "@/components/settings/security-config-card";
 import { ServerMaintenanceCard } from "@/components/settings/server-maintenance-card";
 import { SharedDbCard } from "@/components/settings/shared-db-card";
 import { TopBar } from "@/components/top-bar";
@@ -122,6 +124,8 @@ function ServerPage() {
 						</Card>
 					</QueryBoundary>
 				</div>
+				{isAdmin ? <SecurityConfigCard /> : null}
+				{isAdmin ? <LogRotationCard /> : null}
 				<PanelDomainCard />
 				<SharedDbCard />
 				<ServerMaintenanceCard />

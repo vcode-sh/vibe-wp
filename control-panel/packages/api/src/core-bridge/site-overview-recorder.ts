@@ -1,4 +1,5 @@
 import { subscribeOperationLifecycleEvents } from "./job-events";
+import { clearServerInfoCache } from "./server-info-cache";
 import { deleteSiteOverviewSnapshot } from "./site-overview-cache";
 import {
 	kickSiteOverviewRefresh,
@@ -84,6 +85,7 @@ export function startSiteOverviewOperationRefresher(
 			if (event.phase !== "finish" || !event.status) {
 				continue;
 			}
+			clearServerInfoCache();
 			if (event.kind === "removeSite") {
 				await deleteSiteOverviewSnapshot(event.siteId);
 				continue;

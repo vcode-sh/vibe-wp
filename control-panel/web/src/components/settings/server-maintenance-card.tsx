@@ -135,9 +135,10 @@ export function ServerMaintenanceCard() {
 				<div className="grid gap-2 border-border border-t pt-6">
 					<div className="font-medium text-sm">Update Vibe WP</div>
 					<p className="text-muted-foreground text-sm">
-						Pulls the latest code, rebuilds the panel and stack, and briefly
-						restarts the panel. You may be signed out for a few seconds — that
-						is normal. The progress appears in the operations tray.
+						Takes a local panel snapshot, pulls the latest code, rebuilds, and
+						briefly restarts the panel. If deployment or the health check fails,
+						the previous panel is restored. Progress appears in the operations
+						tray.
 					</p>
 					<div>
 						<Button
@@ -160,10 +161,11 @@ export function ServerMaintenanceCard() {
 					<AlertDialogHeader>
 						<AlertDialogTitle>Update Vibe WP now?</AlertDialogTitle>
 						<AlertDialogDescription>
-							This pulls the latest code, rebuilds the panel and stack, and
-							briefly restarts the panel — you may be signed out for a few
-							seconds. The update continues in the background even while the
-							panel restarts. Continue?
+							This takes a local panel snapshot, pulls the latest code,
+							rebuilds, and briefly restarts the panel. If deployment or the
+							health check fails, the previous panel is restored. The update
+							continues in the background even while the panel restarts.
+							Continue?
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>

@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/server";
 import { describe, expect, it } from "vitest";
 import type { LogLine } from "../contract";
 import {
+	applyLogFilters,
 	applySourceFilter,
 	applyTextFilter,
 	assertSourceAllowed,
@@ -9,6 +10,7 @@ import {
 	hostArgs,
 	mapServiceToSource,
 	maskStreamLine,
+	passesStreamFilters,
 	passesStreamSourceFilter,
 } from "./logs-helpers";
 
@@ -84,10 +86,40 @@ describe("applyTextFilter", () => {
 	const lines = [mk({ text: "alpha" }), mk({ text: "beta" })];
 	it("substring matches", () =>
 		expect(applyTextFilter(lines, "alph")).toHaveLength(1));
-	it("regex matches", () =>
-		expect(applyTextFilter(lines, "^be")).toHaveLength(1));
+	it("treats filter text as literal by default", () =>
+		expect(applyTextFilter(lines, "^be")).toHaveLength(0));
 	it("invalid regex falls back to literal", () =>
 		expect(applyTextFilter([mk({ text: "a(b" })], "a(b")).toHaveLength(1));
+});
+
+describe("applyLogFilters", () => {
+	const lines = [
+		mk({ id: "1", text: "cache miss", cache: "MISS", severity: "warn" }),
+		mk({ id: "2", text: "fatal cache hit", cache: "HIT", severity: "error" }),
+		mk({ id: "3", text: "literal marker", severity: "info" }),
+	];
+
+	it("keeps text filters literal unless regex mode is explicit", () => {
+		expect(
+			applyLogFilters(lines, { filter: "^literal" }).map((l) => l.id)
+		).toEqual([]);
+		expect(
+			applyLogFilters(lines, { filter: "^literal", filterMode: "regex" }).map(
+				(l) => l.id
+			)
+		).toEqual(["3"]);
+	});
+
+	it("combines severity and cache filters", () => {
+		expect(
+			applyLogFilters(lines, { severity: "error", cache: "HIT" }).map(
+				(l) => l.id
+			)
+		).toEqual(["2"]);
+		expect(applyLogFilters(lines, { severity: "warn", cache: "HIT" })).toEqual(
+			[]
+		);
+	});
 });
 
 describe("assertSourceAllowed", () => {
@@ -150,5 +182,29 @@ describe("maskStreamLine", () => {
 	it("leaves a plain nginx error line unchanged", () => {
 		const raw = "nginx-1  | 2026/06/24 [error] open() failed";
 		expect(maskStreamLine(raw, "nginx")).toBe(raw);
+	});
+});
+
+describe("passesStreamFilters", () => {
+	const errorHit =
+		'nginx-1  | 2026/06/24 [error] open() failed "GET / HTTP/1.1" 500 cache=HIT';
+	const warnMiss =
+		'nginx-1  | 2026/06/24 [warn] slow "GET / HTTP/1.1" 200 cache=MISS';
+
+	it("applies text, severity, and cache filters to live lines", () => {
+		expect(passesStreamFilters(errorHit, { severity: "error" })).toBe(true);
+		expect(passesStreamFilters(errorHit, { severity: "warn" })).toBe(false);
+		expect(passesStreamFilters(errorHit, { cache: "HIT" })).toBe(true);
+		expect(passesStreamFilters(warnMiss, { cache: "HIT" })).toBe(false);
+	});
+
+	it("uses explicit regex mode for live text filters", () => {
+		expect(passesStreamFilters(warnMiss, { filter: "^nginx" })).toBe(false);
+		expect(
+			passesStreamFilters(warnMiss, {
+				filter: "^nginx",
+				filterMode: "regex",
+			})
+		).toBe(true);
 	});
 });

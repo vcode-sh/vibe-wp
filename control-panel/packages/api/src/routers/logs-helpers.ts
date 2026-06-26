@@ -7,6 +7,7 @@ import {
 	maskAccessPii,
 	maskMariadbPii,
 } from "../core-bridge/log-pii";
+import { parseSeverity } from "../core-bridge/parse";
 
 export const LOG_SERVICE = z.enum([
 	"nginx",
@@ -18,7 +19,35 @@ export const LOG_SERVICE = z.enum([
 	"all",
 ]);
 export const LOG_TAIL = z.enum(["100", "500", "2000"]);
+export const LOG_FILTER_MODE = z.enum(["text", "regex"]);
+export const LOG_SEVERITY_FILTER = z.enum([
+	"all",
+	"error",
+	"warn",
+	"info",
+	"debug",
+]);
+export const LOG_CACHE_FILTER = z.enum([
+	"all",
+	"HIT",
+	"MISS",
+	"BYPASS",
+	"EXPIRED",
+	"STALE",
+	"UPDATING",
+	"REVALIDATED",
+]);
 export type PanelService = z.infer<typeof LOG_SERVICE>;
+export type LogFilterMode = z.infer<typeof LOG_FILTER_MODE>;
+export type LogSeverityFilter = z.infer<typeof LOG_SEVERITY_FILTER>;
+export type LogCacheFilter = z.infer<typeof LOG_CACHE_FILTER>;
+
+export interface LogFilterOptions {
+	cache?: LogCacheFilter;
+	filter?: string;
+	filterMode?: LogFilterMode;
+	severity?: LogSeverityFilter;
+}
 
 // Panel source → docker compose SERVICE NAME. null = no service filter (all).
 // access shares the nginx container (post-filtered to access-format lines).
@@ -83,17 +112,51 @@ export function decorateLines(
 	});
 }
 
-export function applyTextFilter(lines: LogLine[], filter: string): LogLine[] {
-	let re: RegExp | null = null;
-	try {
-		re = new RegExp(filter, "i");
-	} catch {
-		re = null;
+function matchesText(
+	text: string,
+	filter: string,
+	mode: LogFilterMode = "text"
+): boolean {
+	if (filter.trim().length === 0) {
+		return true;
+	}
+	if (mode === "regex") {
+		try {
+			return new RegExp(filter, "i").test(text);
+		} catch {
+			// Invalid explicit regex falls back to literal matching instead of
+			// throwing from a read endpoint.
+		}
 	}
 	const needle = filter.toLowerCase();
-	return lines.filter((l) =>
-		re ? re.test(l.text) : l.text.toLowerCase().includes(needle)
-	);
+	return text.toLowerCase().includes(needle);
+}
+
+export function applyTextFilter(
+	lines: LogLine[],
+	filter: string,
+	mode: LogFilterMode = "text"
+): LogLine[] {
+	return lines.filter((l) => matchesText(l.text, filter, mode));
+}
+
+export function applyLogFilters(
+	lines: LogLine[],
+	options: LogFilterOptions
+): LogLine[] {
+	const severity = options.severity ?? "all";
+	const cache = options.cache ?? "all";
+	return lines.filter((l) => {
+		if (severity !== "all" && l.severity !== severity) {
+			return false;
+		}
+		if (cache !== "all" && l.cache !== cache) {
+			return false;
+		}
+		return options.filter
+			? matchesText(l.text, options.filter, options.filterMode)
+			: true;
+	});
 }
 
 const DB_LINE_PREFIX = /^\s*db-\d+\s*\|/;
@@ -127,6 +190,23 @@ export function passesStreamSourceFilter(
 		return isAccessLine(raw);
 	}
 	return true;
+}
+
+export function passesStreamFilters(
+	line: string,
+	options: LogFilterOptions
+): boolean {
+	const severity = options.severity ?? "all";
+	const cache = options.cache ?? "all";
+	if (severity !== "all" && parseSeverity(line) !== severity) {
+		return false;
+	}
+	if (cache !== "all" && extractCache(line) !== cache) {
+		return false;
+	}
+	return options.filter
+		? matchesText(line, options.filter, options.filterMode)
+		: true;
 }
 
 export const SENSITIVE_SOURCES = new Set<string>(["access", "mariadb"]);

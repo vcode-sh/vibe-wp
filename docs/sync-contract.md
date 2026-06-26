@@ -1,53 +1,64 @@
 # Vibe WP Sync Contract
 
-Status: pre-Tauri contract, 2026-06-26.
+Status: current pre-Tauri contract, 2026-06-26.
 
-The current stack has working staging primitives and a read-only panel sync plan.
-Desktop/local sync must not reuse opaque text streams directly. Every sync
-direction needs a reviewable plan, fresh validation at apply time, and structured
-output.
+This document describes the sync behavior that exists now and the contract any
+future desktop/local sync must follow. It intentionally does not define Tauri UI.
 
 ## Current Safe Primitives
 
-- `bin/stage-refresh` copies production to staging by taking a production backup,
-  restoring it into staging with `--old-url` / `--new-url`, marking it as staging,
-  and running smoke.
+- `bin/stage-refresh` refreshes staging from production. It takes a production
+  backup, restores that backup into staging with `--old-url` / `--new-url`,
+  marks staging as staging/noindex, and runs smoke.
 - `bin/stage-promote-files` promotes only managed WordPress files:
-  `plugins`, `themes`, and `mu-plugins`. It does not copy the database or
-  uploads. After import it normalizes those managed directories to
-  `www-data:www-data`, directories `755`, and files `644` before restart/smoke.
-- The web panel uses `stagingPushToLive`, which takes a local production snapshot,
-  promotes staging files with the script backup suppressed, verifies production,
-  and auto-restores the snapshot on promote or verification failure.
-- The panel API exposes `stagingSyncPlan`, a read-only plan for
-  `refreshFromProd` and `pushFilesToLive`. It reads only non-secret env identity
-  keys through `bin/vibe env`, reports the source/target environments, required
-  backup timing, selected scope, URL rewrite intent, apply role, and blocking
-  identity conflicts.
-- The raw `stagingPromote` API route is disabled. Use `stagingPushToLive`.
+  `plugins`, `themes`, and `mu-plugins`. It does not copy database content or
+  uploads. It normalizes managed file ownership/permissions before restart/smoke.
+- The panel `stagingPushToLive` job wraps managed-file promotion in a production
+  snapshot, promote with script backup suppressed, production verification, and
+  automatic restore on promote or verification failure.
+- The raw `stagingPromote` API route is disabled and fails closed.
+
+## Current Panel Plan/Apply Flow
+
+- `stagingSyncPlan` is read-only. It returns:
+  - direction: `refreshFromProd` or `pushFilesToLive`
+  - source/target env, URL, and Compose project
+  - scope
+  - required production backup timing
+  - blocking identity conflicts
+  - apply procedure and required role
+  - deterministic plan id
+  - `createdAt`, `expiresAt`, and freshness metadata
+  - URL rewrite preview
+  - exact URL rewrite occurrence count when the host dry-run count succeeds
+- `stagingSyncApplyPlan` is the only plan-backed apply endpoint. It requires an
+  issued, non-expired plan id, recomputes the plan immediately, rejects stale or
+  changed plans, enforces operator/admin role requirements, then starts only the
+  existing safe refresh or safe push-to-live job.
+- URL occurrence counts come from `bin/vibe <env> url-rewrite-count <OLD> <NEW>`,
+  which runs WP-CLI `search-replace` with `--dry-run`, the same table/precision
+  shape as restore, and prints only the numeric count. The op is allowlisted in
+  `core-bridge/exec.ts` and revalidated in `bin/vibe-panel-run`.
 
 ## VPS Proof - 2026-06-26
 
 - `refresh-from-prod --yes` took a production backup, restored it into staging,
-  rewrote production URLs to staging URLs, and passed staging smoke.
+  rewrote URLs, and passed staging smoke.
 - Direct `promote-files-to-prod --yes` took a production safety backup, promoted
   managed files, and passed production smoke.
-- Panel `stagingPushToLive` first failed on a forced ownership/permission issue,
-  then auto-restored the captured production snapshot and passed post-restore
-  smoke.
-- After fixing managed-file ownership normalization, panel `stagingPushToLive`
-  succeeded with one production snapshot, promote `--no-backup`, production
-  smoke, and an 81 ms homepage TTFB check.
-- Authenticated browser proof covered the staging route from sign-in through the
-  destructive publish confirmation, operations tray, active operation dialog,
-  realtime step rail, and terminal `[done] Push to live succeeded` line with no
-  browser console, page, or request failures. Production runtime doctor and
-  production/staging smoke passed afterward.
+- Panel `stagingPushToLive` failed on a forced ownership/permission issue,
+  auto-restored the captured production snapshot, and passed post-restore smoke.
+- After fixing ownership normalization, panel `stagingPushToLive` succeeded with
+  one production snapshot, promote `--no-backup`, production smoke, and homepage
+  TTFB verification.
+- Authenticated browser proof covered sign-in, site discovery, staging
+  navigation, destructive confirmation, operations tray/dialog, realtime steps,
+  and terminal completion.
 
-## Required Plan Shape
+## Required Future Local/Desktop Contract
 
-Future desktop/local sync entry points should expose the same JSON-style plan
-before apply:
+Every future local pull/push direction must expose a structured plan before
+apply and revalidate before changing anything:
 
 ```json
 {
@@ -55,47 +66,44 @@ before apply:
   "source": { "env": "prod", "url": "https://example.com", "project": "vibe-wp-site-prod" },
   "target": { "env": "stage", "url": "https://stage.example.com", "project": "vibe-wp-site-stage" },
   "scope": ["database", "uploads", "plugins", "themes", "mu-plugins"],
-  "urlRewrite": { "required": true, "from": "https://example.com", "to": "https://stage.example.com" },
+  "urlRewrite": {
+    "required": true,
+    "from": "https://example.com",
+    "to": "https://stage.example.com",
+    "estimatedOccurrences": 42
+  },
   "backup": { "env": "prod", "required": true, "timing": "before-change" },
   "conflicts": [],
   "apply": { "procedure": "stagingRefresh", "requiresRole": "operator" }
 }
 ```
 
-## Apply Rules
+Apply rules:
 
-- Apply must require a completed plan id or equivalent plan payload that is
-  revalidated immediately before changes.
-- Apply must take a backup before changing the target unless the target is a
-  disposable local runtime.
-- URL rewrites must reject equal source/target URLs and must never run without
-  both URLs.
-- Secret material is never part of a plan, diff, or stream: env files, DB
-  passwords, Redis passwords, salts, SMTP/R2 keys, tokens, and API keys are out
-  of scope.
-- Destructive apply needs typed confirmation in GUI and `--yes` only for
-  reviewed/headless automation.
-- Output should be JSON or NDJSON with redacted log lines, not free-form text as
-  the only contract.
+- Apply requires the current plan id or an equivalent full plan payload.
+- Apply recomputes source/target identity and rejects drift before changes.
+- Apply takes a backup before changing a non-disposable target.
+- URL rewrites reject equal source/target URLs and never run without both URLs.
+- Secret material is never part of a plan, diff, log stream, or support bundle.
+- Destructive apply needs GUI confirmation or reviewed/headless `--yes`.
+- Streams should be JSON/NDJSON or structured job events, with redacted log
+  lines only as supporting detail.
 
 ## Conflict Checks
 
-Minimum conflicts before any desktop/local pull or push:
+Minimum conflicts before any future desktop/local pull or push:
 
 - Source and target URL, env, or Compose project are identical.
-- Staging is missing for staging-based sync.
+- Required staging/local target is missing.
 - Another job is running for the same site.
 - Required backup cannot be created or verified.
-- Production changed after the last staging refresh.
-- Staging is older than the configured freshness window.
-- Plugin/theme inventories differ in a way the selected direction does not cover.
+- Production changed after the last staging/local refresh.
+- Target is older than the configured freshness window.
+- Plugin/theme inventories differ outside the selected direction's scope.
 - Database/content drift exists but the selected direction only copies files.
 
-## Pre-Tauri Gaps
+## Not Built
 
-- `stagingSyncPlan` exists for staging refresh and managed-file push, but no
-  persisted plan id or desktop/local plan endpoint exists yet.
-- URL rewrite counts/previews are not surfaced before apply.
-- Freshness/drift checks are not persisted across refresh and push.
-- Local pull/push is not built; the new local workflow foundation only covers
-  inventory/create/reset/delete blueprint state.
+- Local pull/push sync.
+- Desktop/Tauri sync UI.
+- Multi-server sync.

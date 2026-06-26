@@ -403,12 +403,15 @@ describe("buildVibeArgv", () => {
 			"restart",
 			"restore",
 			"scheduleStatus",
+			"securityConfigApply",
+			"securityConfigGet",
 			"securityStatus",
 			"siteConfigApply",
 			"smoke",
 			"smtpConfigApply",
 			"smtpTest",
 			"up",
+			"urlRewriteCount",
 			"vulnFeedFetch",
 			"wpCoreUpdate",
 			"wpLoginLink",
@@ -471,6 +474,20 @@ describe("buildVibeArgv operations", () => {
 				"--yes",
 			]
 		);
+	});
+	it("passes source and target URLs to the read-only URL rewrite counter", () => {
+		expect(
+			buildVibeArgv("/opt/acme", "prod", "urlRewriteCount", [
+				"https://demo.test",
+				"https://stage.demo.test",
+			])
+		).toEqual([
+			"/opt/acme/bin/vibe",
+			"prod",
+			"url-rewrite-count",
+			"https://demo.test",
+			"https://stage.demo.test",
+		]);
 	});
 	it("rejects args for an op that does not take them", () => {
 		expect(() => buildVibeArgv("/opt/acme", "prod", "up", ["x"])).toThrow();

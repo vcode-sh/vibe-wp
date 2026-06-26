@@ -8,6 +8,7 @@ import {
 	isAllowedWordpressImage,
 	parseScheduleStatus,
 	securityFixToEnv,
+	siteSecurityPatchToEnv,
 } from "./site-config-pure";
 
 describe("envBool", () => {
@@ -36,6 +37,8 @@ describe("parseScheduleStatus", () => {
 			"script_debug\t1",
 			"fastcgi_cache\toff",
 			"www_alias\ton",
+			"disable_xmlrpc\t1",
+			"disallow_file_edit\t0",
 		].join("\n");
 		expect(parseScheduleStatus(out)).toEqual({
 			backupSchedule: "weekly",
@@ -46,6 +49,8 @@ describe("parseScheduleStatus", () => {
 			fastcgiCache: false,
 			wordpressImage: "",
 			wwwAlias: true,
+			disableXmlRpc: true,
+			disallowFileEdit: false,
 		});
 	});
 
@@ -81,6 +86,8 @@ describe("parseScheduleStatus", () => {
 			fastcgiCache: true,
 			wordpressImage: "",
 			wwwAlias: false,
+			disableXmlRpc: false,
+			disallowFileEdit: false,
 		});
 		expect(parseScheduleStatus("")).toEqual({
 			backupSchedule: "off",
@@ -91,6 +98,8 @@ describe("parseScheduleStatus", () => {
 			fastcgiCache: true,
 			wordpressImage: "",
 			wwwAlias: false,
+			disableXmlRpc: false,
+			disallowFileEdit: false,
 		});
 	});
 });
@@ -184,5 +193,21 @@ describe("securityFixToEnv", () => {
 			const named = env.VIBE_SITE_CONFIG_KEYS;
 			expect(env[named]).toBe("1");
 		}
+	});
+});
+
+describe("siteSecurityPatchToEnv", () => {
+	it("maps reversible site guard settings to exact env keys", () => {
+		expect(
+			siteSecurityPatchToEnv({ disableXmlRpc: false, disallowFileEdit: true })
+		).toEqual({
+			VIBE_WP_DISABLE_XMLRPC: "0",
+			DISALLOW_FILE_EDIT: "1",
+			VIBE_SITE_CONFIG_KEYS: "VIBE_WP_DISABLE_XMLRPC DISALLOW_FILE_EDIT",
+		});
+	});
+
+	it("returns an empty map when no settings are supplied", () => {
+		expect(siteSecurityPatchToEnv({})).toEqual({});
 	});
 });

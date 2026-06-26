@@ -35,6 +35,7 @@ vi.mock("@control-panel/env/server", () => ({
 import { hostExec, runSupportBundle, runVibe } from "../core-bridge/exec";
 import { launchPanelUpdateJob, startJob } from "../core-bridge/jobs";
 import { writeAudit } from "../core-bridge/jobs-db";
+import { clearServerInfoCache } from "../core-bridge/server-info-cache";
 import { readSiteOverviewSnapshot } from "../core-bridge/site-overview-cache";
 import {
 	kickSiteOverviewRefresh,
@@ -46,11 +47,13 @@ import { serverRouter } from "./server";
 const fakeContext = { session: { user: { id: "user-1" } } } as never;
 
 const BUNDLE_FILENAME_RE = /^vibe-wp-support-\d{8}-\d{4}\.tar\.gz$/;
+const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 describe("serverInfo cache behavior", () => {
 	it("uses cached overview statuses instead of smoking every site", async () => {
 		vi.clearAllMocks();
-		vi.mocked(detectSites).mockResolvedValueOnce([
+		clearServerInfoCache();
+		asMock(detectSites).mockResolvedValueOnce([
 			{
 				id: "site-1",
 				slug: "acme",
@@ -59,12 +62,12 @@ describe("serverInfo cache behavior", () => {
 				hasStaging: false,
 			},
 		]);
-		vi.mocked(hostExec).mockImplementation(async (argv: string[]) =>
+		asMock(hostExec).mockImplementation(async (argv: string[]) =>
 			argv[0] === "df"
 				? "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/root 100 42 58 42% /\n"
 				: "test-host\n"
 		);
-		vi.mocked(readSiteOverviewSnapshot).mockResolvedValueOnce({
+		asMock(readSiteOverviewSnapshot).mockResolvedValueOnce({
 			refreshedAt: new Date(),
 			payload: {
 				siteId: "site-1",
@@ -83,7 +86,7 @@ describe("serverInfo cache behavior", () => {
 				activity: [],
 			},
 		});
-		vi.mocked(shouldRefreshSiteOverview).mockReturnValueOnce(false);
+		asMock(shouldRefreshSiteOverview).mockReturnValueOnce(false);
 
 		const result = await serverRouter.serverInfo["~orpc"].handler({
 			context: fakeContext,

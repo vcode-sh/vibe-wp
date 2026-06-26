@@ -8,7 +8,6 @@ import type {
 	ServerInfo,
 } from "../contract";
 import {
-	hostExec,
 	runSupportBundle,
 	runVibe,
 	SUPPORT_BUNDLE_MAX_BYTES,
@@ -21,12 +20,12 @@ import {
 } from "../core-bridge/panel-domain-apply";
 import { parseSecurityStatus, parseSmoke } from "../core-bridge/parse";
 import { panelDomainSchema } from "../core-bridge/provision-input";
-import { readSiteOverviewSnapshot } from "../core-bridge/site-overview-cache";
 import {
-	kickSiteOverviewRefresh,
-	shouldRefreshSiteOverview,
-} from "../core-bridge/site-overview-refresher";
-import { type DetectedSite, detectSites } from "../core-bridge/sites";
+	applySecurityConfig,
+	getSecurityConfig,
+} from "../core-bridge/security-config";
+import { readServerInfo } from "../core-bridge/server-info-cache";
+import { detectSites } from "../core-bridge/sites";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
 /** UTC YYYYMMDD-HHMM stamp for the downloaded support-bundle filename. */
@@ -38,36 +37,19 @@ function bundleStamp(now = new Date()): string {
 	);
 }
 
-const WHITESPACE = /\s+/;
-
-function diskPercentFromDf(out: string): number {
-	// `df -P /` second line, 5th column like "41%"
-	const line = out.trim().split("\n")[1] ?? "";
-	const pct = line.split(WHITESPACE)[4] ?? "0%";
-	return Number.parseInt(pct.replace("%", ""), 10) || 0;
-}
-
-async function cachedSiteHealthy(site: DetectedSite): Promise<boolean> {
-	const snapshot = await readSiteOverviewSnapshot(site.id);
-	if (shouldRefreshSiteOverview(snapshot)) {
-		kickSiteOverviewRefresh(site);
-	}
-	return snapshot?.payload.status === "good";
-}
+const durationInput = z.string().regex(/^[1-9][0-9]*[smhd]$/);
+const securityConfigSetInput = z.object({
+	firewallEnabled: z.boolean().optional(),
+	fail2banEnabled: z.boolean().optional(),
+	maxRetry: z.number().int().min(1).max(10).optional(),
+	findTime: durationInput.optional(),
+	banTime: durationInput.optional(),
+});
 
 export const serverRouter = {
-	serverInfo: protectedProcedure.handler(async (): Promise<ServerInfo> => {
-		const sites = await detectSites();
-		const df = await hostExec(["df", "-P", "/"]);
-		const host = (await hostExec(["hostname", "-f"])).trim();
-		const statuses = await Promise.all(sites.map(cachedSiteHealthy));
-		return {
-			vps: env.PANEL_VPS_LABEL ?? host ?? "this server",
-			siteCount: sites.length,
-			diskPercent: diskPercentFromDf(df),
-			allHealthy: statuses.every(Boolean),
-		};
-	}),
+	serverInfo: protectedProcedure.handler(
+		async (): Promise<ServerInfo> => readServerInfo()
+	),
 
 	serverDoctor: protectedProcedure.handler(async () => {
 		const sites = await detectSites();
@@ -93,6 +75,16 @@ export const serverRouter = {
 			return parseSecurityStatus(stdout);
 		}
 	),
+
+	securityConfigGet: protectedProcedure.handler(async () => ({
+		config: await getSecurityConfig(env.PANEL_HOST_DIR),
+	})),
+
+	securityConfigSet: adminProcedure
+		.input(securityConfigSetInput)
+		.handler(async ({ input }) => ({
+			config: await applySecurityConfig(env.PANEL_HOST_DIR, input),
+		})),
 
 	serverHarden: adminProcedure.handler(({ context }) => {
 		// Host-level hardening runs against PANEL_HOST_DIR (siteId "server" maps

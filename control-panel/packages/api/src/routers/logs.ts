@@ -7,22 +7,25 @@ import { parseLogLines } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { adminProcedure, operatorProcedure } from "../procedures";
 import {
+	applyLogFilters,
 	applySourceFilter,
-	applyTextFilter,
 	assertSourceAllowed,
 	decorateLines,
 	hostArgs,
+	LOG_CACHE_FILTER,
+	LOG_FILTER_MODE,
 	LOG_SERVICE,
+	LOG_SEVERITY_FILTER,
 	LOG_TAIL,
 	mapServiceToSource,
 	maskStreamLine,
+	passesStreamFilters,
 	passesStreamSourceFilter,
 } from "./logs-helpers";
 
 const GLOBAL_MAX = 8;
 const PER_USER_MAX = 3;
 const FOLLOW_TAIL = "200";
-const EXPORT_TAIL = "2000";
 
 let globalActiveStreams = 0;
 const perUserActiveStreams = new Map<string, number>();
@@ -42,7 +45,10 @@ function pipeline(
 	input: {
 		service: z.infer<typeof LOG_SERVICE>;
 		tail: string;
+		cache?: z.infer<typeof LOG_CACHE_FILTER>;
 		filter?: string;
+		filterMode?: z.infer<typeof LOG_FILTER_MODE>;
+		severity?: z.infer<typeof LOG_SEVERITY_FILTER>;
 	}
 ): LogLine[] {
 	let lines = parseLogLines(
@@ -52,9 +58,7 @@ function pipeline(
 	);
 	lines = applySourceFilter(lines, input.service);
 	lines = decorateLines(lines, input.service);
-	if (input.filter) {
-		lines = applyTextFilter(lines, input.filter);
-	}
+	lines = applyLogFilters(lines, input);
 	return lines.slice(-Number(input.tail));
 }
 
@@ -65,7 +69,10 @@ export const logsRouter = {
 				siteId: z.string(),
 				service: LOG_SERVICE.default("all"),
 				tail: LOG_TAIL.default("500"),
+				cache: LOG_CACHE_FILTER.default("all"),
 				filter: z.string().max(200).optional(),
+				filterMode: LOG_FILTER_MODE.default("text"),
+				severity: LOG_SEVERITY_FILTER.default("all"),
 			})
 		)
 		.handler(async ({ input, context }): Promise<LogLine[]> => {
@@ -85,7 +92,10 @@ export const logsRouter = {
 			z.object({
 				siteId: z.string(),
 				service: LOG_SERVICE.default("all"),
+				cache: LOG_CACHE_FILTER.default("all"),
 				filter: z.string().max(200).optional(),
+				filterMode: LOG_FILTER_MODE.default("text"),
+				severity: LOG_SEVERITY_FILTER.default("all"),
 			})
 		)
 		.output(eventIterator(logStreamSchema))
@@ -134,12 +144,8 @@ export const logsRouter = {
 						continue;
 					}
 					const masked = maskStreamLine(raw, input.service);
-					if (
-						input.filter &&
-						!masked.toLowerCase().includes(input.filter.toLowerCase())
-					) {
-						// Server-side filter before yielding keeps wire traffic low. Plain
-						// substring (not regex) for the stream path — cheap + ReDoS-free.
+					if (!passesStreamFilters(masked, input)) {
+						// Server-side filters keep wire traffic low and match recent/export.
 						continue;
 					}
 					yield { line: masked, status: "running", done: false };
@@ -166,7 +172,11 @@ export const logsRouter = {
 			z.object({
 				siteId: z.string(),
 				service: LOG_SERVICE.default("all"),
+				tail: LOG_TAIL.default("2000"),
+				cache: LOG_CACHE_FILTER.default("all"),
 				filter: z.string().max(200).optional(),
+				filterMode: LOG_FILTER_MODE.default("text"),
+				severity: LOG_SEVERITY_FILTER.default("all"),
 			})
 		)
 		.handler(
@@ -180,16 +190,22 @@ export const logsRouter = {
 					"prod",
 					"logsExport",
 					{
-						args: hostArgs(input.service, EXPORT_TAIL),
+						args: hostArgs(input.service, input.tail),
 						timeoutMs: 30_000,
 					}
 				);
 				const lines = pipeline(stdout, {
 					service: input.service,
-					tail: EXPORT_TAIL,
+					tail: input.tail,
+					cache: input.cache,
 					filter: input.filter,
+					filterMode: input.filterMode,
+					severity: input.severity,
 				});
-				return { lines, filename: `logs-${input.service}.txt` };
+				return {
+					lines,
+					filename: `logs-${input.siteId}-${input.service}-${input.tail}.txt`,
+				};
 			}
 		),
 };

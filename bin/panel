@@ -20,7 +20,8 @@ usage() {
   echo "             browser onboarding wizard creates the owner on first visit. Supply"
   echo "             both (or --admin-email + VIBE_PANEL_ADMIN_PASSWORD) for headless/CI."
   echo "             Env: VIBE_PANEL_ADMIN_PASSWORD — supply the owner password without exposing it in argv/ps"
-  echo "  update     Rebuild + redeploy the panel from the current repo checkout"
+  echo "  update     [--ref git-ref] Rebuild + redeploy the panel from the current repo checkout"
+  echo "             Env: VIBE_PANEL_UPDATE_REF — pin update to a branch, tag, or commit"
   echo "  status     Show systemd service status"
   echo "  logs       Tail panel service logs  [-n N] [-f]"
   echo "  reset-password --email e [--password-stdin --yes]"
@@ -42,6 +43,7 @@ YES=0
 PURGE=0
 LOGS_FOLLOW=0
 LOGS_LINES=200
+UPDATE_REF="${VIBE_PANEL_UPDATE_REF:-}"
 
 die() { echo "panel: $1" >&2; exit 1; }
 
@@ -55,6 +57,7 @@ while [ $# -gt 0 ]; do
     --password-stdin) PASSWORD_STDIN=1;    shift ;;
     --yes)            YES=1;               shift ;;
     --port)           PORT="$2";           shift 2 ;;
+    --ref)            UPDATE_REF="$2";     shift 2 ;;
     --purge)          PURGE=1;             shift ;;
     -f)               LOGS_FOLLOW=1;       shift ;;
     -n)               LOGS_LINES="$2";     shift 2 ;;
@@ -198,6 +201,9 @@ install_runner_and_sudoers() {
   #     imagePatchToEnv / fastcgiCachePatchToEnv / securityFixToEnv):
   #     WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG VIBE_SITE_CONFIG_KEYS
   #     WORDPRESS_IMAGE NGINX_FASTCGI_CACHE DISALLOW_FILE_EDIT VIBE_WP_DISABLE_XMLRPC
+  #     VIBE_LOG_MAX_SIZE VIBE_LOG_MAX_FILE
+  #     VIBE_SECURITY_FIREWALL VIBE_SECURITY_FAIL2BAN VIBE_FAIL2BAN_MAX_RETRY
+  #     VIBE_FAIL2BAN_FIND_TIME VIBE_FAIL2BAN_BAN_TIME
   #   backup-config.ts (backupConfigApply, via backup-config-pure toEnv + retention):
   #     VIBE_BACKUP_R2_ENABLED VIBE_BACKUP_R2_BUCKET VIBE_BACKUP_R2_PREFIX
   #     VIBE_BACKUP_RETENTION RCLONE_CONFIG_R2_TYPE RCLONE_CONFIG_R2_PROVIDER
@@ -214,6 +220,7 @@ install_runner_and_sudoers() {
   #     default): PANEL_VULN_FEED_URL PANEL_VULN_FEED_KEY (VULN_FEED_ENV_KEYS).
   #   perf-apply.ts (perfApply, via the advisor's tunable env map — feature #5):
   #     the per-key VIBE_PERF_* size/count values + VIBE_PERF_KEYS.
+  #   - log rotation settings passed through site-config-apply.
   #     None are secrets; env-transport (not argv) keeps the writer contract
   #     identical to site-config-apply and metachar-free.
   #     VIBE_PERF_KEYS VIBE_PERF_PHP_FPM_PM_MAX_CHILDREN
@@ -225,7 +232,7 @@ install_runner_and_sudoers() {
   # credential, and this is the intended inbound channel — omitting it breaks
   # off-site backups. Streamed jobs (backups.ts) pass no extraEnv, so nothing
   # beyond these apply/test ops needs preserving.
-  panel_env_keep="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG VIBE_SITE_CONFIG_KEYS WORDPRESS_IMAGE NGINX_FASTCGI_CACHE DISALLOW_FILE_EDIT VIBE_WP_DISABLE_XMLRPC VIBE_BACKUP_R2_ENABLED VIBE_BACKUP_R2_BUCKET VIBE_BACKUP_R2_PREFIX VIBE_BACKUP_RETENTION RCLONE_CONFIG_R2_TYPE RCLONE_CONFIG_R2_PROVIDER RCLONE_CONFIG_R2_ACCESS_KEY_ID RCLONE_CONFIG_R2_SECRET_ACCESS_KEY RCLONE_CONFIG_R2_ENDPOINT VIBE_MONITOR_TELEGRAM_TOKEN VIBE_MONITOR_TELEGRAM_CHAT_ID VIBE_MONITOR_WEBHOOK_URL VIBE_MONITOR_EMAIL_TO VIBE_MONITOR_ALERT_ON_WARN SMTP_MODE SMTP_HOST SMTP_PORT SMTP_SECURE SMTP_AUTH SMTP_USER SMTP_PASSWORD SMTP_FROM SMTP_FROM_NAME SMTP_TEST_TO PANEL_VULN_FEED_URL PANEL_VULN_FEED_KEY VIBE_PERF_KEYS VIBE_PERF_PHP_FPM_PM_MAX_CHILDREN VIBE_PERF_PHP_FPM_PM_START_SERVERS VIBE_PERF_PHP_FPM_PM_MIN_SPARE_SERVERS VIBE_PERF_PHP_FPM_PM_MAX_SPARE_SERVERS VIBE_PERF_MARIADB_INNODB_BUFFER_POOL_SIZE VIBE_PERF_PHP_OPCACHE_MEMORY_CONSUMPTION VIBE_PERF_REDIS_MAXMEMORY VIBE_PERF_WP_MEMORY_LIMIT"
+  panel_env_keep="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG VIBE_SITE_CONFIG_KEYS WORDPRESS_IMAGE NGINX_FASTCGI_CACHE DISALLOW_FILE_EDIT VIBE_WP_DISABLE_XMLRPC VIBE_LOG_MAX_SIZE VIBE_LOG_MAX_FILE VIBE_SECURITY_FIREWALL VIBE_SECURITY_FAIL2BAN VIBE_FAIL2BAN_MAX_RETRY VIBE_FAIL2BAN_FIND_TIME VIBE_FAIL2BAN_BAN_TIME VIBE_BACKUP_R2_ENABLED VIBE_BACKUP_R2_BUCKET VIBE_BACKUP_R2_PREFIX VIBE_BACKUP_RETENTION RCLONE_CONFIG_R2_TYPE RCLONE_CONFIG_R2_PROVIDER RCLONE_CONFIG_R2_ACCESS_KEY_ID RCLONE_CONFIG_R2_SECRET_ACCESS_KEY RCLONE_CONFIG_R2_ENDPOINT VIBE_MONITOR_TELEGRAM_TOKEN VIBE_MONITOR_TELEGRAM_CHAT_ID VIBE_MONITOR_WEBHOOK_URL VIBE_MONITOR_EMAIL_TO VIBE_MONITOR_ALERT_ON_WARN SMTP_MODE SMTP_HOST SMTP_PORT SMTP_SECURE SMTP_AUTH SMTP_USER SMTP_PASSWORD SMTP_FROM SMTP_FROM_NAME SMTP_TEST_TO PANEL_VULN_FEED_URL PANEL_VULN_FEED_KEY VIBE_PERF_KEYS VIBE_PERF_PHP_FPM_PM_MAX_CHILDREN VIBE_PERF_PHP_FPM_PM_START_SERVERS VIBE_PERF_PHP_FPM_PM_MIN_SPARE_SERVERS VIBE_PERF_PHP_FPM_PM_MAX_SPARE_SERVERS VIBE_PERF_MARIADB_INNODB_BUFFER_POOL_SIZE VIBE_PERF_PHP_OPCACHE_MEMORY_CONSUMPTION VIBE_PERF_REDIS_MAXMEMORY VIBE_PERF_WP_MEMORY_LIMIT"
 
   # Write the sudoers rule to a temp file, validate it, then move into place.
   tmp_sudoers="$(mktemp)"
@@ -475,10 +482,20 @@ $CADDY_TLS_LINE
   fi
 }
 
-# Fast-forward the source checkout to the latest committed code before rebuilding.
+validate_update_ref() {
+  [ -n "$UPDATE_REF" ] || return 0
+  case "$UPDATE_REF" in
+    -*|/*|.|..|*..*|*//*|*.lock|*[^A-Za-z0-9._/@+-]*)
+      echo "panel: update ref contains unsupported characters: $UPDATE_REF" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Fast-forward the source checkout to the latest committed code before rebuilding,
+# or checkout a pinned ref when UPDATE_REF/VIBE_PANEL_UPDATE_REF is set.
 # GUARDS (fail CLEANLY rather than leave a half-updated tree):
-#   - skip silently when $REPO_DIR is not a git work tree (e.g. a tarball deploy)
-#     or when git is unavailable — the rebuild then ships the checked-out code;
+#   - skip silently when $REPO_DIR is not a git work tree and no ref is pinned;
 #   - abort on a DIRTY tree (uncommitted changes) so a `--ff-only` does not clash
 #     with local edits, and so we never rebuild from an inconsistent worktree;
 #   - `git pull --ff-only` itself refuses to merge a diverged branch, so a
@@ -486,12 +503,23 @@ $CADDY_TLS_LINE
 pull_latest_source() {
   command -v git >/dev/null 2>&1 || { echo "panel: git not found — rebuilding the current checkout."; return 0; }
   if ! git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [ -n "$UPDATE_REF" ]; then
+      echo "panel: --ref requires $REPO_DIR to be a git checkout." >&2
+      return 1
+    fi
     echo "panel: $REPO_DIR is not a git checkout — rebuilding the current files."
     return 0
   fi
   if [ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]; then
     echo "panel: refusing to pull — $REPO_DIR has uncommitted changes. Commit or stash them, then re-run." >&2
     return 1
+  fi
+  if [ -n "$UPDATE_REF" ]; then
+    validate_update_ref || return 1
+    echo "panel: updating to pinned ref $UPDATE_REF..."
+    git -C "$REPO_DIR" fetch --tags --prune origin || return 1
+    git -C "$REPO_DIR" checkout --detach "$UPDATE_REF" || return 1
+    return 0
   fi
   echo "panel: pulling latest code (git pull --ff-only)..."
   if ! git -C "$REPO_DIR" pull --ff-only; then
@@ -639,6 +667,12 @@ panel_update_restore() {
   echo "panel: previous panel snapshot restored"
 }
 
+panel_update_healthcheck() {
+  sleep 2
+  $SUDO systemctl is-active --quiet "$UNIT.service" || return 1
+  curl -fsS "http://localhost:$PORT/" >/dev/null || return 1
+}
+
 update_panel() {
   env_file="$PANEL_DIR/app/server/.env"
   if ! $SUDO test -f "$env_file"; then
@@ -648,7 +682,7 @@ update_panel() {
 
   # Pull the latest code FIRST (dirty/diverged tree aborts cleanly before any
   # rebuild). Done before the Bun preflight so a failed pull short-circuits.
-  pull_latest_source
+  pull_latest_source || return 1
 
   ensure_bun || return 1
 
@@ -679,6 +713,14 @@ update_panel() {
   else
     code="$?"
     echo "panel: update failed; restoring previous panel snapshot." >&2
+    panel_update_restore "$snapshot" || true
+    return "$code"
+  fi
+  if panel_update_healthcheck; then
+    :
+  else
+    code="$?"
+    echo "panel: updated panel failed health check; restoring previous panel snapshot." >&2
     panel_update_restore "$snapshot" || true
     return "$code"
   fi

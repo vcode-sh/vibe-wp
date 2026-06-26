@@ -41,6 +41,10 @@ export interface SiteSettings {
 	debugDisplay: boolean;
 	/** WP_DEBUG_LOG — write debug messages to debug.log. */
 	debugLog: boolean;
+	/** VIBE_WP_DISABLE_XMLRPC — site-level XML-RPC block. */
+	disableXmlRpc: boolean;
+	/** DISALLOW_FILE_EDIT — close the WordPress dashboard file editor. */
+	disallowFileEdit: boolean;
 	/** NGINX_FASTCGI_CACHE — whether anonymous GET/HEAD is page-cached by nginx. */
 	fastcgiCache: boolean;
 	/** Whether the hourly health-monitor timer is enabled. */
@@ -78,6 +82,8 @@ export function parseScheduleStatus(stdout: string): SiteSettings {
 		debugLog: false,
 		debugDisplay: false,
 		scriptDebug: false,
+		disableXmlRpc: false,
+		disallowFileEdit: false,
 		// NGINX_FASTCGI_CACHE defaults to on in the runtime (compose + entrypoint),
 		// so an absent fastcgi_cache line means caching is enabled.
 		fastcgiCache: true,
@@ -116,6 +122,12 @@ export function parseScheduleStatus(stdout: string): SiteSettings {
 				// schedule-status emits a literal on|off; only an explicit "on" enables
 				// the alias (absent/off/anything-else -> not configured).
 				settings.wwwAlias = value === "on";
+				break;
+			case "disable_xmlrpc":
+				settings.disableXmlRpc = envBool(value);
+				break;
+			case "disallow_file_edit":
+				settings.disallowFileEdit = envBool(value);
 				break;
 			default:
 				break;
@@ -211,4 +223,24 @@ const SECURITY_FIX_KEY: Record<SecurityFixKind, string> = {
 export function securityFixToEnv(fix: SecurityFixKind): Record<string, string> {
 	const key = SECURITY_FIX_KEY[fix];
 	return { [key]: "1", VIBE_SITE_CONFIG_KEYS: key };
+}
+
+export function siteSecurityPatchToEnv(patch: {
+	disableXmlRpc?: boolean;
+	disallowFileEdit?: boolean;
+}): Record<string, string> {
+	const env: Record<string, string> = {};
+	const keys: string[] = [];
+	if (patch.disableXmlRpc !== undefined) {
+		env.VIBE_WP_DISABLE_XMLRPC = patch.disableXmlRpc ? "1" : "0";
+		keys.push("VIBE_WP_DISABLE_XMLRPC");
+	}
+	if (patch.disallowFileEdit !== undefined) {
+		env.DISALLOW_FILE_EDIT = patch.disallowFileEdit ? "1" : "0";
+		keys.push("DISALLOW_FILE_EDIT");
+	}
+	if (keys.length > 0) {
+		env.VIBE_SITE_CONFIG_KEYS = keys.join(" ");
+	}
+	return env;
 }

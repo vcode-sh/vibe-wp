@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { PerformanceAdvisorCard } from "@/components/health/performance-advisor-card";
 import { PageHeader } from "@/components/patterns/page-header";
 import { QueryBoundary } from "@/components/patterns/query-boundary";
@@ -9,29 +10,48 @@ import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { healthPerfQuery, healthQuery } from "@/data/queries";
+import { orpc } from "@/lib/orpc/client";
+import { invalidateMonitoringSampleRecorded } from "@/lib/realtime/immediate-invalidation";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/health")({
 	component: HealthPage,
 });
 
+function uptimeDisplay(
+	data: { tiles: Array<{ key: string }>; uptimePercent: number } | undefined
+): { className: string; label: string } {
+	if (data === undefined) {
+		return { label: "—", className: "" };
+	}
+	if (data.tiles.some((tile) => tile.key === "monitoring-sample")) {
+		return { label: "Pending", className: "text-muted-foreground" };
+	}
+	return data.uptimePercent >= 100
+		? { label: "Reachable", className: "text-success" }
+		: { label: "Unreachable", className: "text-destructive" };
+}
+
 function HealthPage() {
 	const { siteId } = Route.useParams();
+	const qc = useQueryClient();
 	const health = useQuery(healthQuery(siteId));
+	const record = useMutation(orpc.monitoringRecordSample.mutationOptions());
 	const [perfEnabled, setPerfEnabled] = useState(false);
 	const perf = useQuery({
 		...healthPerfQuery(siteId),
 		enabled: perfEnabled,
 	});
 
-	// The backend emits a binary signal: uptimePercent is 100 only when a single
-	// instantaneous HTTP probe passed, otherwise 0. Present it honestly as
-	// reachable/unreachable rather than a fabricated continuous percentage.
-	let uptimeLabel = "—";
-	let uptimeClass = "";
-	if (health.data !== undefined) {
-		const reachable = health.data.uptimePercent >= 100;
-		uptimeLabel = reachable ? "Reachable" : "Unreachable";
-		uptimeClass = reachable ? "text-success" : "text-destructive";
+	const uptime = uptimeDisplay(health.data);
+
+	async function handleHealthCheck() {
+		try {
+			await record.mutateAsync({ siteId });
+			await invalidateMonitoringSampleRecorded(qc, siteId);
+			toast.success("Captured a fresh health snapshot.");
+		} catch {
+			toast.error("Couldn't run the health check. Operator role required.");
+		}
 	}
 
 	return (
@@ -42,10 +62,10 @@ function HealthPage() {
 					actions={
 						<>
 							<Button
-								disabled={health.isFetching}
-								onClick={() => health.refetch()}
+								disabled={health.isFetching || record.isPending}
+								onClick={handleHealthCheck}
 							>
-								{health.isFetching ? "Checking…" : "Run health check"}
+								{record.isPending ? "Checking…" : "Run health check"}
 							</Button>
 							<Button
 								disabled={perf.isFetching}
@@ -86,7 +106,8 @@ function HealthPage() {
 									</CardHeader>
 									<CardContent className="grid gap-1 text-sm">
 										<div>
-											Uptime: <span className={uptimeClass}>{uptimeLabel}</span>
+											Uptime:{" "}
+											<span className={uptime.className}>{uptime.label}</span>
 										</div>
 									</CardContent>
 								</Card>

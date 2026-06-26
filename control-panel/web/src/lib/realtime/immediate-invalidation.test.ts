@@ -3,11 +3,14 @@ import {
 	backupConfigQuery,
 	healthQuery,
 	inventoryQuery,
+	logRotationConfigQuery,
 	monitoringHistoryQuery,
 	monitoringOverviewQuery,
 	notifyConfigQuery,
+	securityConfigQuery,
 	securityRadarQuery,
 	securityScoreQuery,
+	securityStatusQuery,
 	serverInfoQuery,
 	sharedDbStatusQuery,
 	siteOverviewQuery,
@@ -17,9 +20,11 @@ import {
 import {
 	invalidateBackupConfigSaved,
 	invalidateInventoryRefreshed,
+	invalidateLogRotationConfigSaved,
 	invalidateMonitoringSampleRecorded,
 	invalidateMonitoringSummaryRecorded,
 	invalidateNotifyConfigSaved,
+	invalidateSecurityConfigSaved,
 	invalidateSecurityFixSaved,
 	invalidateSharedDbInitialized,
 	invalidateSharedDbRotated,
@@ -88,6 +93,26 @@ describe("immediate mutation invalidation", () => {
 
 		expect(hasCall(calls, notifyConfigQuery("__global__").queryKey)).toBe(true);
 		expect(hasCall(calls, healthQuery("site-a").queryKey)).toBe(true);
+	});
+
+	it("refreshes log rotation and site settings after global log rotation saves", () => {
+		const { calls, client } = makeClient();
+
+		invalidateLogRotationConfigSaved(client);
+
+		expect(hasCall(calls, logRotationConfigQuery().queryKey)).toBe(true);
+		expect(hasCall(calls, siteSettingsQuery("site-a").queryKey)).toBe(true);
+	});
+
+	it("refreshes host security reads after global security config saves", () => {
+		const { calls, client } = makeClient();
+
+		invalidateSecurityConfigSaved(client);
+
+		expect(hasCall(calls, securityConfigQuery().queryKey)).toBe(true);
+		expect(hasCall(calls, securityStatusQuery().queryKey)).toBe(true);
+		expect(hasCall(calls, siteOverviewQuery("site-a").queryKey)).toBe(true);
+		expect(hasCall(calls, securityScoreQuery("site-a").queryKey)).toBe(true);
 	});
 
 	it("refreshes all monitoring reads after all-sites sampling", () => {

@@ -27,6 +27,7 @@ Commands:
   backups-remote             List off-server (R2) backups as restorable paths
   monitor [--quiet] [--json] [--no-notify]  Run health checks (uptime, disk, TLS, backups, containers); alert unless --no-notify
   security-status            Print host security posture as JSON (firewall, fail2ban, auto-updates)
+  security-config [--apply]  Print or apply host firewall/fail2ban config
   vuln-feed-fetch            Fetch CVE rows for plugin slugs (stdin) from the optional, default-OFF feed
   harden [--dry-run] [--ssh-key-only]  Apply host hardening (firewall, fail2ban, auto-updates)
   doctor-runtime             Run runtime checks
@@ -38,6 +39,7 @@ Commands:
   refresh-from-prod --yes    Refresh this staging env from prod
   promote-files-to-prod --yes Promote managed plugin/theme files to prod
   env <KEY>                  Print a value from the selected env file
+  url-rewrite-count <OLD> <NEW>  Count URL search-replace replacements with WP-CLI dry-run
   backup-schedule-apply <off|daily|weekly>  Install/remove the scheduled-backup timer
   auto-update-schedule-apply <off|weekly|daily>  Install/remove the scheduled plugin auto-update timer
   monitor-schedule-apply <on|off>           Install/remove the hourly health-monitor timer
@@ -315,6 +317,9 @@ case "${command}" in
   security-status)
     "${VIBE_BIN_DIR}/security-status" "$@"
     ;;
+  security-config)
+    "${VIBE_BIN_DIR}/security-config" "$@"
+    ;;
   vuln-feed-fetch)
     # Optional CVE feed (default OFF). Slugs arrive on stdin (forwarded), not
     # argv; the script reads PANEL_VULN_FEED_URL/KEY from env and prints a JSON
@@ -342,6 +347,46 @@ case "${command}" in
     fi
     vibe_env_value "$1"
     printf '\n'
+    ;;
+  url-rewrite-count)
+    if [ "$#" -ne 2 ]; then
+      echo "Usage: ./bin/vibe ${VIBE_ENV} url-rewrite-count <OLD> <NEW>" >&2
+      exit 1
+    fi
+    old_url="$1"
+    new_url="$2"
+    if [ -z "${old_url}" ] || [ -z "${new_url}" ]; then
+      echo "Both OLD and NEW URLs are required." >&2
+      exit 1
+    fi
+    if [ "${old_url}" = "${new_url}" ]; then
+      echo "0"
+      exit 0
+    fi
+    output="$(
+      vibe_wp search-replace "${old_url}" "${new_url}" \
+        --all-tables --precise --skip-columns=guid --dry-run 2>&1
+    )" || {
+      printf '%s\n' "${output}" >&2
+      exit 1
+    }
+    count="$(printf '%s\n' "${output}" | awk '
+      /^Success: / {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^[0-9]+$/) {
+            value = $i
+          }
+        }
+      }
+      END {
+        if (value == "") {
+          print 0
+        } else {
+          print value
+        }
+      }
+    ')"
+    printf '%s\n' "${count}"
     ;;
   -h|--help|help)
     usage

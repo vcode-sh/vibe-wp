@@ -68,10 +68,18 @@ export const VIBE_OPS = {
 	/** Roll back the last perf-apply from the env/<env>.perf.bak snapshot. */
 	perfApplyRollback: { argv: ["perf-apply", "--rollback"], stream: true },
 	securityStatus: { argv: ["security-status"], stream: false },
+	securityConfigGet: { argv: ["security-config"], stream: false },
+	securityConfigApply: { argv: ["security-config", "--apply"], stream: false },
 	/** List compose service status as JSON (non-streaming, read-only). */
 	psJson: { argv: ["compose", "ps", "--format", "json"], stream: false },
 	/** Read a single non-secret env key (takes one key-name arg). */
 	env: { argv: ["env"], stream: false, takesArg: true },
+	/** Count URL rewrite replacements with WP-CLI dry-run; read-only. */
+	urlRewriteCount: {
+		argv: ["url-rewrite-count"],
+		stream: false,
+		takesArg: true,
+	},
 	backups: { argv: ["backups"], stream: false },
 	backup: { argv: ["backup"], stream: true },
 	backupLocal: { argv: ["backup", "--local-only"], stream: true },

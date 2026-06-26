@@ -135,8 +135,8 @@ x-wordpress-environment: &wordpress-environment
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "3"
+    max-size: "${VIBE_LOG_MAX_SIZE:-10m}"
+    max-file: "${VIBE_LOG_MAX_FILE:-3}"
 
 services:
   nginx:

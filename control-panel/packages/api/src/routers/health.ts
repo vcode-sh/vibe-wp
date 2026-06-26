@@ -1,31 +1,17 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import type {
-	HealthReport,
-	MetricTile,
-	PerfReport,
-	Verdict,
-} from "../contract";
+import type { HealthReport, PerfReport } from "../contract";
 import { runVibe } from "../core-bridge/exec";
+import {
+	buildHealthReport,
+	healthAlertChannels,
+} from "../core-bridge/health-report";
+import { latestSample } from "../core-bridge/monitor-history";
 import { resolveNotifyConfig } from "../core-bridge/notify-config";
-import { parseMonitorJson, parsePerfJson } from "../core-bridge/parse";
+import { parsePerfJson } from "../core-bridge/parse";
 import { findSite } from "../core-bridge/sites";
 import { protectedProcedure } from "../procedures";
-
-const tile = (
-	key: string,
-	label: string,
-	ok: boolean,
-	detail: string
-): MetricTile => ({
-	key,
-	label,
-	verdict: (ok ? "good" : "act") as Verdict,
-	value: ok ? "OK" : "Failing",
-	detail,
-	help: "From the latest monitor checks.",
-});
 
 export const healthRouter = {
 	healthCheck: protectedProcedure.handler(() => ({
@@ -41,33 +27,11 @@ export const healthRouter = {
 			if (!site) {
 				throw new ORPCError("NOT_FOUND");
 			}
-			// monitor exits 1 when a check fails; still parse stdout for the report.
-			const [{ stdout }, notifyCfg] = await Promise.all([
-				runVibe(site.installDir, "prod", "monitor", { timeoutMs: 90_000 }),
-				resolveNotifyConfig(input.siteId),
+			const [sample, alertChannels] = await Promise.all([
+				latestSample(input.siteId),
+				resolveNotifyConfig(input.siteId).then(healthAlertChannels),
 			]);
-			const monitor = parseMonitorJson(stdout);
-
-			// Derive channel names from the resolved config — never include secret values.
-			const alertChannels: string[] = [];
-			if (notifyCfg.telegramToken && notifyCfg.telegramChatId) {
-				alertChannels.push("Telegram");
-			}
-			if (notifyCfg.webhookUrl) {
-				alertChannels.push("Webhook");
-			}
-			if (notifyCfg.email) {
-				alertChannels.push("Email");
-			}
-
-			return {
-				// Each monitor check (HTTP, disk, TLS, backup freshness, containers)
-				// becomes a tile. TLS is surfaced here as a check tile rather than a
-				// fabricated days-to-expiry number.
-				tiles: monitor.checks.map((c) => tile(c.name, c.name, c.ok, c.name)),
-				uptimePercent: monitor.uptimePercent,
-				alertChannels,
-			};
+			return buildHealthReport(sample, alertChannels);
 		}),
 
 	healthPerf: protectedProcedure

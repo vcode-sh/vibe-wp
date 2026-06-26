@@ -10,6 +10,8 @@ set -eu
 #   script_debug\t<0|1>
 #   fastcgi_cache\t<on|off>
 #   www_alias\t<on|off>
+#   disable_xmlrpc\t<0|1>
+#   disallow_file_edit\t<0|1>
 #
 # The backup cadence is recovered from the timer unit's OnCalendar so the panel
 # reflects whatever the installer or a prior apply set, without a second store.
@@ -77,6 +79,8 @@ norm_bool() {
 wp_debug_log="$(norm_bool "$(vibe_env_value WP_DEBUG_LOG)")"
 wp_debug_display="$(norm_bool "$(vibe_env_value WP_DEBUG_DISPLAY)")"
 script_debug="$(norm_bool "$(vibe_env_value SCRIPT_DEBUG)")"
+disable_xmlrpc="$(norm_bool "$(vibe_env_value VIBE_WP_DISABLE_XMLRPC)")"
+disallow_file_edit="$(norm_bool "$(vibe_env_value DISALLOW_FILE_EDIT)")"
 
 # FastCGI page cache toggle (NGINX_FASTCGI_CACHE) from the env file. The nginx
 # entrypoint defaults this to on and normalizes 1/true/yes -> on, 0/false/no ->
@@ -131,3 +135,5 @@ printf 'wp_debug_display\t%s\n' "${wp_debug_display}"
 printf 'script_debug\t%s\n' "${script_debug}"
 printf 'fastcgi_cache\t%s\n' "${fastcgi_cache}"
 printf 'www_alias\t%s\n' "${www_alias}"
+printf 'disable_xmlrpc\t%s\n' "${disable_xmlrpc}"
+printf 'disallow_file_edit\t%s\n' "${disallow_file_edit}"

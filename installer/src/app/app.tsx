@@ -19,6 +19,7 @@ import type { ScreenProps } from "./screen-props";
 import { renderScreen } from "./screen-router";
 import type { Step } from "./steps";
 import { focusCountFor } from "./steps";
+import { classifyTerminalLayout } from "./terminal-layout";
 import { color } from "./theme";
 
 interface AppProps {
@@ -39,7 +40,10 @@ export function App({ initialState, options }: AppProps) {
     executionModeLine(options)
   ]);
 
-  const compact = options.compact || dimensions.width < 92 || dimensions.height < 26;
+  const terminalLayout = classifyTerminalLayout(dimensions, {
+    forceCompact: options.compact
+  });
+  const compact = terminalLayout.compact;
   const ascii = useMemo(() => shouldUseAscii({ ascii: options.ascii }), [options.ascii]);
   const flowSteps = useMemo(
     () => visibleSteps(state.mode, state.quickInstall),

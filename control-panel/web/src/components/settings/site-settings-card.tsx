@@ -18,6 +18,7 @@ import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { DebugFlagsCard } from "@/components/settings/debug-flags-card";
 import { FastcgiCacheCard } from "@/components/settings/fastcgi-cache-card";
 import { PhpVersionCard } from "@/components/settings/php-version-card";
+import { SiteSecurityGuardCard } from "@/components/settings/site-security-guard-card";
 import { WwwAliasCard } from "@/components/settings/www-alias-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { siteSettingsQuery } from "@/data/queries";
@@ -27,6 +28,8 @@ interface Settings {
 	backupSchedule: string;
 	debugDisplay: boolean;
 	debugLog: boolean;
+	disableXmlRpc: boolean;
+	disallowFileEdit: boolean;
 	fastcgiCache: boolean;
 	monitorEnabled: boolean;
 	scriptDebug: boolean;
@@ -133,6 +136,13 @@ function SiteSettingsForm({
 			/>
 			<PhpVersionCard currentImage={settings.wordpressImage} siteId={siteId} />
 			<FastcgiCacheCard initial={settings.fastcgiCache} siteId={siteId} />
+			<SiteSecurityGuardCard
+				initial={{
+					disableXmlRpc: settings.disableXmlRpc,
+					disallowFileEdit: settings.disallowFileEdit,
+				}}
+				siteId={siteId}
+			/>
 			<WwwAliasCard initial={settings.wwwAlias} siteId={siteId} />
 		</div>
 	);

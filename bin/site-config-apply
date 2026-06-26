@@ -79,7 +79,8 @@ env_upsert() {
 # DISALLOW_FILE_EDIT (entrypoint -> wp-config) and VIBE_WP_DISABLE_XMLRPC (read by
 # the vibe-wp-environment MU plugin) are the one-click security hardening toggles;
 # both are 0|1 booleans honored at container start, so a restart applies them.
-managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG WORDPRESS_IMAGE NGINX_FASTCGI_CACHE DISALLOW_FILE_EDIT VIBE_WP_DISABLE_XMLRPC"
+# VIBE_LOG_MAX_SIZE / VIBE_LOG_MAX_FILE feed Docker Compose json-file logging.
+managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG WORDPRESS_IMAGE NGINX_FASTCGI_CACHE DISALLOW_FILE_EDIT VIBE_WP_DISABLE_XMLRPC VIBE_LOG_MAX_SIZE VIBE_LOG_MAX_FILE"
 
 # The curated allowlist of WordPress runtime images the panel may select. This
 # MUST stay in lockstep with ALLOWED_WORDPRESS_IMAGES in the control panel
@@ -88,6 +89,7 @@ managed_keys="WP_DEBUG_LOG WP_DEBUG_DISPLAY SCRIPT_DEBUG WORDPRESS_IMAGE NGINX_F
 # boundary: an image tag that is not EXACTLY one of these is rejected before any
 # write, so an attacker-supplied `WORDPRESS_IMAGE=$(cmd)` can never land here.
 allowed_images="wordpress:7.0-php8.5-fpm wordpress:7.0-php8.4-fpm wordpress:7.0-php8.3-fpm"
+allowed_log_sizes="1m 5m 10m 25m 50m 100m"
 
 # Membership test against a space-separated list (POSIX-safe, no arrays).
 in_list() {
@@ -129,6 +131,21 @@ for key in ${changed_keys}; do
         on|off) : ;;
         *)
           echo "Refusing to write non-on/off value for ${key}: ${val}" >&2
+          exit 2
+          ;;
+      esac
+      ;;
+    VIBE_LOG_MAX_SIZE)
+      in_list "${val}" "${allowed_log_sizes}" || {
+        echo "Refusing to write disallowed VIBE_LOG_MAX_SIZE: ${val}" >&2
+        exit 2
+      }
+      ;;
+    VIBE_LOG_MAX_FILE)
+      case "${val}" in
+        [1-9]|10) : ;;
+        *)
+          echo "Refusing to write out-of-range VIBE_LOG_MAX_FILE: ${val}" >&2
           exit 2
           ;;
       esac

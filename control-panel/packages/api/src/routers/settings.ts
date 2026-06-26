@@ -13,6 +13,12 @@ import type { BackupConfigRow } from "../core-bridge/backup-config-pure";
 import { GLOBAL_SITE_ID } from "../core-bridge/backup-config-pure";
 import { runVibe } from "../core-bridge/exec";
 import {
+	applyLogRotationToSite,
+	getLogRotationConfig,
+	setLogRotationConfig,
+} from "../core-bridge/log-rotation-config";
+import { ALLOWED_LOG_MAX_SIZES } from "../core-bridge/log-rotation-config-pure";
+import {
 	applyNotifyConfigToSite,
 	getNotifyConfig,
 	setNotifyConfig,
@@ -23,6 +29,7 @@ import {
 	applyDebugFlags,
 	applyFastcgiCache,
 	applyMonitorState,
+	applySiteSecuritySettings,
 	applyWordpressImage,
 	applyWwwAlias,
 	getSiteSettings,
@@ -98,6 +105,11 @@ const smtpConfigSetInput = z.object({
 	fromName: z.string().optional(),
 });
 
+const logRotationConfigSetInput = z.object({
+	maxSize: z.enum(ALLOWED_LOG_MAX_SIZES).optional(),
+	maxFile: z.number().int().min(1).max(10).optional(),
+});
+
 /**
  * Applies the saved config to one site (per-site save) or fans out to every
  * configured site (global save), reporting any sites that failed to receive it.
@@ -145,6 +157,22 @@ export const settingsRouter = {
 				applyBackupConfigToSite
 			);
 			return { ok: true };
+		}),
+
+	logRotationConfigGet: adminProcedure.handler(async () => ({
+		config: await getLogRotationConfig(),
+	})),
+
+	logRotationConfigSet: adminProcedure
+		.input(logRotationConfigSetInput)
+		.handler(async ({ input }) => {
+			const config = await setLogRotationConfig(input);
+			await applyToSites(
+				GLOBAL_SITE_ID,
+				async () => (await detectSites()).map((s) => s.id),
+				applyLogRotationToSite
+			);
+			return { ok: true, config, recreateRequired: true };
 		}),
 
 	notifyConfigGet: adminProcedure
@@ -351,6 +379,19 @@ export const settingsRouter = {
 		.handler(
 			async ({ input }) => await applyFastcgiCache(input.siteId, input.enabled)
 		),
+
+	siteSecuritySet: adminProcedure
+		.input(
+			z.object({
+				siteId: z.string().min(1),
+				disableXmlRpc: z.boolean().optional(),
+				disallowFileEdit: z.boolean().optional(),
+			})
+		)
+		.handler(async ({ input }) => {
+			const { siteId, ...patch } = input;
+			return await applySiteSecuritySettings(siteId, patch);
+		}),
 
 	/**
 	 * Add or remove the host Caddy www.<domain> alias for a site. The op edits the

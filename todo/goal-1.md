@@ -1,4 +1,10 @@
-Goal: close pre-Tauri product gap in `/Users/tomrobak/_projects_/vibe-wp`.
+# Archived Goal Prompt
+
+Status: archived execution prompt from 2026-06-26. Do not use this file as a
+current backlog. Current truth lives in `docs/superpowers/ROADMAP.md`,
+`todo/installer.md`, `docs/installer.md`, `docs/sync-contract.md`, and live code.
+
+Original goal: close pre-Tauri product gap in `/Users/tomrobak/_projects_/vibe-wp`.
 
 Rules:
 - All code, docs, tests, branches, and commits in English.

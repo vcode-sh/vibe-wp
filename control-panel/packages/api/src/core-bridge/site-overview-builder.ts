@@ -7,6 +7,7 @@ import type {
 import { auditToActivity } from "./audit";
 import { runVibe } from "./exec";
 import { recentAudit } from "./jobs-db";
+import { latestSample, type MonitorSampleRow } from "./monitor-history";
 import {
 	parseBackups,
 	parseMonitorJson,
@@ -18,6 +19,7 @@ import {
 	backupSignal,
 	certNeed,
 	diskNeed,
+	type MonitorCheck,
 	securityNeed,
 	securitySafety,
 	updatesNeed,
@@ -25,8 +27,10 @@ import {
 import type { DetectedSite } from "./sites";
 
 const PLUGIN_UPDATES_TITLE_RE = /^(\d+) plugin updates? available$/;
+const MONITOR_SAMPLE_FRESH_MS = 20 * 60 * 1000;
 
 export interface SiteOverviewBuildDeps {
+	latestSample?: typeof latestSample;
 	nowMs?: () => number;
 	recentAudit?: typeof recentAudit;
 	runVibe?: typeof runVibe;
@@ -44,6 +48,41 @@ export function pluginUpdatesFromOverview(overview: SiteOverview): number {
 function readSecurity(stdout: string): SecurityStatus | null {
 	try {
 		return parseSecurityStatus(stdout);
+	} catch {
+		return null;
+	}
+}
+
+function monitorChecksFromSample(
+	sample: MonitorSampleRow | null,
+	nowMs: number
+): MonitorCheck[] | null {
+	if (!sample?.checksJson) {
+		return null;
+	}
+	if (nowMs - sample.ts.getTime() > MONITOR_SAMPLE_FRESH_MS) {
+		return null;
+	}
+	try {
+		const checks = JSON.parse(sample.checksJson) as unknown;
+		if (!Array.isArray(checks)) {
+			return null;
+		}
+		return checks
+			.map((check) => {
+				if (
+					typeof check === "object" &&
+					check !== null &&
+					"name" in check &&
+					"ok" in check &&
+					typeof check.name === "string" &&
+					typeof check.ok === "boolean"
+				) {
+					return { name: check.name, ok: check.ok };
+				}
+				return null;
+			})
+			.filter((check): check is MonitorCheck => check !== null);
 	} catch {
 		return null;
 	}
@@ -83,21 +122,28 @@ export async function buildLiveSiteOverview(
 ): Promise<SiteOverview> {
 	const run = deps.runVibe ?? runVibe;
 	const readAudit = deps.recentAudit ?? recentAudit;
+	const readLatestSample = deps.latestSample ?? latestSample;
 	const nowMs = deps.nowMs?.() ?? Date.now();
-	const [smokeRes, backupsRes, updatesRes, monitorRes, securityRes, audit] =
+	const [smokeRes, backupsRes, updatesRes, securityRes, audit, monitorSample] =
 		await Promise.all([
 			run(site.installDir, "prod", "smoke", { timeoutMs: 90_000 }),
 			run(site.installDir, "prod", "backups"),
 			run(site.installDir, "prod", "wpPluginUpdates", { timeoutMs: 90_000 }),
-			run(site.installDir, "prod", "monitor", { timeoutMs: 90_000 }),
 			run(site.installDir, "prod", "securityStatus"),
 			readAudit(site.id),
+			readLatestSample(site.id),
 		]);
+	const cachedMonitorChecks = monitorChecksFromSample(monitorSample, nowMs);
+	const monitorChecks =
+		cachedMonitorChecks ??
+		parseMonitorJson(
+			(await run(site.installDir, "prod", "monitor", { timeoutMs: 90_000 }))
+				.stdout
+		).checks;
 	const smoke = parseSmoke(smokeRes.stdout);
 	const status = smoke.passed ? "good" : ("act" as Verdict);
 	const lastBackupISO = parseBackups(backupsRes.stdout)[0]?.whenISO ?? "";
 	const backup = backupSignal(lastBackupISO, nowMs);
-	const monitorChecks = parseMonitorJson(monitorRes.stdout).checks;
 	const security = readSecurity(securityRes.stdout);
 	const needs: NeedItem[] = [
 		updatesNeed(parseWpUpdateCount(updatesRes.stdout)),

@@ -33,4 +33,6 @@ export const monitorSamples = sqliteTable("monitor_samples", {
 	failures: integer("failures").notNull(),
 	/** Warning check count for this sample. */
 	warnings: integer("warnings").notNull(),
+	/** Original monitor check names, kept so overview can reuse fresh samples. */
+	checksJson: text("checks_json"),
 });
