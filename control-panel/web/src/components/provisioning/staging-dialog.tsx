@@ -55,6 +55,7 @@ export function StagingDialog({
 			queryClient.invalidateQueries({
 				queryKey: stagingQuery(siteId).queryKey,
 			});
+			toast.success(`Staging for ${siteId} is ready.`);
 			return;
 		}
 		const label = status === "canceled" ? "was canceled" : "failed";

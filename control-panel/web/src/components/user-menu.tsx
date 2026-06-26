@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback } from "@control-panel/ui/components/avatar";
 import { Skeleton } from "@control-panel/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDown, KeyRound, LogIn, UserRound } from "lucide-react";
+import { toast } from "sonner";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -88,9 +89,13 @@ export function UserMenu() {
 							authClient.signOut({
 								fetchOptions: {
 									onSuccess: () => {
-										navigate({
-											to: "/",
-										});
+										navigate({ to: "/" });
+									},
+									onError: () => {
+										// Even if the network call fails, get the user out of the
+										// authed shell rather than leaving a silent no-op.
+										toast.error("Sign-out had a problem — returning to login.");
+										navigate({ to: "/login" });
 									},
 								},
 							});

@@ -232,6 +232,11 @@ function BackupsPage() {
 													disabled={isRunning(siteId, "restore")}
 													onClick={() => setRestoring(b)}
 													size="sm"
+													title={
+														isRunning(siteId, "restore")
+															? "A restore is already running."
+															: "Restore the whole site from this backup"
+													}
 													variant="ghost"
 												>
 													Restore…

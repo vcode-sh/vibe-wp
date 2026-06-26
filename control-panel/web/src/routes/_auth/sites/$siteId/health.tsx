@@ -53,7 +53,12 @@ function HealthPage() {
 				<PageHeader
 					actions={
 						<>
-							<Button onClick={() => health.refetch()}>Run health check</Button>
+							<Button
+								disabled={health.isFetching}
+								onClick={() => health.refetch()}
+							>
+								{health.isFetching ? "Checking…" : "Run health check"}
+							</Button>
 							<Button
 								disabled={perf.isFetching}
 								onClick={() => {

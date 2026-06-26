@@ -78,6 +78,9 @@ function RefreshButton({
 	async function handleRefresh() {
 		try {
 			await refresh.mutateAsync({ siteId });
+			toast.success(
+				"Re-checking the site — the inventory refreshes in a moment."
+			);
 			setTimeout(() => {
 				qc.invalidateQueries(inventoryQuery(siteId));
 			}, 2000);

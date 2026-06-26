@@ -137,6 +137,10 @@ export function SignInForm({
 				</form.Subscribe>
 			</form>
 
+			<p className="mt-4 text-center text-muted-foreground text-xs">
+				Forgot your password? Ask a panel admin to reset it for you.
+			</p>
+
 			{onSwitchToSignUp && (
 				<div className="mt-4 text-center">
 					<Button
