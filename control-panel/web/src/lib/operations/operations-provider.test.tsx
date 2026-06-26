@@ -25,7 +25,9 @@ vi.mock("@/lib/orpc/client", async (importOriginal) => {
 			operationsEvents: (_input: unknown, opts?: { signal?: AbortSignal }) =>
 				(async function* () {
 					await new Promise<void>((resolve) =>
-						opts?.signal?.addEventListener("abort", resolve, { once: true })
+						opts?.signal?.addEventListener("abort", () => resolve(), {
+							once: true,
+						})
 					);
 				})(),
 		},

@@ -8,7 +8,10 @@ import {
 } from "react";
 import type { JobStatus } from "@/data/types";
 import { client } from "@/lib/orpc/client";
-import { invalidateOperationLifecycleEvent } from "@/lib/realtime/operation-events";
+import {
+	invalidateOperationLifecycleEvent,
+	type OperationEventInvalidator,
+} from "@/lib/realtime/operation-events";
 import {
 	createOperationInvalidator,
 	type QueryClientLike,
@@ -55,6 +58,37 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
 			{ once: true }
 		);
 	});
+}
+
+async function consumeOperationEventStream(
+	invalidator: OperationEventInvalidator,
+	signal: AbortSignal,
+	isLive: () => boolean
+) {
+	const events = await client.operationsEvents({}, { signal });
+	for await (const event of events) {
+		if (!isLive()) {
+			return;
+		}
+		invalidateOperationLifecycleEvent(invalidator, event);
+	}
+}
+
+async function runOperationEventStream(
+	invalidator: OperationEventInvalidator,
+	signal: AbortSignal,
+	isLive: () => boolean
+) {
+	while (isLive()) {
+		try {
+			await consumeOperationEventStream(invalidator, signal, isLive);
+		} catch {
+			if (!isLive()) {
+				return;
+			}
+		}
+		await wait(OPERATION_EVENTS_RECONNECT_MS, signal);
+	}
 }
 
 export function OperationsProvider({
@@ -113,28 +147,9 @@ export function OperationsProvider({
 	useEffect(() => {
 		let live = true;
 		const ac = new AbortController();
-		async function run() {
-			while (live) {
-				try {
-					const events = await client.operationsEvents(
-						{},
-						{ signal: ac.signal }
-					);
-					for await (const event of events) {
-						if (!live) {
-							return;
-						}
-						invalidateOperationLifecycleEvent(invalidator, event);
-					}
-				} catch {
-					if (!live) {
-						return;
-					}
-				}
-				await wait(OPERATION_EVENTS_RECONNECT_MS, ac.signal);
-			}
-		}
-		run().catch(() => undefined);
+		runOperationEventStream(invalidator, ac.signal, () => live).catch(
+			() => undefined
+		);
 		return () => {
 			live = false;
 			ac.abort();

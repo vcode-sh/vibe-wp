@@ -7,8 +7,8 @@ import {
 	type VibeEnv,
 	type VibeOp,
 } from "./exec";
-import type { persistJobFinish, persistJobStart, writeAudit } from "./jobs-db";
 import { publishOperationLifecycleEvent } from "./job-events";
+import type { persistJobFinish, persistJobStart, writeAudit } from "./jobs-db";
 import { LineStream } from "./line-stream";
 import type { DetectedSite } from "./sites";
 

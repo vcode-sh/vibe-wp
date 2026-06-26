@@ -35,7 +35,9 @@ function makeProc(): FakeProc {
 	return { exited, kill: () => resolveExit(1), pid: 0, resolveExit };
 }
 
-async function* noLines(): AsyncGenerator<string> {}
+async function* noLines(): AsyncGenerator<string> {
+	// Intentionally yields no process output.
+}
 
 const BASE_INPUT = {
 	action: "backup",
