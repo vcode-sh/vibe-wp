@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { backupConfigQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateBackupConfigSaved } from "@/lib/realtime/immediate-invalidation";
 
 const GLOBAL_SITE_ID = "__global__";
 
@@ -84,7 +85,7 @@ function R2GlobalForm({ global: row }: { global: MaskedRow }) {
 				patch.secret = secret;
 			}
 			await save.mutateAsync(patch as Parameters<typeof save.mutateAsync>[0]);
-			await qc.invalidateQueries(backupConfigQuery(GLOBAL_SITE_ID));
+			await invalidateBackupConfigSaved(qc, GLOBAL_SITE_ID);
 			setSecret("");
 			toast.success("Global R2 credentials saved.");
 		} catch {

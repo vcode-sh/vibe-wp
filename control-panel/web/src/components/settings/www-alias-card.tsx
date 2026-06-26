@@ -15,8 +15,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { siteSettingsQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateSiteWwwAliasSaved } from "@/lib/realtime/immediate-invalidation";
 
 export function WwwAliasCard({
 	siteId,
@@ -33,7 +33,7 @@ export function WwwAliasCard({
 		setEnabled(next);
 		try {
 			await wwwSet.mutateAsync({ siteId, enabled: next });
-			await qc.invalidateQueries(siteSettingsQuery(siteId));
+			await invalidateSiteWwwAliasSaved(qc, siteId);
 			toast.success(next ? "www alias enabled." : "www alias disabled.");
 		} catch {
 			setEnabled(!next);

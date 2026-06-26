@@ -1,100 +1,27 @@
-import { createContext, useContext, useEffect, useReducer } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+	createContext,
+	useContext,
+	useEffect,
+	useMemo,
+	useReducer,
+} from "react";
 import type { JobStatus } from "@/data/types";
+import { client } from "@/lib/orpc/client";
+import { invalidateOperationLifecycleEvent } from "@/lib/realtime/operation-events";
+import {
+	createOperationInvalidator,
+	type QueryClientLike,
+} from "@/lib/realtime/query-invalidation";
+import {
+	initialOperationsState,
+	type Operation,
+	operationsReducer,
+} from "./operations-state";
 import { loadFromStorage, saveToStorage } from "./operations-storage";
 
-export interface Operation {
-	jobId: string;
-	kind: string;
-	siteId: string;
-	startedAt: number;
-	title: string;
-}
-
-export interface OperationsState {
-	expandedId: string | null;
-	finished: string[];
-	ops: Operation[];
-	// Terminal status keyed by jobId, recorded when an op finishes. Lets callers
-	// distinguish a successful completion from a failure/cancel after the fact.
-	statuses: Record<string, JobStatus>;
-}
-
-type OperationsAction =
-	| { type: "start"; op: Operation }
-	| { type: "expand"; jobId: string }
-	| { type: "minimize" }
-	| { type: "dismiss"; jobId: string }
-	| { type: "finish"; jobId: string; status: JobStatus }
-	| {
-			type: "rehydrate";
-			state: Pick<OperationsState, "ops" | "finished" | "statuses">;
-	  };
-
-export function operationsReducer(
-	state: OperationsState,
-	action: OperationsAction
-): OperationsState {
-	switch (action.type) {
-		case "start": {
-			// Dedup by jobId; op metadata (title/kind/startedAt) is immutable once
-			// registered. Re-surface the existing op by setting expandedId.
-			const exists = state.ops.some((o) => o.jobId === action.op.jobId);
-			return {
-				...state,
-				ops: exists ? state.ops : [...state.ops, action.op],
-				expandedId: action.op.jobId,
-			};
-		}
-		case "expand": {
-			return { ...state, expandedId: action.jobId };
-		}
-		case "minimize": {
-			return { ...state, expandedId: null };
-		}
-		case "dismiss": {
-			const statuses = Object.fromEntries(
-				Object.entries(state.statuses).filter(([id]) => id !== action.jobId)
-			);
-			return {
-				ops: state.ops.filter((o) => o.jobId !== action.jobId),
-				finished: state.finished.filter((id) => id !== action.jobId),
-				expandedId: state.expandedId === action.jobId ? null : state.expandedId,
-				statuses,
-			};
-		}
-		case "finish": {
-			// Record the terminal status even when the job was already marked
-			// finished (e.g. tray + expanded dialog both fire) — last write wins.
-			const statuses = { ...state.statuses, [action.jobId]: action.status };
-			if (state.finished.includes(action.jobId)) {
-				return { ...state, statuses };
-			}
-			return {
-				...state,
-				finished: [...state.finished, action.jobId],
-				statuses,
-			};
-		}
-		case "rehydrate": {
-			return {
-				...state,
-				ops: action.state.ops,
-				finished: action.state.finished,
-				statuses: action.state.statuses,
-			};
-		}
-		default: {
-			return state;
-		}
-	}
-}
-
-const initialState: OperationsState = {
-	ops: [],
-	expandedId: null,
-	finished: [],
-	statuses: {},
-};
+const FINISHED_OPERATION_AUTO_DISMISS_MS = 5000;
+const OPERATION_EVENTS_RECONNECT_MS = 2000;
 
 interface OperationsContextValue {
 	dismiss: (jobId: string) => void;
@@ -116,12 +43,34 @@ interface OperationsContextValue {
 
 const OperationsContext = createContext<OperationsContextValue | null>(null);
 
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+	return new Promise((resolve) => {
+		const timer = window.setTimeout(resolve, ms);
+		signal.addEventListener(
+			"abort",
+			() => {
+				window.clearTimeout(timer);
+				resolve();
+			},
+			{ once: true }
+		);
+	});
+}
+
 export function OperationsProvider({
 	children,
 }: {
 	children: React.ReactNode;
 }) {
-	const [state, dispatch] = useReducer(operationsReducer, initialState);
+	const [state, dispatch] = useReducer(
+		operationsReducer,
+		initialOperationsState
+	);
+	const queryClient = useQueryClient();
+	const invalidator = useMemo(
+		() => createOperationInvalidator(queryClient as unknown as QueryClientLike),
+		[queryClient]
+	);
 
 	// Rehydrate from localStorage on mount (client-only).
 	useEffect(() => {
@@ -140,15 +89,84 @@ export function OperationsProvider({
 		});
 	}, [state.ops, state.finished, state.statuses]);
 
+	useEffect(() => {
+		const visibleFinished = state.finished.filter(
+			(jobId) =>
+				jobId !== state.expandedId && state.ops.some((op) => op.jobId === jobId)
+		);
+		if (visibleFinished.length === 0) {
+			return;
+		}
+		const timers = visibleFinished.map((jobId) =>
+			window.setTimeout(
+				() => dispatch({ type: "dismiss", jobId }),
+				FINISHED_OPERATION_AUTO_DISMISS_MS
+			)
+		);
+		return () => {
+			for (const timer of timers) {
+				window.clearTimeout(timer);
+			}
+		};
+	}, [state.expandedId, state.finished, state.ops]);
+
+	useEffect(() => {
+		let live = true;
+		const ac = new AbortController();
+		async function run() {
+			while (live) {
+				try {
+					const events = await client.operationsEvents(
+						{},
+						{ signal: ac.signal }
+					);
+					for await (const event of events) {
+						if (!live) {
+							return;
+						}
+						invalidateOperationLifecycleEvent(invalidator, event);
+					}
+				} catch {
+					if (!live) {
+						return;
+					}
+				}
+				await wait(OPERATION_EVENTS_RECONNECT_MS, ac.signal);
+			}
+		}
+		run().catch(() => undefined);
+		return () => {
+			live = false;
+			ac.abort();
+		};
+	}, [invalidator]);
+
 	const value: OperationsContextValue = {
 		ops: state.ops,
 		expandedId: state.expandedId,
-		start: (op) =>
-			dispatch({ type: "start", op: { ...op, startedAt: Date.now() } }),
+		start: (op) => {
+			const full = { ...op, startedAt: Date.now() };
+			dispatch({ type: "start", op: full });
+			invalidator.start({
+				jobId: full.jobId,
+				phase: "start",
+				siteId: full.siteId,
+				uiKind: full.kind,
+			});
+		},
 		expand: (jobId) => dispatch({ type: "expand", jobId }),
 		minimize: () => dispatch({ type: "minimize" }),
 		dismiss: (jobId) => dispatch({ type: "dismiss", jobId }),
-		finish: (jobId, status) => dispatch({ type: "finish", jobId, status }),
+		finish: (jobId, status) => {
+			const op = state.ops.find((candidate) => candidate.jobId === jobId);
+			invalidator.finish({
+				jobId,
+				phase: "finish",
+				siteId: op?.siteId ?? "server",
+				uiKind: op?.kind ?? "unknown",
+			});
+			dispatch({ type: "finish", jobId, status });
+		},
 		getStatus: (siteId, kind) => {
 			// The newest matching op (ops are appended in start order).
 			const op = [...state.ops]

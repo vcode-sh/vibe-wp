@@ -1,4 +1,4 @@
-import type { OperationsState } from "./operations-provider";
+import type { OperationsState } from "./operations-state";
 
 /** The slice of operations state we persist across reloads (no expandedId). */
 export type PersistedState = Pick<

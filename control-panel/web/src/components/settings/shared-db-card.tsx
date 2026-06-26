@@ -27,6 +27,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { sharedDbStatusQuery } from "@/data/queries";
 import { authClient } from "@/lib/auth-client";
 import { type client, orpc } from "@/lib/orpc/client";
+import {
+	invalidateSharedDbInitialized,
+	invalidateSharedDbRotated,
+} from "@/lib/realtime/immediate-invalidation";
 
 /** The operator-readable status payload, derived from the typed oRPC client so
  * the type stays in lockstep with the server without a contract import. */
@@ -82,10 +86,6 @@ function SharedDbBody({ status }: { status: SharedDbStatus }) {
 	const init = useMutation(orpc.sharedDbInit.mutationOptions());
 	const rotate = useMutation(orpc.sharedDbRotateRoot.mutationOptions());
 
-	async function refresh() {
-		await qc.invalidateQueries(sharedDbStatusQuery());
-	}
-
 	async function handleInit() {
 		setOutput(null);
 		try {
@@ -96,7 +96,7 @@ function SharedDbBody({ status }: { status: SharedDbStatus }) {
 			} else {
 				toast.error("Initialization reported a failure — see output below.");
 			}
-			await refresh();
+			await invalidateSharedDbInitialized(qc);
 		} catch {
 			toast.error("Failed to initialize the shared database.");
 		}
@@ -113,7 +113,7 @@ function SharedDbBody({ status }: { status: SharedDbStatus }) {
 			} else {
 				toast.error("Rotation reported a failure — see output below.");
 			}
-			await refresh();
+			await invalidateSharedDbRotated(qc);
 		} catch {
 			toast.error("Failed to rotate the root password.");
 		}

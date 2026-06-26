@@ -28,15 +28,27 @@ keys that need to refresh without requiring a browser reload.
 
 ## Current Realtime Shape
 
-The panel already has live operation streams. Tracked jobs are persisted and
-audited before the host command starts, streamed through `operationsStream`, then
-finished in `jobs`. The web UI records local active operation state through
-`OperationsProvider`.
+The panel has two realtime layers:
 
-The missing piece is a central query refresh layer. `LiveOperation` and
-`OperationsTray` observe terminal job status, but they only call
-`finish(jobId, status)`. They do not translate a completed job into invalidating
-the affected oRPC/TanStack queries.
+- `operationsStream` remains the per-job log/status stream used by the expanded
+  operation dialog and operations tray.
+- `operationsEvents` is the app-wide job lifecycle stream. The backend emits a
+  start event after the job row, audit row, and in-memory registry are ready. It
+  emits a finish event after `persistJobFinish()` and the job's terminal
+  `onFinish` hook complete, so client refetches do not race the authoritative
+  persisted state.
+
+The web app has one query refresh chokepoint in `OperationsProvider`. Local
+`start()` / `finish()` calls and remote `operationsEvents` both flow through the
+same operation invalidator and the same declarative job-kind map. The older
+per-page `useInvalidateOnJobDone` hook has been removed so pages do not need
+their own job wiring.
+
+Broad, background-fed views also carry a light safety net in `data/queries.ts`:
+active overview, health, inventory/security, and monitoring queries refetch on
+window focus and every 60 seconds while mounted. This covers scheduled monitor
+samples, scheduled updates/backups, and Insights collection paths that do not
+originate from the current browser session.
 
 ## Query Groups
 
@@ -74,6 +86,7 @@ a predicate, not only with one exact helper call.
 | `panel-domain-preflight` | `dnsPreflightQuery(domain)`; `setupPanelDnsPreflightQuery(domain)` | Panel domain forms in Settings and setup | DNS lookup plus server IP comparison |
 | `setup-state` | `needsSetupQuery()` | Login/setup routing | admin count |
 | `monitoring` | `monitoringOverviewQuery()`; `monitoringHistoryQuery(siteId, days)`; future `monitoringSummaryQuery()` | Monitoring pages | monitor sample DB |
+| `wp-users` | `orpc.siteUsers.queryOptions({ input: { siteId } })` | WordPress users page | WP user list bridge |
 | `users` | `["admin", "listUsers"]` | Users page | Better Auth admin list users |
 | `self-sessions` | `["self", "sessions"]` | Profile sessions card | Better Auth self sessions |
 | `auth-session` | Better Auth session hook/cache | user menu, role-gated UI, profile | Better Auth session |
@@ -158,6 +171,8 @@ mutation completion.
 | `applySecurityFix` | Writes XML-RPC/file-edit hardening env flag; runtime changes after restart and next Insights collection. | Immediate: `security-score(siteId)` and `site-settings(siteId)` if active. After restart plus inventory refresh, use `restart` and `refreshInventory` maps. |
 | `monitoringSummary` | Records fresh monitor samples for every detected site, then returns summary. | `monitoringOverview`, every active `monitoringHistoryQuery(siteId, days)`, every active `site-overview(siteId)`, every active `healthQuery(siteId)`. |
 | `monitoringRecordSample(siteId)` | Records one fresh monitor sample. | `monitoringHistory(siteId, *)`, `monitoringOverview`, `site-overview(siteId)`, `health(siteId)`. |
+| `setWpUserPassword` | Resets one WordPress user's password through the root-gated WP user bridge. | Intentionally none. The current WP users table does not display password/session state, and the mutation does not change any list field. |
+| `wpLoginLink` | Mints a single-use one-click login URL for a WordPress user. | Intentionally none. It is a no-op for panel read models. |
 | `sharedDbInit` | Initializes the global shared MariaDB project. | `shared-db`, `server-summary`. |
 | `sharedDbRotateRoot` | Rotates shared DB root password. | `shared-db`. |
 | `panelDomainApply` | Applies an additive custom panel domain and writes trusted origin. | `panel-access`. |
@@ -199,11 +214,12 @@ These are not oRPC procedures and do not enter the operation stream.
 - `healthQuery(siteId)` displays resolved alert channels, so global notification
   config saves affect health pages even though they are not health operations.
 - Plugin/theme action UI uses `wp:plugin` and `wp:theme`, while backend job rows
-  persist specific kinds like `wpPluginActivate` and `wpThemeUpdate`. A future
-  server-driven realtime layer should use backend kinds; the current local
-  operation layer must also understand the UI aliases.
-- `operationsListQuery()` is stale today after a live operation finishes unless
-  the browser refreshes or the page manually refetches.
+  persist specific kinds like `wpPluginActivate` and `wpThemeUpdate`. The shared
+  map handles both UI aliases and backend kinds because local events and
+  cross-client server events can use different names.
+- `removeSite` uses a broad cache-removal predicate over `input.siteId`. Current
+  site-scoped oRPC query helpers consistently use that key; tests cover the
+  active dynamic families so a future drift is visible.
 
 ## Current Partial Refreshes Already Present
 
@@ -224,37 +240,21 @@ These are not oRPC procedures and do not enter the operation stream.
 These are useful, but they are inconsistent and do not cover the general
 job-completion path.
 
-## Recommended Implementation Shape
+## Implemented Shape
 
-1. Add a central invalidation module in the web app, for example
-   `web/src/lib/realtime/invalidation-map.ts`.
-2. Represent tracked operation completion as:
-
-   ```ts
-   interface OperationInvalidationEvent {
-     jobId: string;
-     siteId: string;
-     uiKind: string;
-     status: JobStatus;
-   }
-   ```
-
-3. Run the map from the two places that currently observe terminal job state:
-   `LiveOperation` and `OperationsTray`. Deduplicate by `jobId` so the expanded
-   dialog and tray do not double-refresh.
-4. Always invalidate `operations` on job start and terminal status. Always
-   invalidate `site-overview(siteId)` for non-server jobs on start and terminal
-   status.
-5. For terminal status, apply the `Tracked Job Map` above. Prefer authoritative
-   refetches over hand-patching query data for host state.
-6. Add helper invalidators for dynamic families:
-   - all `operationsList` query variants
-   - all `logsRecent` variants for one site
-   - all `listBackupContents` variants for one site
-   - all `monitoringHistory` variants for one site
-   - all active per-site `backupConfigGet` queries when global config changes
-7. Keep immediate non-job mutations explicit. They already know the procedure and
-   input, so they can call narrow invalidators directly after success.
+1. `web/src/lib/realtime/invalidation-rules.ts` maps job lifecycle events to
+   query groups.
+2. `web/src/lib/realtime/query-invalidation.ts` translates those groups into
+   exact query invalidations or predicate-based dynamic-family invalidations.
+3. `OperationsProvider` calls the invalidator for local operation starts and
+   finishes, and subscribes once to backend `operationsEvents` for cross-client
+   job start/finish events.
+4. `createOperationInvalidator()` deduplicates start/finish events by
+   `phase:jobId` with a bounded FIFO memory so the provider can safely receive
+   the same event from local state and the server stream.
+5. Immediate non-job mutations stay explicit in
+   `web/src/lib/realtime/immediate-invalidation.ts` because they already know
+   the exact procedure and input that changed.
 
 ## Verification Checklist For Implementation
 

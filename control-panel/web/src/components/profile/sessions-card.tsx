@@ -12,9 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
+import { SELF_SESSIONS_QUERY_KEY } from "@/lib/realtime/auth-query-keys";
 import { describeSession } from "@/lib/sessions";
-
-const SESSIONS_KEY = ["self", "sessions"] as const;
 
 export function SessionsCard() {
 	const qc = useQueryClient();
@@ -22,7 +21,7 @@ export function SessionsCard() {
 	const currentToken = session?.session.token;
 
 	const query = useQuery({
-		queryKey: SESSIONS_KEY,
+		queryKey: SELF_SESSIONS_QUERY_KEY,
 		queryFn: async () => {
 			const res = await authClient.listSessions();
 			if (res.error) {
@@ -32,7 +31,8 @@ export function SessionsCard() {
 		},
 	});
 
-	const invalidate = () => qc.invalidateQueries({ queryKey: SESSIONS_KEY });
+	const invalidate = () =>
+		qc.invalidateQueries({ queryKey: SELF_SESSIONS_QUERY_KEY });
 
 	const revoke = useMutation({
 		mutationFn: async (token: string) => {

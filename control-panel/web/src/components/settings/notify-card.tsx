@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { notifyConfigQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateNotifyConfigSaved } from "@/lib/realtime/immediate-invalidation";
 
 const GLOBAL_SITE_ID = "__global__";
 
@@ -68,7 +69,7 @@ function NotifyForm({ global: row }: { global: MaskedRow }) {
 				patch.telegramToken = token;
 			}
 			await save.mutateAsync(patch as Parameters<typeof save.mutateAsync>[0]);
-			await qc.invalidateQueries(notifyConfigQuery(GLOBAL_SITE_ID));
+			await invalidateNotifyConfigSaved(qc);
 			setToken("");
 			toast.success("Alert channels saved.");
 		} catch {

@@ -5,7 +5,7 @@
  */
 import { Checkbox } from "@control-panel/ui/components/checkbox";
 import { Label } from "@control-panel/ui/components/label";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PasswordField } from "@/components/users/password-field";
 import { authClient } from "@/lib/auth-client";
 import { passwordSchema } from "@/lib/password";
+import { SELF_SESSIONS_QUERY_KEY } from "@/lib/realtime/auth-query-keys";
 
 export function ChangePasswordCard() {
+	const qc = useQueryClient();
 	const [current, setCurrent] = useState("");
 	const [next, setNext] = useState("");
 	const [confirm, setConfirm] = useState("");
@@ -37,8 +39,11 @@ export function ChangePasswordCard() {
 				throw new Error(res.error.message ?? "Failed to change password.");
 			}
 		},
-		onSuccess: () => {
+		onSuccess: async () => {
 			reset();
+			if (revokeOthers) {
+				await qc.invalidateQueries({ queryKey: SELF_SESSIONS_QUERY_KEY });
+			}
 			toast.success("Password changed.");
 		},
 		onError: (err: Error) => toast.error(err.message),

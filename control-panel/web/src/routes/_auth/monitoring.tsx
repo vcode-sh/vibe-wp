@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { monitoringOverviewQuery } from "@/data/queries";
 import { authClient } from "@/lib/auth-client";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateMonitoringSummaryRecorded } from "@/lib/realtime/immediate-invalidation";
 
 export const Route = createFileRoute("/_auth/monitoring")({
 	component: MonitoringOverviewPage,
@@ -50,7 +51,7 @@ function MonitoringOverviewPage() {
 	async function handleCheckAll() {
 		try {
 			await checkAll.mutateAsync({});
-			await qc.invalidateQueries(monitoringOverviewQuery());
+			await invalidateMonitoringSummaryRecorded(qc);
 			toast.success("Checked every site and updated their status.");
 		} catch {
 			toast.error("Couldn't check the sites. Try again in a moment.");

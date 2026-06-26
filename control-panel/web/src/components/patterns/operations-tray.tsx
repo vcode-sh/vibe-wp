@@ -10,10 +10,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { JobStatus } from "@/data/types";
 import { useLiveStream } from "@/lib/live/use-live-stream";
-import {
-	type Operation,
-	useOperations,
-} from "@/lib/operations/operations-provider";
+import { useOperations } from "@/lib/operations/operations-provider";
+import type { Operation } from "@/lib/operations/operations-state";
 import { client } from "@/lib/orpc/client";
 
 // If a live stream for a not-yet-finished op produces no events for this long

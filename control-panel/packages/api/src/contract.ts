@@ -246,6 +246,14 @@ export type JobStatus =
 	| "failed"
 	| "canceled";
 
+export interface OperationLifecycleEvent {
+	jobId: string;
+	kind: string;
+	phase: "start" | "finish";
+	siteId: string;
+	status?: JobStatus;
+}
+
 export interface Job {
 	exitCode: number | null;
 	finishedAt: string | null;

@@ -19,6 +19,7 @@ export type {
 	MetricTile,
 	NeedItem,
 	OffsiteVerified,
+	OperationLifecycleEvent,
 	PerformancePresetInput,
 	PerfReport,
 	SecurityRadar,

@@ -32,7 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { relativeTime } from "@/data/derive";
-import { inventoryQuery, securityRadarQuery } from "@/data/queries";
+import { securityRadarQuery } from "@/data/queries";
 import {
 	actionButtonLabel,
 	actionGuidance,
@@ -45,6 +45,7 @@ import {
 import type { FlaggedPlugin, SecurityRadar } from "@/data/types";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateInventoryRefreshed } from "@/lib/realtime/immediate-invalidation";
 
 function SeverityDot({ severity }: { severity: FlaggedPlugin["severity"] }) {
 	const meta = SEVERITY_META[severity];
@@ -219,8 +220,7 @@ function RecheckButton({ siteId }: { siteId: string }) {
 			await refresh.mutateAsync({ siteId });
 			toast.success("Re-checking — results refresh in a moment.");
 			setTimeout(() => {
-				qc.invalidateQueries(inventoryQuery(siteId));
-				qc.invalidateQueries(securityRadarQuery(siteId));
+				invalidateInventoryRefreshed(qc, siteId);
 			}, 2000);
 		} catch {
 			toast.error("Couldn't re-check right now. Please try again.");

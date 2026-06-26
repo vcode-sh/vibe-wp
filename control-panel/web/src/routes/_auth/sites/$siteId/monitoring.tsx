@@ -15,6 +15,7 @@ import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { monitoringHistoryQuery, sitesQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateMonitoringSampleRecorded } from "@/lib/realtime/immediate-invalidation";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/monitoring")({
 	component: MonitoringPage,
@@ -40,7 +41,7 @@ function MonitoringPage() {
 	async function handleRecord() {
 		try {
 			await record.mutateAsync({ siteId });
-			await qc.invalidateQueries(monitoringHistoryQuery(siteId, windowDays));
+			await invalidateMonitoringSampleRecorded(qc, siteId);
 			toast.success("Captured a fresh monitoring snapshot.");
 		} catch {
 			toast.error("Couldn't record a monitor sample. Try again in a moment.");

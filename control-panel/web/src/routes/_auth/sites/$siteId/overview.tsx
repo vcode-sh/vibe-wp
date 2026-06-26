@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { siteOverviewQuery, updatesAvailableQuery } from "@/data/queries";
 import type { NeedItem } from "@/data/types";
 import { useOperations } from "@/lib/operations/operations-provider";
-import { useInvalidateOnJobDone } from "@/lib/operations/use-invalidate-on-job-done";
 import { orpc } from "@/lib/orpc/client";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/overview")({
@@ -29,13 +28,6 @@ function OverviewPage() {
 	const overview = useQuery(siteOverviewQuery(siteId));
 	const updatesAvailable = useQuery(updatesAvailableQuery(siteId));
 	const { start, isRunning } = useOperations();
-	// After a backup or update job finishes, refresh the hero + update count so
-	// the overview reflects the new state instead of the pre-action snapshot.
-	useInvalidateOnJobDone(
-		siteId,
-		["backup", "wpUpdate"],
-		[siteOverviewQuery(siteId).queryKey, updatesAvailableQuery(siteId).queryKey]
-	);
 
 	function goToBackups() {
 		navigate({ to: "/sites/$siteId/backups", params: { siteId } });

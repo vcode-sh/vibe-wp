@@ -8,6 +8,7 @@ import {
 	type VibeOp,
 } from "./exec";
 import type { persistJobFinish, persistJobStart, writeAudit } from "./jobs-db";
+import { publishOperationLifecycleEvent } from "./job-events";
 import { LineStream } from "./line-stream";
 import type { DetectedSite } from "./sites";
 
@@ -166,13 +167,20 @@ async function drainJob(
 		job.status = code === 0 ? "succeeded" : "failed";
 	}
 	job.finishedAt = new Date().toISOString();
-	stream.end(job.status);
 	if (!finalized.has(jobId)) {
 		finalized.add(jobId);
 		scheduleEviction(jobId);
 		await deps.persistJobFinish(jobId, job.status, code);
 		await runFinishHook(onFinish, job.status);
+		publishOperationLifecycleEvent({
+			jobId,
+			kind: job.kind,
+			phase: "finish",
+			siteId: job.siteId,
+			status: job.status,
+		});
 	}
+	stream.end(job.status);
 }
 
 /** Metadata shared by every tracked job, regardless of what it spawns. */
@@ -212,6 +220,12 @@ export async function launchJob(
 	// Only now spawn + register + drain.
 	const { proc, lines } = produce();
 	registry.set(jobId, { job, proc, stream });
+	publishOperationLifecycleEvent({
+		jobId,
+		kind: meta.kind,
+		phase: "start",
+		siteId: meta.siteId,
+	});
 
 	drainJob(job, stream, proc, lines, jobId, d, meta.onFinish).catch(
 		async () => {
@@ -220,17 +234,25 @@ export async function launchJob(
 				job.status = "failed";
 			}
 			job.finishedAt = new Date().toISOString();
-			stream.end(job.status);
 			if (!finalized.has(jobId)) {
 				finalized.add(jobId);
 				scheduleEviction(jobId);
 				try {
 					await d.persistJobFinish(jobId, job.status, null);
 				} catch {
-					// Stream is already ended; swallow DB errors to avoid unhandled rejection.
+					// Still end the stream below; swallow DB errors to avoid an
+					// unhandled rejection from the background drain.
 				}
 				await runFinishHook(meta.onFinish, job.status);
+				publishOperationLifecycleEvent({
+					jobId,
+					kind: job.kind,
+					phase: "finish",
+					siteId: job.siteId,
+					status: job.status,
+				});
 			}
+			stream.end(job.status);
 		}
 	);
 

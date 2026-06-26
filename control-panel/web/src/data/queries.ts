@@ -1,5 +1,11 @@
 import { orpc } from "@/lib/orpc/client";
 
+const backgroundRealtimeOptions = {
+	refetchInterval: 60_000,
+	refetchOnWindowFocus: true,
+	staleTime: 15_000,
+} as const;
+
 export const needsSetupQuery = () => orpc.needsSetup.queryOptions();
 
 export const panelAccessQuery = () => orpc.panelAccess.queryOptions();
@@ -8,11 +14,15 @@ export const sitesQuery = () => orpc.sitesList.queryOptions();
 
 export const serverInfoQuery = () => orpc.serverInfo.queryOptions();
 
-export const siteOverviewQuery = (siteId: string) =>
-	orpc.siteOverview.queryOptions({ input: { siteId } });
+export const siteOverviewQuery = (siteId: string) => ({
+	...orpc.siteOverview.queryOptions({ input: { siteId } }),
+	...backgroundRealtimeOptions,
+});
 
-export const healthQuery = (siteId: string) =>
-	orpc.healthReport.queryOptions({ input: { siteId } });
+export const healthQuery = (siteId: string) => ({
+	...orpc.healthReport.queryOptions({ input: { siteId } }),
+	...backgroundRealtimeOptions,
+});
 
 export const backupsQuery = (siteId: string) =>
 	orpc.backupsList.queryOptions({ input: { siteId } });
@@ -45,8 +55,10 @@ export const stagingQuery = (siteId: string) =>
 export const siteStatusQuery = (siteId: string) =>
 	orpc.siteStatus.queryOptions({ input: { siteId } });
 
-export const updatesAvailableQuery = (siteId: string) =>
-	orpc.updatesAvailable.queryOptions({ input: { siteId } });
+export const updatesAvailableQuery = (siteId: string) => ({
+	...orpc.updatesAvailable.queryOptions({ input: { siteId } }),
+	...backgroundRealtimeOptions,
+});
 
 export const backupConfigQuery = (siteId: string) =>
 	orpc.backupConfigGet.queryOptions({ input: { siteId } });
@@ -73,14 +85,20 @@ export const operationsListQuery = (opts?: {
 	limit?: number;
 }) => orpc.operationsList.queryOptions({ input: opts ?? {} });
 
-export const inventoryQuery = (siteId: string) =>
-	orpc.siteInventory.queryOptions({ input: { siteId } });
+export const inventoryQuery = (siteId: string) => ({
+	...orpc.siteInventory.queryOptions({ input: { siteId } }),
+	...backgroundRealtimeOptions,
+});
 
-export const securityScoreQuery = (siteId: string) =>
-	orpc.siteSecurityScore.queryOptions({ input: { siteId } });
+export const securityScoreQuery = (siteId: string) => ({
+	...orpc.siteSecurityScore.queryOptions({ input: { siteId } }),
+	...backgroundRealtimeOptions,
+});
 
-export const securityRadarQuery = (siteId: string) =>
-	orpc.securityRadar.queryOptions({ input: { siteId } });
+export const securityRadarQuery = (siteId: string) => ({
+	...orpc.securityRadar.queryOptions({ input: { siteId } }),
+	...backgroundRealtimeOptions,
+});
 
 export const perfAdviceQuery = (siteId: string) =>
 	orpc.perfAdvice.queryOptions({ input: { siteId } });
@@ -99,11 +117,15 @@ export const dnsPreflightQuery = (domain: string) =>
 export const setupPanelDnsPreflightQuery = (domain: string) =>
 	orpc.setupPanelDnsPreflight.queryOptions({ input: { domain } });
 
-export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) =>
-	orpc.monitoringHistory.queryOptions({ input: { siteId, sinceDays } });
+export const monitoringHistoryQuery = (siteId: string, sinceDays = 7) => ({
+	...orpc.monitoringHistory.queryOptions({ input: { siteId, sinceDays } }),
+	...backgroundRealtimeOptions,
+});
 
 export const monitoringSummaryQuery = () =>
 	orpc.monitoringSummary.queryOptions();
 
-export const monitoringOverviewQuery = () =>
-	orpc.monitoringOverview.queryOptions();
+export const monitoringOverviewQuery = () => ({
+	...orpc.monitoringOverview.queryOptions(),
+	...backgroundRealtimeOptions,
+});

@@ -1,15 +1,32 @@
 import { eventIterator, ORPCError } from "@orpc/server";
 import { z } from "zod";
 
-import type { Job, JobHistoryEntry, JobStatus, StreamEvent } from "../contract";
+import type {
+	Job,
+	JobHistoryEntry,
+	JobStatus,
+	OperationLifecycleEvent,
+	StreamEvent,
+} from "../contract";
 import { cancelJob, getJob, streamJob } from "../core-bridge/jobs";
 import { jobsHistory, writeAudit } from "../core-bridge/jobs-db";
+import { subscribeOperationLifecycleEvents } from "../core-bridge/job-events";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
 const streamEventSchema = z.object({
 	line: z.string(),
 	status: z.enum(["queued", "running", "succeeded", "failed", "canceled"]),
 	done: z.boolean(),
+});
+
+const operationLifecycleEventSchema = z.object({
+	jobId: z.string(),
+	kind: z.string(),
+	phase: z.enum(["start", "finish"]),
+	siteId: z.string(),
+	status: z
+		.enum(["queued", "running", "succeeded", "failed", "canceled"])
+		.optional(),
 });
 
 export const operationsRouter = {
@@ -43,6 +60,15 @@ export const operationsRouter = {
 			}
 			for await (const ev of stream) {
 				yield ev;
+			}
+		}),
+
+	operationsEvents: protectedProcedure
+		.input(z.object({}))
+		.output(eventIterator(operationLifecycleEventSchema))
+		.handler(async function* (): AsyncGenerator<OperationLifecycleEvent> {
+			for await (const event of subscribeOperationLifecycleEvents()) {
+				yield event;
 			}
 		}),
 

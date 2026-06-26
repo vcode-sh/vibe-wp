@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { backupConfigQuery, sitesQuery } from "@/data/queries";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateBackupConfigSaved } from "@/lib/realtime/immediate-invalidation";
 
 interface SiteSummary {
 	domain: string;
@@ -121,7 +122,7 @@ function R2SiteFieldsForm({
 				prefix: prefix || undefined,
 				retention: retentionNum && retentionNum > 0 ? retentionNum : undefined,
 			});
-			await qc.invalidateQueries(backupConfigQuery(site.id));
+			await invalidateBackupConfigSaved(qc, site.id);
 			toast.success(`Off-site settings saved for ${site.name}.`);
 		} catch {
 			toast.error("Failed to save per-site R2 settings.");

@@ -4,16 +4,19 @@
  * `authClient.updateUser`; the reactive session hook reflects the new name.
  */
 import { Label } from "@control-panel/ui/components/label";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { USERS_QUERY_KEY } from "@/lib/realtime/auth-query-keys";
 
 export function ProfileDetailsCard() {
-	const { data: session } = authClient.useSession();
+	const qc = useQueryClient();
+	const sessionQuery = authClient.useSession();
+	const { data: session } = sessionQuery;
 	const currentName = session?.user.name ?? "";
 	const email = session?.user.email ?? "";
 	const [name, setName] = useState(currentName);
@@ -30,7 +33,11 @@ export function ProfileDetailsCard() {
 				throw new Error(res.error.message ?? "Failed to update profile.");
 			}
 		},
-		onSuccess: () => toast.success("Profile updated."),
+		onSuccess: async () => {
+			await sessionQuery.refetch();
+			await qc.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+			toast.success("Profile updated.");
+		},
 		onError: (err: Error) => toast.error(err.message),
 	});
 

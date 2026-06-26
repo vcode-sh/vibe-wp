@@ -24,15 +24,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { relativeTime } from "@/data/derive";
-import {
-	inventoryQuery,
-	securityRadarQuery,
-	securityScoreQuery,
-	updatesAvailableQuery,
-} from "@/data/queries";
+import { inventoryQuery } from "@/data/queries";
 import type { InsightsPlugin, InsightsTheme, SiteInsights } from "@/data/types";
-import { useInvalidateOnJobDone } from "@/lib/operations/use-invalidate-on-job-done";
 import { orpc } from "@/lib/orpc/client";
+import { invalidateInventoryRefreshed } from "@/lib/realtime/immediate-invalidation";
 
 export const Route = createFileRoute("/_auth/sites/$siteId/inventory")({
 	component: InventoryPage,
@@ -82,7 +77,7 @@ function RefreshButton({
 				"Re-checking the site — the inventory refreshes in a moment."
 			);
 			setTimeout(() => {
-				qc.invalidateQueries(inventoryQuery(siteId));
+				invalidateInventoryRefreshed(qc, siteId);
 			}, 2000);
 		} catch {
 			toast.error("Failed to refresh inventory.");
@@ -389,19 +384,6 @@ function InventoryBody({
 function InventoryPage() {
 	const { siteId } = Route.useParams();
 	const inventory = useQuery(inventoryQuery(siteId));
-	// When a plugin/theme/core/safe-update job finishes, re-read the inventory and
-	// the security signals so the page reflects reality instead of the pre-action
-	// state. Without this the table keeps showing the old active/version values.
-	useInvalidateOnJobDone(
-		siteId,
-		["wp:plugin", "wp:theme", "safeUpdate", "wpUpdate"],
-		[
-			inventoryQuery(siteId).queryKey,
-			securityScoreQuery(siteId).queryKey,
-			securityRadarQuery(siteId).queryKey,
-			updatesAvailableQuery(siteId).queryKey,
-		]
-	);
 
 	return (
 		<>

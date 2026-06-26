@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { Operation, OperationsState } from "./operations-provider";
-import { operationsReducer } from "./operations-provider";
+import {
+	type Operation,
+	type OperationsState,
+	operationsReducer,
+} from "./operations-state";
 
 const opA: Operation = {
 	jobId: "job-a",

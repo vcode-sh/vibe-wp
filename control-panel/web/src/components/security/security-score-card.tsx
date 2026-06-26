@@ -28,9 +28,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { inventoryQuery, securityScoreQuery } from "@/data/queries";
+import { securityScoreQuery } from "@/data/queries";
 import { useOperations } from "@/lib/operations/operations-provider";
 import { type client, orpc } from "@/lib/orpc/client";
+import {
+	invalidateInventoryRefreshed,
+	invalidateSecurityFixSaved,
+} from "@/lib/realtime/immediate-invalidation";
 
 /** Derived from the typed oRPC client so the type tracks the server without a
  * contract import. `null` = insights not collected yet. */
@@ -179,9 +183,7 @@ function SecurityFixButton({
 		try {
 			const result = await apply.mutateAsync({ siteId, fix });
 			setApplied(true);
-			// The score only changes after the restart re-reads the env, so refresh
-			// the now-stale score view but keep showing the "restart to apply" hint.
-			await qc.invalidateQueries(securityScoreQuery(siteId));
+			await invalidateSecurityFixSaved(qc, siteId);
 			if (result.restartRequired) {
 				toast.success(copy.success, {
 					action: {
@@ -336,8 +338,7 @@ function RecheckButton({ siteId }: { siteId: string }) {
 		try {
 			await refresh.mutateAsync({ siteId });
 			setTimeout(() => {
-				qc.invalidateQueries(inventoryQuery(siteId));
-				qc.invalidateQueries(securityScoreQuery(siteId));
+				invalidateInventoryRefreshed(qc, siteId);
 			}, 2000);
 		} catch {
 			toast.error("Failed to re-check security.");

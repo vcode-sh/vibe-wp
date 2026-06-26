@@ -12,6 +12,7 @@ import { QueryBoundary } from "@/components/patterns/query-boundary";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { USERS_QUERY_KEY } from "@/lib/realtime/auth-query-keys";
 import {
 	filterUsers,
 	type PanelUser,
@@ -23,7 +24,6 @@ import { AddUserDialog } from "./add-user-dialog";
 import { UserFilters } from "./user-filters";
 import { UsersTable } from "./users-table";
 
-const USERS_KEY = ["admin", "listUsers"] as const;
 const PAGE_SIZE = 10;
 
 function toPanelUser(u: {
@@ -58,7 +58,7 @@ export function UserManager() {
 	const [page, setPage] = useState(0);
 
 	const query = useQuery({
-		queryKey: USERS_KEY,
+		queryKey: USERS_QUERY_KEY,
 		queryFn: async () => {
 			const res = await authClient.admin.listUsers({ query: { limit: 200 } });
 			if (res.error) {
@@ -69,7 +69,7 @@ export function UserManager() {
 	});
 
 	const onChanged = async () => {
-		await qc.invalidateQueries({ queryKey: USERS_KEY });
+		await qc.invalidateQueries({ queryKey: USERS_QUERY_KEY });
 	};
 
 	const all = query.data ?? [];
