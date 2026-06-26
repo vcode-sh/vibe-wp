@@ -21,7 +21,12 @@ import {
 } from "../core-bridge/panel-domain-apply";
 import { parseSecurityStatus, parseSmoke } from "../core-bridge/parse";
 import { panelDomainSchema } from "../core-bridge/provision-input";
-import { detectSites } from "../core-bridge/sites";
+import { readSiteOverviewSnapshot } from "../core-bridge/site-overview-cache";
+import {
+	kickSiteOverviewRefresh,
+	shouldRefreshSiteOverview,
+} from "../core-bridge/site-overview-refresher";
+import { type DetectedSite, detectSites } from "../core-bridge/sites";
 import { adminProcedure, protectedProcedure } from "../procedures";
 
 /** UTC YYYYMMDD-HHMM stamp for the downloaded support-bundle filename. */
@@ -42,19 +47,20 @@ function diskPercentFromDf(out: string): number {
 	return Number.parseInt(pct.replace("%", ""), 10) || 0;
 }
 
+async function cachedSiteHealthy(site: DetectedSite): Promise<boolean> {
+	const snapshot = await readSiteOverviewSnapshot(site.id);
+	if (shouldRefreshSiteOverview(snapshot)) {
+		kickSiteOverviewRefresh(site);
+	}
+	return snapshot?.payload.status === "good";
+}
+
 export const serverRouter = {
 	serverInfo: protectedProcedure.handler(async (): Promise<ServerInfo> => {
 		const sites = await detectSites();
 		const df = await hostExec(["df", "-P", "/"]);
 		const host = (await hostExec(["hostname", "-f"])).trim();
-		const statuses = await Promise.all(
-			sites.map(async (s) => {
-				const { stdout, code } = await runVibe(s.installDir, "prod", "smoke", {
-					timeoutMs: 90_000,
-				});
-				return code === 0 && parseSmoke(stdout).passed;
-			})
-		);
+		const statuses = await Promise.all(sites.map(cachedSiteHealthy));
 		return {
 			vps: env.PANEL_VPS_LABEL ?? host ?? "this server",
 			siteCount: sites.length,
@@ -88,7 +94,7 @@ export const serverRouter = {
 		}
 	),
 
-	serverHarden: adminProcedure.handler(async ({ context }) => {
+	serverHarden: adminProcedure.handler(({ context }) => {
 		// Host-level hardening runs against PANEL_HOST_DIR (siteId "server" maps
 		// to env.PANEL_HOST_DIR inside startJob).
 		return startJob({

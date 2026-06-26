@@ -322,7 +322,7 @@ User=$PANEL_USER
 Group=$PANEL_USER
 WorkingDirectory=$PANEL_DIR/app/server
 Environment=PORT=$PORT
-ExecStart=$BUN run src/index.ts
+ExecStart=$BUN --smol run src/index.ts
 Restart=always
 [Install]
 WantedBy=multi-user.target"

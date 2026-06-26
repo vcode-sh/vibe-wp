@@ -10,9 +10,15 @@ export const needsSetupQuery = () => orpc.needsSetup.queryOptions();
 
 export const panelAccessQuery = () => orpc.panelAccess.queryOptions();
 
-export const sitesQuery = () => orpc.sitesList.queryOptions();
+export const sitesQuery = () => ({
+	...orpc.sitesList.queryOptions(),
+	...backgroundRealtimeOptions,
+});
 
-export const serverInfoQuery = () => orpc.serverInfo.queryOptions();
+export const serverInfoQuery = () => ({
+	...orpc.serverInfo.queryOptions(),
+	...backgroundRealtimeOptions,
+});
 
 export const siteOverviewQuery = (siteId: string) => ({
 	...orpc.siteOverview.queryOptions({ input: { siteId } }),

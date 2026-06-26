@@ -21,18 +21,85 @@ vi.mock("../core-bridge/jobs", () => ({
 vi.mock("../core-bridge/jobs-db", () => ({
 	writeAudit: vi.fn(async () => undefined),
 }));
+vi.mock("../core-bridge/site-overview-cache", () => ({
+	readSiteOverviewSnapshot: vi.fn(),
+}));
+vi.mock("../core-bridge/site-overview-refresher", () => ({
+	kickSiteOverviewRefresh: vi.fn(),
+	shouldRefreshSiteOverview: vi.fn(() => false),
+}));
 vi.mock("@control-panel/env/server", () => ({
 	env: { PANEL_HOST_DIR: "/opt/vibe-wp-src", PANEL_VPS_LABEL: undefined },
 }));
 
-import { runSupportBundle, runVibe } from "../core-bridge/exec";
+import { hostExec, runSupportBundle, runVibe } from "../core-bridge/exec";
 import { launchPanelUpdateJob, startJob } from "../core-bridge/jobs";
 import { writeAudit } from "../core-bridge/jobs-db";
+import { readSiteOverviewSnapshot } from "../core-bridge/site-overview-cache";
+import {
+	kickSiteOverviewRefresh,
+	shouldRefreshSiteOverview,
+} from "../core-bridge/site-overview-refresher";
+import { detectSites } from "../core-bridge/sites";
 import { serverRouter } from "./server";
 
 const fakeContext = { session: { user: { id: "user-1" } } } as never;
 
 const BUNDLE_FILENAME_RE = /^vibe-wp-support-\d{8}-\d{4}\.tar\.gz$/;
+
+describe("serverInfo cache behavior", () => {
+	it("uses cached overview statuses instead of smoking every site", async () => {
+		vi.clearAllMocks();
+		vi.mocked(detectSites).mockResolvedValueOnce([
+			{
+				id: "site-1",
+				slug: "acme",
+				domain: "acme.test",
+				installDir: "/srv/acme",
+				hasStaging: false,
+			},
+		]);
+		vi.mocked(hostExec).mockImplementation(async (argv: string[]) =>
+			argv[0] === "df"
+				? "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/root 100 42 58 42% /\n"
+				: "test-host\n"
+		);
+		vi.mocked(readSiteOverviewSnapshot).mockResolvedValueOnce({
+			refreshedAt: new Date(),
+			payload: {
+				siteId: "site-1",
+				status: "good",
+				headline: "cached",
+				subline: "cached",
+				lastBackupISO: "2026-06-25T12:00:00.000Z",
+				needs: [],
+				tiles: [],
+				safety: {
+					backupText: "Recent backup",
+					backupDetail: "Backups are current.",
+					securityText: "Protections on",
+					securityDetail: "Firewall on.",
+				},
+				activity: [],
+			},
+		});
+		vi.mocked(shouldRefreshSiteOverview).mockReturnValueOnce(false);
+
+		const result = await serverRouter.serverInfo["~orpc"].handler({
+			context: fakeContext,
+			input: undefined,
+		});
+
+		expect(result).toMatchObject({
+			vps: "test-host",
+			siteCount: 1,
+			diskPercent: 42,
+			allHealthy: true,
+		});
+		expect(runVibe).not.toHaveBeenCalled();
+		expect(kickSiteOverviewRefresh).not.toHaveBeenCalled();
+	});
+});
 
 describe("securityStatus", () => {
 	it("runs against PANEL_HOST_DIR with zero sites (no throw)", async () => {

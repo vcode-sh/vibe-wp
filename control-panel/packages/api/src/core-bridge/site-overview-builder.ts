@@ -55,6 +55,7 @@ export function collectingSiteOverview(site: DetectedSite): SiteOverview {
 		status: "watch",
 		headline: `${site.slug} is being checked.`,
 		subline: `${site.domain} · collecting fresh status`,
+		lastBackupISO: "",
 		needs: [],
 		tiles: [
 			{
@@ -115,6 +116,7 @@ export async function buildLiveSiteOverview(
 		subline: smoke.passed
 			? `${site.domain} · all checks passing`
 			: `${site.domain} · needs attention`,
+		lastBackupISO,
 		needs,
 		tiles: smoke.checks.slice(0, 4).map((c) => ({
 			key: c.name,

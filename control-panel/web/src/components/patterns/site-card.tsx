@@ -1,9 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { relativeTime, verdictTone } from "@/data/derive";
-import { siteStatusQuery } from "@/data/queries";
 import type { SiteSummary } from "@/data/types";
 
 interface SiteCardProps {
@@ -12,10 +10,7 @@ interface SiteCardProps {
 }
 
 export function SiteCard({ site, now }: SiteCardProps) {
-	const statusResult = useQuery(siteStatusQuery(site.id));
-	const dot = statusResult.data
-		? verdictTone(statusResult.data.status).dot
-		: "bg-muted animate-pulse";
+	const dot = verdictTone(site.status ?? "watch").dot;
 
 	return (
 		<Link

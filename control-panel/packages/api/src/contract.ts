@@ -38,6 +38,7 @@ export interface ActivityEntry {
 export interface SiteOverview {
 	activity: ActivityEntry[];
 	headline: string;
+	lastBackupISO?: string;
 	needs: NeedItem[];
 	safety: {
 		backupText: string;
