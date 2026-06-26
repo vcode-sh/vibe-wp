@@ -50,6 +50,14 @@ window focus and every 60 seconds while mounted. This covers scheduled monitor
 samples, scheduled updates/backups, and Insights collection paths that do not
 originate from the current browser session.
 
+`siteOverview` is now a cached read model, not a request-time host fan-out. The
+UI reads the latest `site_overview_cache` SQLite snapshot, or a cheap
+"collecting" fallback when no snapshot exists yet. Background workers refresh
+the snapshot on a fixed cadence (`PANEL_OVERVIEW_REFRESH_MINUTES`, default 5
+minutes), on stale reads, and after terminal operation lifecycle events. This
+keeps the overview route fast while preserving the same realtime invalidation
+surface for browser clients.
+
 ## Query Groups
 
 Use these groups to keep implementation readable. In code, dynamic query families
@@ -62,7 +70,7 @@ a predicate, not only with one exact helper call.
 | `site-list` | `sitesQuery()` | Sites page, switcher, command menu, settings, staging, monitoring | `detectSites()` plus each site's backup listing |
 | `server-summary` | `serverInfoQuery()` | Sites page, Server page | `detectSites()`, `df`, hostname, all-site smoke checks |
 | `server-security` | `securityStatusQuery()` | Server page; also feeds site overview/security score indirectly | host `securityStatus` |
-| `site-overview` | `siteOverviewQuery(siteId)` | Site overview | smoke, backups, plugin update count, monitor, security-status, recent audit |
+| `site-overview` | `siteOverviewQuery(siteId)` | Site overview | SQLite `site_overview_cache` snapshot built from smoke, backups, plugin update count, monitor, security-status, recent audit |
 | `site-status` | `siteStatusQuery(siteId)` | Site cards | smoke check |
 | `health` | `healthQuery(siteId)` | Health page | monitor op plus resolved notify config |
 | `health-perf` | `healthPerfQuery(siteId)` | Health page perf report | perf report op |
@@ -75,7 +83,7 @@ a predicate, not only with one exact helper call.
 | `backup-config` | `backupConfigQuery("__global__")`; every `backupConfigQuery(siteId)` | Settings R2; Backup menu; per-site R2 | config DB plus resolved global/site rows |
 | `staging` | `stagingQuery(siteId)` | Staging page, attach-staging dialog | stage env file |
 | `inventory` | `inventoryQuery(siteId)` | Inventory page | Insights drop-file |
-| `updates` | `updatesAvailableQuery(siteId)` | Overview page | `wpPluginUpdates` count |
+| `updates` | `updatesAvailableQuery(siteId)` | Overview page | Plugin-update count derived from the cached `site_overview_cache` snapshot |
 | `security-score` | `securityScoreQuery(siteId)` | Security score card | Insights plus host security-status |
 | `security-radar` | `securityRadarQuery(siteId)` | Security radar card | Insights plus vuln feed |
 | `site-settings` | `siteSettingsQuery(siteId)` | Site settings, backup schedule | schedule status plus selected env values |
@@ -100,9 +108,9 @@ These rules apply to every tracked job launched through `startJob`,
 | Event | Required invalidation |
 | --- | --- |
 | Job start | `operations` because `persistJobStart()` writes the job row. |
-| Job start with a site id other than `server` | `site-overview(siteId)` because `writeAudit()` is read by `recentAudit(site.id)` in the overview activity timeline. |
+| Job start with a site id other than `server` | `site-overview(siteId)` because `writeAudit()` is part of the cached overview activity timeline. |
 | Job terminal status | `operations` because `persistJobFinish()` changes status, exit code, and finish time. |
-| Job terminal status with a site id other than `server` | `site-overview(siteId)` again because the overview aggregates live state and activity. |
+| Job terminal status with a site id other than `server` | `site-overview(siteId)` again. The backend also kicks a cache refresh after terminal operation events so the next client refetch reads a fresh snapshot. |
 
 Do not make these success-only. Several compound jobs can create a backup or
 write logs before failing or being canceled. Refreshing authoritative reads on
@@ -202,9 +210,10 @@ These are not oRPC procedures and do not enter the operation stream.
 
 ## Cross-Query Effects That Are Easy To Miss
 
-- `siteOverviewQuery(siteId)` is broad. It reads smoke, backups, plugin update
-  count, monitor, security status, and recent audit. Most tracked site jobs
-  should refresh it.
+- `siteOverviewQuery(siteId)` is broad but cached. Its snapshot is built from
+  smoke, backups, plugin update count, monitor, security status, and recent
+  audit. Most tracked site jobs should refresh it, and the backend should refresh
+  the SQLite snapshot after terminal operation events.
 - `sitesQuery()` is not just a static site registry. It includes `hasStaging` and
   `lastBackupISO`, so backups and compound jobs that take snapshots affect it.
 - `serverInfoQuery()` reads disk and all-site smoke state. Backups, creates,
@@ -255,6 +264,9 @@ job-completion path.
 5. Immediate non-job mutations stay explicit in
    `web/src/lib/realtime/immediate-invalidation.ts` because they already know
    the exact procedure and input that changed.
+6. Backend `site-overview-recorder` keeps `site_overview_cache` warm on an
+   interval and listens to `operationsEvents` so terminal site jobs refresh the
+   cached read model without making the route wait for host probes.
 
 ## Verification Checklist For Implementation
 

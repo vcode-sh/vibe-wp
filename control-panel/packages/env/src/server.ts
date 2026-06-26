@@ -37,6 +37,11 @@ export const env = createEnv({
 		// (operators then rely on the on-demand "Record sample" button). Default
 		// 15 minutes — frequent enough for a readable sparkline, light on the host.
 		PANEL_MONITOR_RECORD_MINUTES: z.string().default("15"),
+		// How often (minutes) the panel refreshes expensive per-site overview
+		// snapshots in SQLite. UI reads stay fast; this worker performs the host
+		// probes in the background. Clamped to [1, 1440]; "0"/"off" disables the
+		// timer (operation-finish refreshes and request-triggered refreshes still run).
+		PANEL_OVERVIEW_REFRESH_MINUTES: z.string().default("5"),
 		// Feature E: OPTIONAL CVE feed for the Security Radar. BOTH default to
 		// undefined = feed OFF (the vuln-feed-fetch op is a `{}` no-op). When an
 		// operator licenses a source (WPScan/Patchstack/curated JSON — an OPEN

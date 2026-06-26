@@ -17,6 +17,7 @@ import { backupConfig } from "./schema/backups";
 import { auditLog, jobs } from "./schema/jobs";
 import { monitorSamples } from "./schema/monitoring";
 import { notifyConfig } from "./schema/notify";
+import { siteOverviewCache } from "./schema/site-overview-cache";
 import { smtpConfig } from "./schema/smtp";
 
 const schema = {
@@ -33,6 +34,7 @@ const schema = {
 	backupConfig,
 	backupVerification,
 	notifyConfig,
+	siteOverviewCache,
 	smtpConfig,
 	monitorSamples,
 };

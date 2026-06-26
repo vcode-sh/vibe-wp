@@ -7,6 +7,11 @@ import {
 	resolveRecorderIntervalMs,
 	startMonitorRecorder,
 } from "@control-panel/api/core-bridge/monitor-recorder";
+import {
+	resolveOverviewRefreshIntervalMs,
+	startSiteOverviewOperationRefresher,
+	startSiteOverviewRecorder,
+} from "@control-panel/api/core-bridge/site-overview-recorder";
 import { env } from "@control-panel/env/server";
 
 import { createServerApp } from "./app";
@@ -35,6 +40,23 @@ startMonitorRecorder({
 		// Best-effort background work: log and keep the loop alive. Never throw out
 		// of a timer tick (an unhandled rejection there would crash the process).
 		console.error("[monitor-recorder] pass failed:", err);
+	},
+});
+
+// Keep the expensive dashboard overview cache warm. Reads return the persisted
+// snapshot immediately; this loop and operation-finish events refresh it.
+startSiteOverviewRecorder({
+	intervalMs: resolveOverviewRefreshIntervalMs(
+		env.PANEL_OVERVIEW_REFRESH_MINUTES
+	),
+	onError: (err) => {
+		console.error("[site-overview-recorder] pass failed:", err);
+	},
+});
+
+startSiteOverviewOperationRefresher({
+	onError: (err) => {
+		console.error("[site-overview-recorder] operation refresh failed:", err);
 	},
 });
 

@@ -1,8 +1,12 @@
 import { z } from "zod";
 
-import { runVibe } from "../core-bridge/exec";
 import { startJob } from "../core-bridge/jobs";
-import { parseWpUpdateCount } from "../core-bridge/parse";
+import { pluginUpdatesFromOverview } from "../core-bridge/site-overview-builder";
+import { readSiteOverviewSnapshot } from "../core-bridge/site-overview-cache";
+import {
+	kickSiteOverviewRefresh,
+	shouldRefreshSiteOverview,
+} from "../core-bridge/site-overview-refresher";
 import { findSite } from "../core-bridge/sites";
 import { operatorProcedure, protectedProcedure } from "../procedures";
 
@@ -14,12 +18,13 @@ export const updatesRouter = {
 			if (!site) {
 				return { plugins: 0 };
 			}
-			// `compose run --rm wp` can be slow; give it more than the 60s default
-			// so a slow run is not killed → empty stdout → false "0 updates".
-			const out = await runVibe(site.installDir, "prod", "wpPluginUpdates", {
-				timeoutMs: 90_000,
-			});
-			return { plugins: parseWpUpdateCount(out.stdout) };
+			const snapshot = await readSiteOverviewSnapshot(site.id);
+			if (shouldRefreshSiteOverview(snapshot)) {
+				kickSiteOverviewRefresh(site);
+			}
+			return {
+				plugins: snapshot ? pluginUpdatesFromOverview(snapshot.payload) : 0,
+			};
 		}),
 
 	updatesApply: operatorProcedure
