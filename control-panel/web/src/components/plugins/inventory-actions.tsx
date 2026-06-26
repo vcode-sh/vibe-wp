@@ -2,16 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { SafetyConfirm } from "@/components/patterns/safety-confirm";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -202,33 +193,22 @@ export function RowActions({
 				</DropdownMenuContent>
 			</DropdownMenu>
 
-			<AlertDialog onOpenChange={setConfirmDelete} open={confirmDelete}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Delete {row.name}?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This removes the {kind} from the site. It cannot be reinstalled
-							from the panel — only from wp-admin. The site is not backed up
-							first.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							onClick={() => {
-								setConfirmDelete(false);
-								run(
-									deleteMut.mutateAsync,
-									`Deleting ${slug}`,
-									"Failed to start delete."
-								);
-							}}
-						>
-							Delete
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+			<SafetyConfirm
+				confirmLabel={`Delete ${kind}`}
+				consequence={`This permanently removes the ${kind} "${row.name}" from ${siteId}.${active ? " It is currently active, so its features go offline immediately." : ""} The site is NOT backed up first, and it can only be reinstalled from wp-admin — not from the panel.`}
+				onConfirm={() => {
+					setConfirmDelete(false);
+					run(
+						deleteMut.mutateAsync,
+						`Deleting ${slug}`,
+						"Failed to start delete."
+					);
+				}}
+				onOpenChange={setConfirmDelete}
+				open={confirmDelete}
+				reversible={false}
+				title={`Delete ${row.name}?`}
+			/>
 		</>
 	);
 }
